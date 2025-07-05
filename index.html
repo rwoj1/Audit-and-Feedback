@@ -1,3 +1,4 @@
+<!-- SAVE POINT -->
 <!-- ✅ HTML SECTION -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
@@ -88,8 +89,8 @@
     </div>
   </div>
 
-  <button id="printButton" onclick="printReport()" style="display:none;">Print Report</button>
-  <button id="downloadCSV" onclick="downloadAuditCSV()" style="display:none;">Download All Data (Admin Only)</button>
+  
+  
 </div>
 
 <!-- ✅ JAVASCRIPT SECTION -->
@@ -112,9 +113,7 @@ function generateReport() {
   else if(rate<30)analysis.textContent=`On average above average`;
   else analysis.textContent=`On average top 25%`;
   document.getElementById('report').style.display='block';
-  printReport();
-  downloadAuditCSV();
 }
-function printReport(){html2canvas(document.getElementById('printableArea')).then(canvas=>{const w=window.open();w.document.write('<img src='+canvas.toDataURL()+'/>');w.print();});}
-function downloadAuditCSV(){const data=JSON.parse(localStorage.getItem('auditLog')||'[]');const csv=[Object.keys(data[0]).join(','),...data.map(r=>Object.values(r).join(','))].join("\n");const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='data.csv';a.click();}
+);}
+));a.download='data.csv';a.click();}
 </script>
