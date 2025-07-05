@@ -3,6 +3,11 @@
   document.getElementById("softwareText").textContent =
     this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
 });
+document.getElementById("practiceLevel").addEventListener("change", function () {
+  const selectedValue = this.value;
+  document.getElementById("fteInput").style.display = selectedValue === "practice" ? "block" : "none";
+  document.getElementById("hoursInput").style.display = selectedValue === "individual" ? "block" : "none";
+});
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
