@@ -284,10 +284,22 @@ window.barChartInstance = new Chart(ctx, {
   localStorage.setItem("auditLog", JSON.stringify(savedLog));
 }
 function printReport() {
+  const originalCanvas = document.getElementById("barChart");
+  const chartImage = new Image();
+  chartImage.src = originalCanvas.toDataURL("image/png");
+  chartImage.style.maxWidth = "100%";
+  chartImage.style.display = "block";
+  chartImage.style.margin = "0 auto";
+
   const printableArea = document.getElementById("printableArea").cloneNode(true);
+  const canvasClone = printableArea.querySelector("#barChart");
+  if (canvasClone && canvasClone.parentNode) {
+    canvasClone.parentNode.replaceChild(chartImage, canvasClone);
+  }
+
   const printWindow = window.open('', '', 'width=800,height=600');
   printWindow.document.write('<html><head><title>Audit Report</title>');
-  printWindow.document.write('<style>body { font-family: Arial, sans-serif; margin: 40px; } canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }</style>');
+  printWindow.document.write('<style>body { font-family: Arial, sans-serif; margin: 40px; } img { max-width: 100%; height: auto; display: block; margin: 0 auto; }</style>');
   printWindow.document.write('</head><body>');
   printWindow.document.body.appendChild(printableArea);
   printWindow.document.write('</body></html>');
