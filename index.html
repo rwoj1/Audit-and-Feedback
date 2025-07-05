@@ -130,19 +130,21 @@ function generateReport() {
     return;
   }
 
-  let weeklyRate = 0;
-  if (level === "individual") {
-    weeklyRate = prescribed / 84;
+  let hours = 0;
+  if (level === "practice") {
+    hours = fte * 38;
   } else {
-    weeklyRate = (prescribed / (fte * 38)) / 84;
+    hours = manualHours;
   }
 
-  document.getElementById("resultText").textContent = `Average prescription of ${medicine} per week: ${weeklyRate.toFixed(2)}`;
+  const weeklyRate = prescribed / hours;
+
+  document.getElementById("resultText").textContent = `Average Prescribing per Week: ${weeklyRate.toFixed(2)}`;
 
   const analysis = document.getElementById("resultAnalysis");
-  if (weeklyRate < 0.12) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
-  else if (weeklyRate < 0.24) analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
-  else if (weeklyRate < 0.36) analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
+  if (weeklyRate < 10) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
+  else if (weeklyRate < 20) analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
+  else if (weeklyRate < 30) analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
   else analysis.textContent = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`;
 
   const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
@@ -165,10 +167,10 @@ function generateReport() {
   window.barChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ['Q1 (0.12)', 'Median (0.24)', 'Q3 (0.36)', 'Your Data'],
+      labels: ['Q1 (10)', 'Median (20)', 'Q3 (30)', 'Your Data'],
       datasets: [{
         label: 'Prescribing Rate',
-        data: [0.12, 0.24, 0.36, weeklyRate],
+        data: [10, 20, 30, weeklyRate],
         backgroundColor: [
           'rgba(0, 123, 255, 0.6)',
           'rgba(0, 200, 83, 0.6)',
@@ -189,7 +191,7 @@ function generateReport() {
       scales: {
         y: {
           beginAtZero: true,
-          title: { display: true, text: 'Prescribing Rate per Week' }
+          title: { display: true, text: 'Prescribing Rate' }
         }
       }
     }
