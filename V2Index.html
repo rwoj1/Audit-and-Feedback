@@ -119,6 +119,81 @@
   <button id="printButton" onclick="printReport()" style="display:none;">Print Report</button>
   <button id="downloadCSV" onclick="downloadAuditCSV()" style="display:none;">Download All Data (Admin Only)</button>
 </div>
+<script>
+// ✅ Check if a medicine has already been submitted
+function hasSubmittedMedicine(medicine) {
+  const log = JSON.parse(localStorage.getItem("auditLog")) || {};
+  return log[medicine];
+}
+
+// ✅ Save one entry per medicine
+function saveEntry(medicine, data) {
+  const log = JSON.parse(localStorage.getItem("auditLog")) || {};
+  log[medicine] = data;
+  localStorage.setItem("auditLog", JSON.stringify(log));
+}
+
+// ✅ Disable all form fields after submission attempt
+function disableFormInputs() {
+  const formElements = document.querySelectorAll("input, select, button");
+  formElements.forEach(el => {
+    if (el.id !== "printButton" && el.id !== "downloadCSV") {
+      el.disabled = true;
+    }
+  });
+}
+
+// ✅ Report generation and lockout
+function generateReport() {
+  const level = document.getElementById("practiceLevel").value;
+  const medicine = document.getElementById("medicine").value;
+  const software = document.getElementById("software").value;
+  const prescribed = parseFloat(document.getElementById("prescribed").value);
+  const fte = parseFloat(document.getElementById("fte").value);
+  const manualHours = parseFloat(document.getElementById("hours").value);
+
+  if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
+    (level === "practice" && (isNaN(fte) || fte <= 0)) ||
+    (level === "individual" && (isNaN(manualHours) || manualHours <= 0))) {
+    alert("Please complete all required fields with valid numbers.");
+    return;
+  }
+
+  if (hasSubmittedMedicine(medicine)) {
+    alert(`You’ve already submitted an entry for ${medicine}.`);
+    disableFormInputs(); // lock everything
+    return;
+  }
+
+  let weeklyRate = 0;
+  if (level === "practice") {
+    weeklyRate = prescribed / fte;
+  } else {
+    weeklyRate = prescribed / (manualHours / 38);
+  }
+  weeklyRate = weeklyRate / 12;
+
+  const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
+  const challenges = [...document.querySelectorAll("#challenges input:checked")].map(el => el.value);
+
+  const entry = {
+    timestamp: new Date().toISOString(),
+    practiceLevel: level,
+    medicine,
+    software,
+    prescribed,
+    fte,
+    hours: manualHours,
+    weeklyRate: weeklyRate.toFixed(2),
+    strengths,
+    challenges
+  };
+
+  saveEntry(medicine, entry);
+  alert(`Submission for ${medicine} recorded successfully.`);
+  disableFormInputs();
+}
+</script>
 
 <script>
 document.getElementById("software").addEventListener("change", function () {
