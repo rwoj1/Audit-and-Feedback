@@ -49,7 +49,9 @@
   <!-- Report -->
   <div id="report" style="display:none;">
     <h2>Audit Results</h2>
-    <canvas id="barChart"></canvas>
+    <div style="width:100%; max-width:600px; height:400px;">
+    <canvas id="barChart" style="width:100%; height:100%;"></canvas>
+  </div></canvas>
     <p id="resultText"></p>
     <p id="resultAnalysis"></p>
   </div>
@@ -84,13 +86,13 @@ function generateReport() {
   // Render chart
   const ctx = document.getElementById('barChart').getContext('2d');
   new Chart(ctx, {
-    options: { responsive: true, maintainAspectRatio: false },
-
     type: 'bar',
+    data: {
     data: {
       labels: ['Rate'],
       datasets: [{ data: [rate], label: medicine }]
     }
+    , options: { responsive: true, maintainAspectRatio: false }
   });
 
   document.getElementById('resultText').textContent = 'Average Prescribing per Week: ' + rate.toFixed(2);
