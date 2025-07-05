@@ -161,7 +161,7 @@ function generateReport() {
 
   if (hasSubmittedMedicine(medicine)) {
     alert(`You’ve already submitted an entry for ${medicine}.`);
-    disableFormInputs(); // lock everything
+    disableFormInputs();
     return;
   }
 
@@ -193,6 +193,7 @@ function generateReport() {
   alert(`Submission for ${medicine} recorded successfully.`);
   disableFormInputs();
 }
+
 </script>
 
 <script>
@@ -358,7 +359,30 @@ window.barChartInstance = new Chart(ctx, {
   savedLog.push({ timestamp: new Date().toISOString(), practiceLevel: level, medicine, software, prescribed, fte, weeklyRate: weeklyRate.toFixed(2), strengths, challenges });
   localStorage.setItem("auditLog", JSON.stringify(savedLog));
 }
-function printReport() {
+<script>
+// Prevent duplicate submission for same medicine
+function hasSubmittedMedicine(medicine) {
+  const log = JSON.parse(localStorage.getItem("auditLog")) || {};
+  return log[medicine];
+}
+
+function saveEntry(medicine, data) {
+  const log = JSON.parse(localStorage.getItem("auditLog")) || {};
+  log[medicine] = data;
+  localStorage.setItem("auditLog", JSON.stringify(log));
+}
+
+function disableFormInputs() {
+  const formElements = document.querySelectorAll("input, select, button");
+  formElements.forEach(el => {
+    if (el.id !== "printButton" && el.id !== "downloadCSV") {
+      el.disabled = true;
+    }
+  });
+}
+  
+  
+  function printReport() {
   requestAnimationFrame(() => {
     const originalCanvas = document.getElementById("barChart");
     const chartImage = new Image();
