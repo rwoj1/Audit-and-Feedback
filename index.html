@@ -117,11 +117,7 @@ window.addEventListener("DOMContentLoaded", function () {
       med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
   });
 
-  const softwareSelect = document.getElementById("software");
-  softwareSelect.addEventListener("change", function () {
-    document.getElementById("softwareText").textContent =
-      this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
-  });
+  
 });
 
   const softwareSelect = document.getElementById("software");
