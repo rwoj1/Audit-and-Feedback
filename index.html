@@ -1,3 +1,4 @@
+<!-- ✅ HTML SECTION -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
@@ -141,11 +142,6 @@ window.addEventListener("load", function () {
   toggleInputs();
 });
 
-  const selected = document.getElementById("practiceLevel").value;
-  document.getElementById("fteInput").style.display = selected === "practice" ? "block" : "none";
-  document.getElementById("hoursInput").style.display = selected === "individual" ? "block" : "none";
-});
-
 function generateReport() {
   const level = document.getElementById("practiceLevel").value;
   const medicine = document.getElementById("medicine").value;
@@ -156,8 +152,8 @@ function generateReport() {
 
   let hours = 0;
   if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
-      (level === "practice" && (isNaN(fte) || fte <= 0)) ||
-      (level === "individual" && (isNaN(manualHours) || manualHours <= 0))) {
+    (level === "practice" && (isNaN(fte) || fte <= 0)) ||
+    (level === "individual" && (isNaN(manualHours) || manualHours <= 0))) {
     alert("Please complete all required fields with valid numbers.");
     return;
   }
@@ -176,13 +172,13 @@ function generateReport() {
   const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
   const challenges = [...document.querySelectorAll("#challenges input:checked")].map(el => el.value);
 
-  document.getElementById("strengthOutput").innerHTML = strengths.includes("None") ?
-    "<li>It is known using Strength 1 can accomplish Y..</li>" :
-    strengths.map(s => `<li>${s} can result in Y</li>`).join("");
+  document.getElementById("strengthOutput").innerHTML = strengths.includes("None")
+    ? "<li>It is known using Strength 1 can accomplish Y..</li>"
+    : strengths.map(s => `<li>${s} can result in Y</li>`).join("");
 
-  document.getElementById("challengeOutput").innerHTML = challenges.includes("None") ?
-    "<li>Navigating barriers can result in Y</li>" :
-    challenges.map(c => `<li>${c} can result in Y</li>`).join("");
+  document.getElementById("challengeOutput").innerHTML = challenges.includes("None")
+    ? "<li>Navigating barriers can result in Y</li>"
+    : challenges.map(c => `<li>${c} can result in Y</li>`).join("");
 
   document.getElementById("report").style.display = "block";
   document.getElementById("printButton").style.display = "inline-block";
@@ -252,17 +248,8 @@ function downloadAuditCSV() {
   if (!data.length) return alert("No data to export.");
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join("
-");
+  const csvContent = [headers.join(","), ...rows].join("\n");
   const blob = new Blob([csvContent], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "audit-data.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-});
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
