@@ -122,6 +122,8 @@ window.addEventListener("DOMContentLoaded", function() {
 });
 
 function generateReport() {
+  // show inputs to ensure they exist
+  document.getElementById('fteInput'); document.getElementById('hoursInput');
   const level = document.getElementById("practiceLevel").value;
   const medicine = document.getElementById("medicine").value;
   const software = document.getElementById("software").value;
@@ -137,7 +139,7 @@ function generateReport() {
   }
 
   let rate = level === "practice" ? prescribed / fte : prescribed / (hours / 38);
-  rate = rate.toFixed(2);
+  rate = parseFloat(rate.toFixed(2));
 
   document.getElementById("resultText").textContent = `Average Prescribing per Week: ${rate}`;
   const analysisEl = document.getElementById("resultAnalysis");
@@ -150,26 +152,83 @@ function generateReport() {
 
   const strengths = [...document.querySelectorAll("#strengths input:checked")].map(i=>i.value);
   const challenges = [...document.querySelectorAll("#challenges input:checked")].map(i=>i.value);
-  document.getElementById("strengthOutput").innerHTML = strengths.includes("None")?"<li>It is known using Strength 1 can accomplish Y..</li>":strengths.map(s=>`<li>${s} can result in Y</li>`).join("");
-  document.getElementById("challengeOutput").innerHTML = challenges.includes("None")?"<li>Navigating barriers can result in Y</li>":challenges.map(c=>`<li>${c} can result in Y</li>`).join("");
+  document.getElementById("strengthOutput").innerHTML = strengths.includes("None")
+    ? "<li>It is known using Strength 1 can accomplish Y..</li>"
+    : strengths.map(s=>`<li>${s} can result in Y</li>`).join("");
+  document.getElementById("challengeOutput").innerHTML = challenges.includes("None")
+    ? "<li>Navigating barriers can result in Y</li>"
+    : challenges.map(c=>`<li>${c} can result in Y</li>`).join("");
 
   document.getElementById("report").style.display = "block";
   document.getElementById("printButton").style.display = "inline-block";
   document.getElementById("downloadCSV").style.display = "inline-block";
 
   const ctx = document.getElementById("barChart").getContext("2d");
-  if(window.barChartInstance) window.barChartInstance.destroy();
+  if (window.barChartInstance) window.barChartInstance.destroy();
   window.barChartInstance = new Chart(ctx, {
-    type:'bar', data:{ labels:['Q1 (10)','Median (20)','Q3 (30)','Your Data'], datasets:[{ data:[10,20,30,rate], backgroundColor:['#ccc','#ccc','#ccc',color], borderColor:['#999','#999','#999',color], borderWidth:1 }] },
-    options:{ responsive:true, plugins:{ title:{display:true,text:'Average Prescribing Rate Based on National Data',font:{size:16}}, legend:{display:false} }, scales:{ y:{beginAtZero:true,title:{display:true,text:`Average Prescribing Rate Based on ${medicine} (prescriptions/week)`}} }
+    type: 'bar',
+    data: {
+      labels: ['Q1 (10)', 'Median (20)', 'Q3 (30)', 'Your Data'],
+      datasets: [{
+        data: [10, 20, 30, rate],
+        backgroundColor: ['#ccc', '#ccc', '#ccc', color],
+        borderColor: ['#999', '#999', '#999', color],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: { display: true, text: 'Average Prescribing Rate Based on National Data', font: { size: 16 } },
+        legend: { display: false }
+      },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: `Average Prescribing Rate for ${medicine} (prescriptions/week)` } }
+      }
+    }
   });
 
   const saved = JSON.parse(localStorage.getItem("auditLog"))||[];
-  saved.push({timestamp:new Date().toISOString(),practiceLevel:level,medicine,software,hours:level==='individual'?hours:'',fte:level==='practice'?fte:'',prescribed,...Object.fromEntries(strengths.map((s,i)=>[`strength_${i+1}`,s])),...Object.fromEntries(challenges.map((c,i)=>[`challenge_${i+1}`,c]))});
-  localStorage.setItem("auditLog",JSON.stringify(saved));
+  saved.push({
+    timestamp: new Date().toISOString(),
+    practiceLevel: level,
+    medicine,
+    software,
+    hours: level==='individual'?hours:'',
+    fte: level==='practice'?fte:'',
+    prescribed,
+    ...Object.fromEntries(strengths.map((s,i)=>[`strength_${i+1}`,s])),
+    ...Object.fromEntries(challenges.map((c,i)=>[`challenge_${i+1}`,c]))
+  });
+  localStorage.setItem("auditLog", JSON.stringify(saved));
 }
 
-function printReport(){const printArea=document.getElementById("printableArea");document.getElementById("report").style.display="block";html2canvas(printArea,{scale:2}).then(c=>{const data=c.toDataURL("image/png"),w=window.open('','',"width=800,height=1100");w.document.write(`<html><head><title>Audit Report</title><style>@page{size:A4;margin:20mm;}body{margin:0;padding:0;}img{width:100%;height:auto;display:block;margin:0 auto;}</style></head><body><img src='${data}'/></body></html>`);w.document.close();w.focus();w.print();w.close();});}
+function printReport() {
+  const printArea = document.getElementById("printableArea");
+  document.getElementById("report").style.display = "block";
+  html2canvas(printArea, { scale: 2 }).then(canvas => {
+    const data = canvas.toDataURL("image/png");
+    const w = window.open('', '', 'width=800,height=1100');
+    w.document.write(`
+      <html><head><title>Audit Report</title>
+      <style>@page{size:A4;margin:20mm;}body{margin:0;padding:0;}img{width:100%;height:auto;display:block;margin:0 auto;}</style>
+      </head><body><img src='${data}'/></body></html>`);
+    w.document.close(); w.focus(); w.print(); w.close();
+  });
+}
 
-function downloadAuditCSV(){const pwd=prompt("Admin access required. Enter password:");if(pwd!="admin123"){alert("Access denied.");return;}const data=JSON.parse(localStorage.getItem("auditLog"))||[];if(!data.length)return alert("No data to export.");const headers=Object.keys(data[0]);const rows=data.map(r=>headers.map(h=>JSON.stringify(r[h]||"")).join(","));const csv=[headers.join(","),...rows].join("\n");const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="audit-data.csv";document.body.appendChild(a);a.click();document.body.removeChild(a);}
+function downloadAuditCSV() {
+  const pwd = prompt("Admin access required. Enter password:");
+  if (pwd !== "admin123") { alert("Access denied."); return; }
+  const data = JSON.parse(localStorage.getItem("auditLog"))||[];
+  if (!data.length) return alert("No data to export.");
+  const headers = Object.keys(data[0]);
+  const rows = data.map(r=>headers.map(h=>JSON.stringify(r[h]||"")).join(","));
+  const csv = [headers.join(","), ...rows].join("
+");
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download="audit-data.csv";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
 </script>
