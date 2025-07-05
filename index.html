@@ -278,10 +278,36 @@ function downloadAuditCSV() {
   const data = JSON.parse(localStorage.getItem("auditLog")) || [];
   if (!data.length) return alert("No data to export.");
 
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join(",");
+  const strengthOptions = [
+    "Strength 1", "Strength 2", "Strength 3", "Strength 4", "Strength 5", "Strength 6", "None"
+  ];
+  const challengeOptions = [
+    "Challenge 1", "Challenge 2", "Challenge 3", "Challenge 4", "Challenge 5", "Challenge 6", "None"
+  ];
 
+  const headers = [
+    "Timestamp", "Practice Level", "Medicine", "Software", "Hours", "FTE", "Number of Medicines Prescribed", "Prescribing Rate",
+    ...strengthOptions,
+    ...challengeOptions
+  ];
+
+  const rows = data.map(entry => {
+    const row = [
+      entry.timestamp,
+      entry.practiceLevel,
+      entry.medicine,
+      entry.software,
+      entry.hours || "",
+      entry.fte || "",
+      entry.prescribed,
+      entry.weeklyRate
+    ];
+    strengthOptions.forEach(opt => row.push(entry.strengths.includes(opt) ? "TRUE" : ""));
+    challengeOptions.forEach(opt => row.push(entry.challenges.includes(opt) ? "TRUE" : ""));
+    return row;
+  });
+
+  const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join(",");
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
