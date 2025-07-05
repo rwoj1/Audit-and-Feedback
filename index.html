@@ -5,7 +5,7 @@
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
 
-  <label for="practiceLevel">Practice:</label>
+  <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
   <select id="practiceLevel">
     <option value="">Select...</option>
     <option value="practice">Practice Level Data</option>
@@ -43,7 +43,7 @@
     <input type="number" id="hours" />
   </div>
 
-  <label>Number of prescribed orders using the criteria above:</label>
+  <label id="prescribedLabel">Number of [medicine] prescribed in the last 3 months:</label>
   <input type="number" id="prescribed" />
 
   <h3>Facilitators (Strengths):</h3>
@@ -88,43 +88,16 @@
   <button id="downloadCSV" onclick="downloadAuditCSV()" style="display:none;">Download All Data (Admin Only)</button>
 </div>
 
-<!-- ✅ CSS SECTION -->
-<style>
-body {
-  font-family: Arial, sans-serif;
-  padding: 20px;
-}
-.container {
-  max-width: 700px;
-  margin: auto;
-}
-label {
-  display: block;
-  margin-top: 10px;
-}
-input, select {
-  width: 100%;
-  padding: 8px;
-  margin-top: 5px;
-}
-button {
-  margin-top: 15px;
-  padding: 10px 20px;
-  font-size: 16px;
-}
-pre {
-  white-space: pre-wrap;
-  background: #f4f4f4;
-  padding: 1em;
-  margin-top: 1em;
-}
-</style>
-
-<!-- ✅ JAVASCRIPT SECTION -->
 <script>
 document.getElementById("software").addEventListener("change", function () {
   document.getElementById("softwareText").textContent =
     this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
+});
+
+document.getElementById("medicine").addEventListener("change", function () {
+  const med = this.value;
+  document.getElementById("prescribedLabel").textContent =
+    med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
 });
 
 window.addEventListener("load", function () {
@@ -150,7 +123,6 @@ function generateReport() {
   const fte = parseFloat(document.getElementById("fte").value);
   const manualHours = parseFloat(document.getElementById("hours").value);
 
-  let hours = 0;
   if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
     (level === "practice" && (isNaN(fte) || fte <= 0)) ||
     (level === "individual" && (isNaN(manualHours) || manualHours <= 0))) {
@@ -158,15 +130,19 @@ function generateReport() {
     return;
   }
 
-  hours = level === "practice" ? fte * 38 : manualHours;
-  const rate = prescribed / hours;
+  let weeklyRate = 0;
+  if (level === "individual") {
+    weeklyRate = prescribed / 84;
+  } else {
+    weeklyRate = (prescribed / (fte * 38)) / 84;
+  }
 
-  document.getElementById("resultText").textContent = `Average Prescribing per Week: ${rate.toFixed(2)}`;
+  document.getElementById("resultText").textContent = `Average prescription of ${medicine} per week: ${weeklyRate.toFixed(2)}`;
 
   const analysis = document.getElementById("resultAnalysis");
-  if (rate < 10) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
-  else if (rate < 20) analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
-  else if (rate < 30) analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
+  if (weeklyRate < 0.12) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
+  else if (weeklyRate < 0.24) analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
+  else if (weeklyRate < 0.36) analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
   else analysis.textContent = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`;
 
   const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
@@ -189,10 +165,10 @@ function generateReport() {
   window.barChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ['Q1 (10)', 'Median (20)', 'Q3 (30)', 'Your Data'],
+      labels: ['Q1 (0.12)', 'Median (0.24)', 'Q3 (0.36)', 'Your Data'],
       datasets: [{
         label: 'Prescribing Rate',
-        data: [10, 20, 30, rate],
+        data: [0.12, 0.24, 0.36, weeklyRate],
         backgroundColor: [
           'rgba(0, 123, 255, 0.6)',
           'rgba(0, 200, 83, 0.6)',
@@ -213,49 +189,14 @@ function generateReport() {
       scales: {
         y: {
           beginAtZero: true,
-          title: { display: true, text: 'Prescribing Rate' }
+          title: { display: true, text: 'Prescribing Rate per Week' }
         }
       }
     }
   });
 
   const savedLog = JSON.parse(localStorage.getItem("auditLog")) || [];
-  savedLog.push({ timestamp: new Date().toISOString(), practiceLevel: level, medicine, software, prescribed, fte, hours, rate: rate.toFixed(2), strengths, challenges });
+  savedLog.push({ timestamp: new Date().toISOString(), practiceLevel: level, medicine, software, prescribed, fte, weeklyRate: weeklyRate.toFixed(2), strengths, challenges });
   localStorage.setItem("auditLog", JSON.stringify(savedLog));
-}
-
-function printReport() {
-  const printableArea = document.getElementById("printableArea");
-  html2canvas(printableArea).then(canvas => {
-    const printWindow = window.open('', '', 'width=800,height=600');
-    printWindow.document.write('<html><head><title>Audit Report</title></head><body>');
-    printWindow.document.body.appendChild(canvas);
-    printWindow.document.write('</body></html>');
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
-  });
-}
-
-function downloadAuditCSV() {
-  const password = prompt("Admin access required. Enter password:");
-  if (password !== "admin123") {
-    alert("Access denied.");
-    return;
-  }
-  const data = JSON.parse(localStorage.getItem("auditLog")) || [];
-  if (!data.length) return alert("No data to export.");
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join("\n");
-  const blob = new Blob([csvContent], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "audit-data.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
 }
 </script>
