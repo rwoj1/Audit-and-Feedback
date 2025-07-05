@@ -317,5 +317,19 @@ function downloadAuditCSV() {
   a.click();
   document.body.removeChild(a);
 }
+
+function clearAuditData() {
+  const password = prompt("Admin access required. Enter password:");
+  if (password !== "admin123") {
+    alert("Access denied.");
+    return;
+  }
+
+  if (confirm("Are you sure you want to clear all audit data? This cannot be undone.")) {
+    localStorage.removeItem("auditLog");
+    alert("Audit data cleared.");
+  }
+}
+
 </script>
 
