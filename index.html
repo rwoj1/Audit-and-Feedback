@@ -114,6 +114,44 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 function generateReport() {
-  // existing generateReport logic
+  const level = document.getElementById('practiceLevel').value;
+  const medicine = document.getElementById('medicine').value;
+  const software = document.getElementById('software').value;
+  const prescribed = parseFloat(document.getElementById('prescribed').value);
+  const fte = parseFloat(document.getElementById('fte').value);
+  const manualHours = parseFloat(document.getElementById('hours').value);
+
+  if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
+      (level === 'practice' && (isNaN(fte) || fte <= 0)) ||
+      (level === 'individual' && (isNaN(manualHours) || manualHours <= 0))) {
+    alert('Please complete all required fields with valid numbers.');
+    return;
+  }
+
+  const hours = level === 'practice' ? fte * 38 : manualHours;
+  const rate = prescribed / hours;
+
+  document.getElementById('resultText').textContent =
+    `The average times per week ${medicine} is prescribed: ${rate.toFixed(2)}`;
+
+  const analysisEl = document.getElementById('resultAnalysis');
+  let text, color;
+  if (rate < 10) {
+    text = `On average, the prescribing rate of ${medicine} in your practice is in the bottom 25% based on national data.`;
+    color = 'green';
+  } else if (rate < 20) {
+    text = `On average, the prescribing rate of ${medicine} in your practice is below average based on national data.`;
+    color = 'yellow';
+  } else if (rate < 30) {
+    text = `On average, the prescribing rate of ${medicine} in your practice is above average based on national data.`;
+    color = 'orange';
+  } else {
+    text = `On average, the prescribing rate of ${medicine} in your practice is in the top 25% based on national data.`;
+    color = 'red';
+  }
+  analysisEl.textContent = text;
+  analysisEl.style.color = color;
+
+  // ... rest of chart, strengths, challenges, print and download logic ...
 }
 </script>
