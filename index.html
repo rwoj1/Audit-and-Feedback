@@ -1,5 +1,9 @@
 <!-- ✅ HTML SECTION -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js">document.getElementById("software").addEventListener("change", function () {
+  document.getElementById("softwareText").textContent =
+    this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
+});
+</script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <div class="container">
@@ -120,11 +124,7 @@ window.addEventListener("DOMContentLoaded", function () {
   
 });
 
-  const softwareSelect = document.getElementById("software");
-  softwareSelect.addEventListener("change", function () {
-    document.getElementById("softwareText").textContent =
-      this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
-    });
+  
 });
 });
 
