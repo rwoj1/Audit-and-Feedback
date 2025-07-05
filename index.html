@@ -1,67 +1,39 @@
 <!-- ✅ HTML SECTION -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const levelSelect = document.getElementById("practiceLevel");
-  const fteInput = document.getElementById("fteInput");
-  const hoursInput = document.getElementById("hoursInput");
-  const medSelect = document.getElementById("medicine");
-  const softwareSelect = document.getElementById("software");
-
-  function toggleInputs() {
-    const selectedValue = levelSelect.value;
-    fteInput.style.display = selectedValue === "practice" ? "block" : "none";
-    hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
-  }
-
-  levelSelect.addEventListener("change", toggleInputs);
-  toggleInputs();
-
-  medSelect.addEventListener("change", function () {
-    const med = this.value;
-    document.getElementById("prescribedLabel").textContent =
-      med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
-  });
-
-  softwareSelect.addEventListener("change", function () {
-    document.getElementById("softwareText").textContent =
-      this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
-  });
-});
-</script>
 
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
-
   <div class="form-group">
     <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
     <select id="practiceLevel">
-    <option value="">Select...</option>
-    <option value="practice">Practice Level Data</option>
-    <option value="individual">Individual Level Data</option>
-  </select>
-</div>
+      <option value="">Select...</option>
+      <option value="practice">Practice Level Data</option>
+      <option value="individual">Individual Level Data</option>
+    </select>
+  </div>
+
   <div class="form-group">
     <label for="medicine">Medicine Prescribed to Audit:</label>
     <select id="medicine">
-    <option value="">Select...</option>
-    <option value="Medicine A">Medicine A</option>
-    <option value="Medicine B">Medicine B</option>
-    <option value="Medicine C">Medicine C</option>
-    <option value="Medicine D">Medicine D</option>
-    <option value="Medicine E">Medicine E</option>
-    <option value="Medicine F">Medicine F</option>
-  </select>
+      <option value="">Select...</option>
+      <option value="Medicine A">Medicine A</option>
+      <option value="Medicine B">Medicine B</option>
+      <option value="Medicine C">Medicine C</option>
+      <option value="Medicine D">Medicine D</option>
+      <option value="Medicine E">Medicine E</option>
+      <option value="Medicine F">Medicine F</option>
+    </select>
   </div>
+
   <div class="form-group">
     <label for="software">Dispensing Software:</label>
     <select id="software">
-    <option value="">Select...</option>
-    <option value="Best Practice">Best Practice</option>
-    <option value="Medical Director Clinical">Medical Director Clinical</option>
-    <option value="Medical Director Helix">Medical Director Helix</option>
-  </select>
+      <option value="">Select...</option>
+      <option value="Best Practice">Best Practice</option>
+      <option value="Medical Director Clinical">Medical Director Clinical</option>
+      <option value="Medical Director Helix">Medical Director Helix</option>
+    </select>
   </div>
   <p id="softwareText"></p>
 
@@ -120,37 +92,33 @@ document.addEventListener("DOMContentLoaded", function () {
   <button id="downloadCSV" onclick="downloadAuditCSV()" style="display:none;">Download All Data (Admin Only)</button>
 </div>
 
+<!-- ✅ JAVASCRIPT SECTION -->
 <script>
-
-
-
-
-window.addEventListener("DOMContentLoaded", function () {
+window.addEventListener("DOMContentLoaded", function() {
   const levelSelect = document.getElementById("practiceLevel");
   const fteInput = document.getElementById("fteInput");
   const hoursInput = document.getElementById("hoursInput");
+  const medSelect = document.getElementById("medicine");
+  const softwareSelect = document.getElementById("software");
 
   function toggleInputs() {
-    const selectedValue = levelSelect.value;
-    fteInput.style.display = selectedValue === "practice" ? "block" : "none";
-    hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
+    const val = levelSelect.value;
+    fteInput.style.display = val === "practice" ? "block" : "none";
+    hoursInput.style.display = val === "individual" ? "block" : "none";
   }
-
   levelSelect.addEventListener("change", toggleInputs);
   toggleInputs();
 
-  const medSelect = document.getElementById("medicine");
-  medSelect.addEventListener("change", function () {
-    const med = this.value;
+  medSelect.addEventListener("change", () => {
+    const med = medSelect.value;
     document.getElementById("prescribedLabel").textContent =
       med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
   });
 
-  
-});
-
-  
-});
+  softwareSelect.addEventListener("change", () => {
+    document.getElementById("softwareText").textContent =
+      softwareSelect.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${softwareSelect.value}` : "";
+  });
 });
 
 function generateReport() {
@@ -159,192 +127,49 @@ function generateReport() {
   const software = document.getElementById("software").value;
   const prescribed = parseFloat(document.getElementById("prescribed").value);
   const fte = parseFloat(document.getElementById("fte").value);
-  const manualHours = parseFloat(document.getElementById("hours").value);
+  const hours = parseFloat(document.getElementById("hours").value);
 
   if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
-    (level === "practice" && (isNaN(fte) || fte <= 0)) ||
-    (level === "individual" && (isNaN(manualHours) || manualHours <= 0))) {
+      (level === "practice" && (isNaN(fte) || fte <= 0)) ||
+      (level === "individual" && (isNaN(hours) || hours <= 0))) {
     alert("Please complete all required fields with valid numbers.");
     return;
   }
 
-  let weeklyRate = 0;
-  if (level === "practice") {
-    weeklyRate = prescribed / fte;
-  } else {
-    weeklyRate = prescribed / (manualHours / 38);
-  }
+  let rate = level === "practice" ? prescribed / fte : prescribed / (hours / 38);
+  rate = rate.toFixed(2);
 
-  weeklyRate = weeklyRate / 12;
+  document.getElementById("resultText").textContent = `Average Prescribing per Week: ${rate}`;
+  const analysisEl = document.getElementById("resultAnalysis");
+  let text, color;
+  if (rate < 10) { text = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`; color='green'; }
+  else if (rate < 20) { text = `On average, the prescribing rate of ${medicine} is below average based on national data.`; color='yellow'; }
+  else if (rate < 30) { text = `On average, the prescribing rate of ${medicine} is above average based on national data.`; color='orange'; }
+  else { text = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`; color='red'; }
+  analysisEl.textContent = text; analysisEl.style.color = color;
 
-  document.getElementById("resultText").textContent = `The average times per week ${medicine} is prescribed is: ${weeklyRate.toFixed(1)}`;
-
-  const analysis = document.getElementById("resultAnalysis");
-  if (weeklyRate < 10) {
-    analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
-    analysis.style.color = 'green';
-  } else if (weeklyRate < 20) {
-    analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
-    analysis.style.color = 'yellow';
-  } else if (weeklyRate < 30) {
-    analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
-    analysis.style.color = 'orange';
-  } else {
-    analysis.textContent = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`;
-    analysis.style.color = 'red';
-  }
-
-  const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
-  const challenges = [...document.querySelectorAll("#challenges input:checked")].map(el => el.value);
-
-  document.getElementById("strengthOutput").innerHTML = strengths.includes("None")
-    ? "<li>It is known using Strength 1 can accomplish Y..</li>"
-    : strengths.map(s => `<li>${s} can result in Y</li>`).join("");
-
-  document.getElementById("challengeOutput").innerHTML = challenges.includes("None")
-    ? "<li>Navigating barriers can result in Y</li>"
-    : challenges.map(c => `<li>${c} can result in Y</li>`).join("");
+  const strengths = [...document.querySelectorAll("#strengths input:checked")].map(i=>i.value);
+  const challenges = [...document.querySelectorAll("#challenges input:checked")].map(i=>i.value);
+  document.getElementById("strengthOutput").innerHTML = strengths.includes("None")?"<li>It is known using Strength 1 can accomplish Y..</li>":strengths.map(s=>`<li>${s} can result in Y</li>`).join("");
+  document.getElementById("challengeOutput").innerHTML = challenges.includes("None")?"<li>Navigating barriers can result in Y</li>":challenges.map(c=>`<li>${c} can result in Y</li>`).join("");
 
   document.getElementById("report").style.display = "block";
-document.getElementById("printButton").style.display = "inline-block";
-document.getElementById("downloadCSV").style.display = "inline-block";
   document.getElementById("printButton").style.display = "inline-block";
   document.getElementById("downloadCSV").style.display = "inline-block";
 
   const ctx = document.getElementById("barChart").getContext("2d");
-if (window.barChartInstance) window.barChartInstance.destroy();
-
-let chartLabels = [];
-let chartData = [];
-let barColors = [];
-let borderColors = [];
-
-// Set reference points
-const q1 = 10;
-const median = 20;
-const q3 = 30;
-
-// Determine position and style of user's data
-let insertIndex = 0;
-let userColor = 'green';
-
-if (weeklyRate < q1) {
-  chartLabels = ['Your Data', 'Q1 (10)', 'Median (20)', 'Q3 (30)'];
-chartData = [weeklyRate, q1, median, q3];
-barColors = ['green', '#ccc', '#ccc', '#ccc'];
-} else if (weeklyRate < median) {
-  chartLabels = ['Q1 (10)', 'Your Data', 'Median (20)', 'Q3 (30)'];
-chartData = [q1, weeklyRate, median, q3];
-barColors = ['#ccc', 'yellow', '#ccc', '#ccc'];
-} else if (weeklyRate < q3) {
-  chartLabels = ['Q1 (10)', 'Median (20)', 'Your Data', 'Q3 (30)'];
-chartData = [q1, median, weeklyRate, q3];
-barColors = ['#ccc', '#ccc', 'orange', '#ccc'];
-} else {
-  chartLabels = ['Q1 (10)', 'Median (20)', 'Q3 (30)', 'Your Data'];
-  chartData = [q1, median, q3, weeklyRate];
-  barColors = ['#ccc', '#ccc', '#ccc', 'red'];
-}
-
-
-window.barChartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: chartLabels,
-      datasets: [{
-        label: '',
-        data: chartData,
-        backgroundColor: barColors,
-        borderColor: [
-          'rgba(0, 123, 255, 1)',
-          'rgba(0, 200, 83, 1)',
-          'rgba(255, 193, 7, 1)',
-          'rgba(220, 53, 69, 1)'
-        ],
-        borderWidth: 1
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        title: {
-          display: true,
-          text: 'Average Prescribing Rate Based on National Data',
-          font: {
-            size: 16
-          }
-        },
-        legend: {
-          display: false
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          title: { display: true, text: `Average Prescribing Rate Based on National Data` }
-        }
-      }
-    }
+  if(window.barChartInstance) window.barChartInstance.destroy();
+  window.barChartInstance = new Chart(ctx, {
+    type:'bar', data:{ labels:['Q1 (10)','Median (20)','Q3 (30)','Your Data'], datasets:[{ data:[10,20,30,rate], backgroundColor:['#ccc','#ccc','#ccc',color], borderColor:['#999','#999','#999',color], borderWidth:1 }] },
+    options:{ responsive:true, plugins:{ title:{display:true,text:'Average Prescribing Rate Based on National Data',font:{size:16}}, legend:{display:false} }, scales:{ y:{beginAtZero:true,title:{display:true,text:`Average Prescribing Rate Based on ${medicine} (prescriptions/week)`}} }
   });
 
-  const savedLog = JSON.parse(localStorage.getItem("auditLog")) || [];
-  savedLog.push({
-    timestamp: new Date().toISOString(),
-    practiceLevel: level,
-    medicine,
-    software,
-    hours: manualHours || "",
-    fte: fte || "",
-    prescribed,
-    ...Object.fromEntries(strengths.map((s, i) => ["strength_" + (i+1), s])),
-    ...Object.fromEntries(challenges.map((c, i) => ["challenge_" + (i+1), c]))
-  });
-  localStorage.setItem("auditLog", JSON.stringify(savedLog));
+  const saved = JSON.parse(localStorage.getItem("auditLog"))||[];
+  saved.push({timestamp:new Date().toISOString(),practiceLevel:level,medicine,software,hours:level==='individual'?hours:'',fte:level==='practice'?fte:'',prescribed,...Object.fromEntries(strengths.map((s,i)=>[`strength_${i+1}`,s])),...Object.fromEntries(challenges.map((c,i)=>[`challenge_${i+1}`,c]))});
+  localStorage.setItem("auditLog",JSON.stringify(saved));
 }
-function printReport() {
-  const printableArea = document.getElementById("printableArea");
-  document.getElementById("report").style.display = "block";
-  html2canvas(printableArea, { scale: 2 }).then(canvas => {
-    const imgData = canvas.toDataURL("image/png");
-    const printWindow = window.open('', '', 'width=800,height=1100');
-    printWindow.document.write(`
-      <html><head><title>Audit Report</title>
-      <style>
-        @page { size: A4; margin: 20mm; }
-        body { margin: 0; padding: 0; }
-        img { width: 100%; height: auto; display: block; margin: 0 auto; }
-      </style>
-      </head><body>
-      <img src="${imgData}" />
-      </body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-    printWindow.close();
-  });
-};
 
-function downloadAuditCSV() {
-  const password = prompt("Admin access required. Enter password:");
-  if (password !== "admin123") {
-    alert("Access denied.");
-    return;
-  }
+function printReport(){const printArea=document.getElementById("printableArea");document.getElementById("report").style.display="block";html2canvas(printArea,{scale:2}).then(c=>{const data=c.toDataURL("image/png"),w=window.open('','',"width=800,height=1100");w.document.write(`<html><head><title>Audit Report</title><style>@page{size:A4;margin:20mm;}body{margin:0;padding:0;}img{width:100%;height:auto;display:block;margin:0 auto;}</style></head><body><img src='${data}'/></body></html>`);w.document.close();w.focus();w.print();w.close();});}
 
-  const data = JSON.parse(localStorage.getItem("auditLog")) || [];
-  if (!data.length) return alert("No data to export.");
-
-  const headers = Object.keys(data[0]);
-  const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join(",");
-
-  const blob = new Blob([csvContent], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "audit-data.csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-}
+function downloadAuditCSV(){const pwd=prompt("Admin access required. Enter password:");if(pwd!="admin123"){alert("Access denied.");return;}const data=JSON.parse(localStorage.getItem("auditLog"))||[];if(!data.length)return alert("No data to export.");const headers=Object.keys(data[0]);const rows=data.map(r=>headers.map(h=>JSON.stringify(r[h]||"")).join(","));const csv=[headers.join(","),...rows].join("\n");const blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="audit-data.csv";document.body.appendChild(a);a.click();document.body.removeChild(a);}
 </script>
