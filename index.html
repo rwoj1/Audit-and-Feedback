@@ -223,8 +223,7 @@ function downloadAuditCSV() {
   if (!data.length) return alert('No data to export.');
   const headers = Object.keys(data[0]);
   const rows = data.map(r => headers.map(h => JSON.stringify(r[h] || '')).join(','));
-  const csv = [headers.join(','), ...rows].join('
-');
+  const csv = [headers.join(','), ...rows].join(",");
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = 'audit-data.csv';
