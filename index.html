@@ -1,10 +1,12 @@
+<!-- SAVE POINT -->
+<!-- ✅ HTML SECTION -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
 
-  <label for="practiceLevel">Type of data:</label>
+  <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
   <select id="practiceLevel">
     <option value="">Select...</option>
     <option value="practice">Practice Level Data</option>
@@ -41,7 +43,7 @@
     <input type="number" id="hours" />
   </div>
 
-  <label id="prescribedLabel">Number of prescribed orders using the criteria above:</label>
+  <label id="prescribedLabel">Number of [medicine] prescribed in the last 3 months:</label>
   <input type="number" id="prescribed" />
 
   <h3>Facilitators (Strengths):</h3>
@@ -88,29 +90,26 @@
 
 <!-- ✅ JAVASCRIPT SECTION -->
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
   const levelSelect = document.getElementById('practiceLevel');
   const fteInput = document.getElementById('fteInput');
   const hoursInput = document.getElementById('hoursInput');
 
   function toggleInputs() {
-    const val = levelSelect.value;
-    fteInput.style.display = val === 'practice' ? 'block' : 'none';
-    hoursInput.style.display = val === 'individual' ? 'block' : 'none';
+    fteInput.style.display = levelSelect.value === 'practice' ? 'block' : 'none';
+    hoursInput.style.display = levelSelect.value === 'individual' ? 'block' : 'none';
   }
-
   levelSelect.addEventListener('change', toggleInputs);
   toggleInputs();
 
-  const medSelect = document.getElementById('medicine');
-  medSelect.addEventListener('change', () => {
+  document.getElementById('medicine').addEventListener('change', function() {
     document.getElementById('prescribedLabel').textContent =
-      `Number of ${medSelect.value} prescribed using the criteria above`;
+      `Number of ${this.value} prescribed in the last 3 months:`;
   });
 
-  document.getElementById('software').addEventListener('change', (e) => {
+  document.getElementById('software').addEventListener('change', function() {
     document.getElementById('softwareText').textContent =
-      e.target.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${e.target.value}` : '';
+      this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : '';
   });
 });
 
@@ -125,7 +124,7 @@ function generateReport() {
   if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
       (level === 'practice' && (isNaN(fte) || fte <= 0)) ||
       (level === 'individual' && (isNaN(hours) || hours <= 0))) {
-    alert('Please complete all fields with valid numbers.');
+    alert('Please complete all required fields.');
     return;
   }
 
