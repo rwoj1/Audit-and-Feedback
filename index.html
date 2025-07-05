@@ -130,14 +130,12 @@ function generateReport() {
     return;
   }
 
-  let hours = 0;
+  let weeklyRate = 0;
   if (level === "practice") {
-    hours = fte * 38;
+    weeklyRate = prescribed / fte;
   } else {
-    hours = manualHours;
+    weeklyRate = prescribed / (manualHours / 38);
   }
-
-  const weeklyRate = prescribed / hours;
 
   document.getElementById("resultText").textContent = `Average Prescribing per Week: ${weeklyRate.toFixed(2)}`;
 
