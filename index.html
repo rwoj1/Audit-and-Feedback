@@ -266,6 +266,7 @@ window.barChartInstance = new Chart(ctx, {
 }
 function printReport() {
   const printableArea = document.getElementById("printableArea");
+  document.getElementById("report").style.display = "block";
   html2canvas(printableArea, { scale: 2 }).then(canvas => {
     const imgData = canvas.toDataURL("image/png");
     const printWindow = window.open('', '', 'width=800,height=1100');
@@ -284,6 +285,7 @@ function printReport() {
     printWindow.print();
     printWindow.close();
   });
+};
 }
 
 function downloadAuditCSV() {
@@ -298,7 +300,8 @@ function downloadAuditCSV() {
 
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join(",");
+  const csvContent = [headers.join(","), ...rows].join("
+");
 
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
