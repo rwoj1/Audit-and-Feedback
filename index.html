@@ -51,7 +51,7 @@
   <label id="prescribedLabel">Number of [medicine] prescribed in the last 3 months:</label>
   <input type="number" id="prescribed" />
 
-  <h3>Facilitators (Strengths):</h3>
+  <h3>Which of the following strategies have aided in your ability to deprescribe?</h3>
   <div id="strengths">
     <label><input type="checkbox" value="Strength 1" /> Strength 1</label>
     <label><input type="checkbox" value="Strength 2" /> Strength 2</label>
@@ -62,7 +62,7 @@
     <label><input type="checkbox" value="None" /> None</label>
   </div>
 
-  <h3>Challenges:</h3>
+  <h3>Which of the following challenges has made deprescribing challenging?</h3>
   <div id="challenges">
     <label><input type="checkbox" value="Challenge 1" /> Challenge 1</label>
     <label><input type="checkbox" value="Challenge 2" /> Challenge 2</label>
@@ -144,7 +144,7 @@ function generateReport() {
 
   weeklyRate = weeklyRate / 12;
 
-  document.getElementById("resultText").textContent = `Average Prescribing per Week (divided by 12): ${weeklyRate.toFixed(1)}`;
+  document.getElementById("resultText").textContent = `The average times per week the ${medicine} is prescribed is: ${weeklyRate.toFixed(1)}`;
 
   const analysis = document.getElementById("resultAnalysis");
   if (weeklyRate < 10) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
@@ -164,24 +164,46 @@ function generateReport() {
     : challenges.map(c => `<li>${c} can result in Y</li>`).join("");
 
   document.getElementById("report").style.display = "block";
+document.getElementById("printButton").style.display = "inline-block";
+document.getElementById("downloadCSV").style.display = "inline-block";
   document.getElementById("printButton").style.display = "inline-block";
   document.getElementById("downloadCSV").style.display = "inline-block";
 
   const ctx = document.getElementById("barChart").getContext("2d");
-  if (window.barChartInstance) window.barChartInstance.destroy();
-  window.barChartInstance = new Chart(ctx, {
+if (window.barChartInstance) window.barChartInstance.destroy();
+
+let chartLabels = ['Q1 (10)', 'Median (20)', 'Q3 (30)'];
+let chartData = [10, 20, 30];
+let barColors = ['#ccc', '#ccc', '#ccc'];
+let userColor = 'green';
+let userIndex = 0;
+
+if (weeklyRate < 10) {
+  userIndex = 0;
+  userColor = 'green';
+} else if (weeklyRate < 20) {
+  userIndex = 1;
+  userColor = 'yellow';
+} else if (weeklyRate < 30) {
+  userIndex = 2;
+  userColor = 'orange';
+} else {
+  userIndex = 3;
+  userColor = 'red';
+}
+
+chartLabels.splice(userIndex + 1, 0, 'Your Data');
+chartData.splice(userIndex + 1, 0, weeklyRate);
+barColors.splice(userIndex + 1, 0, userColor);
+
+window.barChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: ['Q1 (10)', 'Median (20)', 'Q3 (30)', 'Your Data'],
+      labels: chartLabels,
       datasets: [{
         label: 'Prescribing Rate',
-        data: [10, 20, 30, weeklyRate],
-        backgroundColor: [
-          'rgba(0, 123, 255, 0.6)',
-          'rgba(0, 200, 83, 0.6)',
-          'rgba(255, 193, 7, 0.6)',
-          'rgba(220, 53, 69, 0.8)'
-        ],
+        data: chartData,
+        backgroundColor: barColors,
         borderColor: [
           'rgba(0, 123, 255, 1)',
           'rgba(0, 200, 83, 1)',
@@ -196,7 +218,7 @@ function generateReport() {
       scales: {
         y: {
           beginAtZero: true,
-          title: { display: true, text: 'Prescribing Rate' }
+          title: { display: true, text: `Prescribing Rate ${medicine} (prescriptions / week)` }
         }
       }
     }
