@@ -24,8 +24,6 @@
     <option value="Medicine E">Medicine E</option>
     <option value="Medicine F">Medicine F</option>
   </select>
-
-  </select>
   </div>
   <div class="form-group">
     <label for="software">Dispensing Software:</label>
@@ -105,20 +103,18 @@ document.getElementById("medicine").addEventListener("change", function () {
     med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
 });
 
-window.addEventListener("load", function () {
-  const levelSelect = document.getElementById("practiceLevel");
-  const fteInput = document.getElementById("fteInput");
-  const hoursInput = document.getElementById("hoursInput");
+const levelSelect = document.getElementById("practiceLevel");
+const fteInput = document.getElementById("fteInput");
+const hoursInput = document.getElementById("hoursInput");
 
-  function toggleInputs() {
-    const selectedValue = levelSelect.value;
-    fteInput.style.display = selectedValue === "practice" ? "block" : "none";
-    hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
-  }
+function toggleInputs() {
+  const selectedValue = levelSelect.value;
+  fteInput.style.display = selectedValue === "practice" ? "block" : "none";
+  hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
+}
 
-  levelSelect.addEventListener("change", toggleInputs);
-  toggleInputs();
-});
+levelSelect.addEventListener("change", toggleInputs);
+toggleInputs();
 
 function generateReport() {
   const level = document.getElementById("practiceLevel").value;
