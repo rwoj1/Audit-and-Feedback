@@ -2,6 +2,31 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
+<style>
+@media print {
+  #barChart {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  canvas {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    display: block;
+    margin: 0 auto;
+  }
+  #printableArea {
+    width: 100%;
+    max-width: 800px;
+    margin: auto;
+  }
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+  }
+}
+</style>
+
+
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
 
