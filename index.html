@@ -103,18 +103,27 @@ document.getElementById("medicine").addEventListener("change", function () {
     med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
 });
 
-const levelSelect = document.getElementById("practiceLevel");
-const fteInput = document.getElementById("fteInput");
-const hoursInput = document.getElementById("hoursInput");
+window.addEventListener("DOMContentLoaded", function () {
+  const levelSelect = document.getElementById("practiceLevel");
+  const fteInput = document.getElementById("fteInput");
+  const hoursInput = document.getElementById("hoursInput");
 
-function toggleInputs() {
-  const selectedValue = levelSelect.value;
-  fteInput.style.display = selectedValue === "practice" ? "block" : "none";
-  hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
-}
+  function toggleInputs() {
+    const selectedValue = levelSelect.value;
+    fteInput.style.display = selectedValue === "practice" ? "block" : "none";
+    hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
+  }
 
-levelSelect.addEventListener("change", toggleInputs);
-toggleInputs();
+  levelSelect.addEventListener("change", toggleInputs);
+  toggleInputs();
+
+  const medSelect = document.getElementById("medicine");
+  medSelect.addEventListener("change", function () {
+    const med = this.value;
+    document.getElementById("prescribedLabel").textContent =
+      med ? `Number of ${med} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
+  });
+});
 
 function generateReport() {
   const level = document.getElementById("practiceLevel").value;
