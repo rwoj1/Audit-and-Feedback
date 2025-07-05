@@ -42,6 +42,11 @@
     th, td {
       padding: 10px;
       border: 1px solid #ccc;
+      vertical-align: middle;
+    }
+    img.pill {
+      max-width: 100px;
+      height: auto;
     }
     #printBtn {
       margin-top: 20px;
@@ -61,7 +66,7 @@
 
   <h1>Proton Pump Inhibitor (PPI) Tapering Tool</h1>
 
-  <!-- Step-by-step form -->
+  <!-- Form Elements -->
   <label for="medicine">1. I currently take:</label>
   <select id="medicine" onchange="populateDoses()">
     <option value="">-- Select Medicine --</option>
@@ -74,7 +79,7 @@
 
   <div id="doseSection" style="display:none;">
     <label for="dose">2. My dose is:</label>
-    <select id="dose"></select>
+    <select id="dose" onchange="showFrequency()"></select>
   </div>
 
   <div id="freqSection" style="display:none;">
@@ -135,11 +140,22 @@
       Rabeprazole: [10, 20]
     };
 
+    const imageMap = {
+      "Pantoprazole-20": "Pantoprazole 20.gif",
+      "Pantoprazole-40": "Pantoprazole 40.gif",
+      "Omeprazole-10": "Omeprazole 10.gif",
+      "Omeprazole-20": "Omeprazole 20.gif",
+      "Esomeprazole-20": "Esomperazole 20.gif", // filename typo handled
+      "Esomeprazole-40": "Esomeprazole 40.gif",
+      "Lansoprazole-15": "Lansoprazole 15.gif",
+      "Lansoprazole-30": "Lansoprazole 30.gif",
+      "Rabeprazole-10": "Rabeprazole 10.gif",
+      "Rabeprazole-20": "Rabeprazole 20.gif"
+    };
+
     function populateDoses() {
       const med = document.getElementById("medicine").value;
       const doseSelect = document.getElementById("dose");
-      if (!med) return;
-
       doseSelect.innerHTML = "";
       doseOptions[med].forEach(dose => {
         const opt = document.createElement("option");
@@ -147,8 +163,10 @@
         opt.textContent = `${dose} mg`;
         doseSelect.appendChild(opt);
       });
-
       document.getElementById("doseSection").style.display = "block";
+    }
+
+    function showFrequency() {
       document.getElementById("freqSection").style.display = "block";
     }
 
@@ -163,7 +181,7 @@
 
     function generateSchedule() {
       const med = document.getElementById("medicine").value;
-      const dose = parseInt(document.getElementById("dose").value);
+      let dose = parseInt(document.getElementById("dose").value);
       const freq = document.getElementById("frequency").value;
       const time = document.getElementById("timeOfDay").value;
       const interval = parseInt(document.getElementById("interval").value);
@@ -174,6 +192,7 @@
       const lowerDose = (dose === strengths[0]) ? null : strengths[0];
 
       let html = `<h2>Tapering Schedule</h2>`;
+
       if (freq === "once" && lowerDose === null && taperType === "fast") {
         html += `<p>No taper required – this medicine can be stopped.</p>`;
         document.getElementById("result").innerHTML = html;
@@ -182,7 +201,7 @@
       }
 
       html += `<table>
-        <tr><th>Week Beginning</th><th>Instructions</th><th>Note</th></tr>`;
+        <tr><th>Week Starting</th><th>Instructions</th><th>Your tablet/capsule may look like:</th></tr>`;
 
       let week = 0;
       let currentDate = new Date(startDate);
@@ -190,44 +209,49 @@
       let complete = false;
 
       while (tapering) {
-        const dateStr = currentDate.toLocaleDateString();
+        const dateStr = currentDate.toLocaleDateString("en-AU", {
+          day: 'numeric', month: 'long', year: 'numeric'
+        });
+
         let instruction = "";
-        let note = "";
+        let doseThisWeek = dose;
+        let imageKey = `${med}-${dose}`;
 
         if (freq === "twice") {
           instruction = `Take ${dose} mg at dinner time`;
           if (week >= interval) {
             if (dose !== lowerDose && lowerDose !== null) {
-              instruction = `Take ${lowerDose} mg at dinner time`;
               dose = lowerDose;
+              instruction = `Take ${dose} mg at dinner time`;
             } else {
-              tapering = false;
               instruction = (taperType === "fast") ? "Completed" : "Take when required";
+              tapering = false;
               complete = true;
             }
           }
         } else {
           if (week === 0) {
-            instruction = `Take ${lowerDose} mg ${time}`;
+            dose = lowerDose ?? dose;
+            instruction = `Take ${dose} mg ${time}`;
           } else {
-            tapering = false;
             instruction = (taperType === "fast") ? "Completed" : "Take when required";
+            tapering = false;
             complete = true;
           }
         }
 
-        note = (complete && taperType === "fast") ? "Completed" :
-               (complete && taperType === "slow") ? "Optional/as needed" : "";
+        imageKey = `${med}-${dose}`;
+        const imgSrc = imageMap[imageKey] || "";
 
         html += `<tr>
           <td>${dateStr}</td>
           <td>${instruction}</td>
-          <td>${note}</td>
+          <td>${imgSrc ? `<img class="pill" src="${imgSrc}" alt="${dose} mg tablet" />` : "[No image available]"}</td>
         </tr>`;
 
         currentDate.setDate(currentDate.getDate() + (interval * 7));
         week++;
-        if (week > 10) tapering = false; // safety break
+        if (week > 10) tapering = false;
       }
 
       html += `</table>`;
