@@ -144,13 +144,22 @@ function generateReport() {
 
   weeklyRate = weeklyRate / 12;
 
-  document.getElementById("resultText").textContent = `The average times per week the ${medicine} is prescribed is: ${weeklyRate.toFixed(1)}`;
+  document.getElementById("resultText").textContent = `The average times per week ${medicine} is prescribed is: ${weeklyRate.toFixed(1)}`;
 
   const analysis = document.getElementById("resultAnalysis");
-  if (weeklyRate < 10) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
-  else if (weeklyRate < 20) analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
-  else if (weeklyRate < 30) analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
-  else analysis.textContent = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`;
+  if (weeklyRate < 10) {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
+    analysis.style.color = 'green';
+  } else if (weeklyRate < 20) {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
+    analysis.style.color = 'yellow';
+  } else if (weeklyRate < 30) {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
+    analysis.style.color = 'orange';
+  } else {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`;
+    analysis.style.color = 'red';
+  }
 
   const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
   const challenges = [...document.querySelectorAll("#challenges input:checked")].map(el => el.value);
@@ -210,7 +219,7 @@ window.barChartInstance = new Chart(ctx, {
     data: {
       labels: chartLabels,
       datasets: [{
-        label: 'Prescribing Rate',
+        label: '',
         data: chartData,
         backgroundColor: barColors,
         borderColor: [
@@ -224,10 +233,22 @@ window.barChartInstance = new Chart(ctx, {
     },
     options: {
       responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Average Prescribing Rate Based on National Data',
+          font: {
+            size: 16
+          }
+        },
+        legend: {
+          display: false
+        }
+      },
       scales: {
         y: {
           beginAtZero: true,
-          title: { display: true, text: `Prescribing Rate ${medicine} (prescriptions / week)` }
+          title: { display: true, text: `Average Prescribing Rate Based on National Data` }
         }
       }
     }
