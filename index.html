@@ -256,10 +256,11 @@ window.barChartInstance = new Chart(ctx, {
 }
 function printReport() {
   const printableArea = document.getElementById("printableArea");
-  html2canvas(printableArea).then(canvas => {
-    const printWindow = window.open('', '', 'width=800,height=600');
-    printWindow.document.write('<html><head><title>Audit Report</title></head><body>');
-    printWindow.document.body.appendChild(canvas);
+  html2canvas(printableArea, { scale: 2 }).then(canvas => {
+    const imgData = canvas.toDataURL("image/png");
+    const printWindow = window.open('', '', 'width=800,height=1000');
+    printWindow.document.write('<html><head><title>Audit Report</title><style>body{margin:0;}img{max-width:100%;height:auto;display:block;margin:0 auto;}</style></head><body>');
+    printWindow.document.write(`<img src="${imgData}" />`);
     printWindow.document.write('</body></html>');
     printWindow.document.close();
     printWindow.focus();
@@ -280,7 +281,8 @@ function downloadAuditCSV() {
 
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join(",");
+  const csvContent = [headers.join(","), ...rows].join("
+");
 
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
