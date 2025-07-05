@@ -284,8 +284,7 @@ function downloadAuditCSV() {
 
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join("
-");
+  const csvContent = [headers.join(","), ...rows].join(",");
 
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
