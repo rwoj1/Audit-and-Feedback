@@ -5,7 +5,7 @@
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
   <div class="form-group">
-    <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
+    <label for="practiceLevel">Type of data:</label>
     <select id="practiceLevel">
       <option value="">Select...</option>
       <option value="practice">Practice Level Data</option>
@@ -132,26 +132,10 @@ function generateReport() {
   const rate = prescribed / hours;
 
   document.getElementById('resultText').textContent =
-    `The average times per week ${medicine} is prescribed: ${rate.toFixed(2)}`;
+    `Average Prescribing per Week: ${rate.toFixed(2)}`;
 
   const analysisEl = document.getElementById('resultAnalysis');
   let text, color;
-  if (rate < 10) {
-    text = `On average, the prescribing rate of ${medicine} in your practice is in the bottom 25% based on national data.`;
-    color = 'green';
-  } else if (rate < 20) {
-    text = `On average, the prescribing rate of ${medicine} in your practice is below average based on national data.`;
-    color = 'yellow';
-  } else if (rate < 30) {
-    text = `On average, the prescribing rate of ${medicine} in your practice is above average based on national data.`;
-    color = 'orange';
-  } else {
-    text = `On average, the prescribing rate of ${medicine} in your practice is in the top 25% based on national data.`;
-    color = 'red';
-  }
-  analysisEl.textContent = text;
-  analysisEl.style.color = color;
-
-  // ... rest of chart, strengths, challenges, print and download logic ...
-}
-</script>
+  if (rate < 10) { text = `On average, the prescribing rate of ${medicine} in your practice is in the bottom 25% based on national data.`; color = 'green'; }
+  else if (rate < 20) { text = `On average, the prescribing rate of ${medicine} in your practice is below average based on national data.`; color = 'yellow'; }
+  else if (rate < 30) { text = `On average, the prescribing rate of ${medicine} in your practice is above average based on national data.`; color = '
