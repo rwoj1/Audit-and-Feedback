@@ -5,15 +5,17 @@
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
 
-  <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
-  <select id="practiceLevel">
+  <div class="form-group">
+    <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
+    <select id="practiceLevel">
     <option value="">Select...</option>
     <option value="practice">Practice Level Data</option>
     <option value="individual">Individual Level Data</option>
   </select>
 
-  <label for="medicine">Medicine Prescribed to Audit:</label>
-  <select id="medicine">
+  <div class="form-group">
+    <label for="medicine">Medicine Prescribed to Audit:</label>
+    <select id="medicine">
     <option value="">Select...</option>
     <option value="Medicine A">Medicine A</option>
     <option value="Medicine B">Medicine B</option>
@@ -23,14 +25,17 @@
     <option value="Medicine F">Medicine F</option>
   </select>
 
-  <label for="software">Dispensing Software:</label>
-  <select id="software">
+  </select>
+  </div>
+  <div class="form-group">
+    <label for="software">Dispensing Software:</label>
+    <select id="software">
     <option value="">Select...</option>
     <option value="Best Practice">Best Practice</option>
     <option value="Medical Director Clinical">Medical Director Clinical</option>
     <option value="Medical Director Helix">Medical Director Helix</option>
   </select>
-
+  </div>
   <p id="softwareText"></p>
 
   <div id="fteInput" style="display:none;">
@@ -137,7 +142,10 @@ function generateReport() {
     weeklyRate = prescribed / (manualHours / 38);
   }
 
-  document.getElementById("resultText").textContent = `Average Prescribing per Week: ${weeklyRate.toFixed(2)}`;
+  weeklyRate = weeklyRate / 12;
+  }
+
+  document.getElementById("resultText").textContent = `Average Prescribing per Week (divided by 12): ${weeklyRate.toFixed(1)}`;
 
   const analysis = document.getElementById("resultAnalysis");
   if (weeklyRate < 10) analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
