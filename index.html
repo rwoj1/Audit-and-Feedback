@@ -1,41 +1,34 @@
-<!-- SAVE POINT -->
-<!-- ✅ HTML SECTION -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <div class="container">
   <h1>Medicine Prescribing Audit</h1>
-  <div class="form-group">
-    <label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
-    <select id="practiceLevel">
-      <option value="">Select...</option>
-      <option value="practice">Practice Level Data</option>
-      <option value="individual">Individual Level Data</option>
-    </select>
-  </div>
 
-  <div class="form-group">
-    <label for="medicine">Medicine Prescribed to Audit:</label>
-    <select id="medicine">
-      <option value="">Select...</option>
-      <option value="Medicine A">Medicine A</option>
-      <option value="Medicine B">Medicine B</option>
-      <option value="Medicine C">Medicine C</option>
-      <option value="Medicine D">Medicine D</option>
-      <option value="Medicine E">Medicine E</option>
-      <option value="Medicine F">Medicine F</option>
-    </select>
-  </div>
+  <label for="practiceLevel">Type of data:</label>
+  <select id="practiceLevel">
+    <option value="">Select...</option>
+    <option value="practice">Practice Level Data</option>
+    <option value="individual">Individual Level Data</option>
+  </select>
 
-  <div class="form-group">
-    <label for="software">Dispensing Software:</label>
-    <select id="software">
-      <option value="">Select...</option>
-      <option value="Best Practice">Best Practice</option>
-      <option value="Medical Director Clinical">Medical Director Clinical</option>
-      <option value="Medical Director Helix">Medical Director Helix</option>
-    </select>
-  </div>
+  <label for="medicine">Medicine Prescribed to Audit:</label>
+  <select id="medicine">
+    <option value="">Select...</option>
+    <option value="Medicine A">Medicine A</option>
+    <option value="Medicine B">Medicine B</option>
+    <option value="Medicine C">Medicine C</option>
+    <option value="Medicine D">Medicine D</option>
+    <option value="Medicine E">Medicine E</option>
+    <option value="Medicine F">Medicine F</option>
+  </select>
+
+  <label for="software">Dispensing Software:</label>
+  <select id="software">
+    <option value="">Select...</option>
+    <option value="Best Practice">Best Practice</option>
+    <option value="Medical Director Clinical">Medical Director Clinical</option>
+    <option value="Medical Director Helix">Medical Director Helix</option>
+  </select>
   <p id="softwareText"></p>
 
   <div id="fteInput" style="display:none;">
@@ -95,17 +88,30 @@
 
 <!-- ✅ JAVASCRIPT SECTION -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', () => {
   const levelSelect = document.getElementById('practiceLevel');
   const fteInput = document.getElementById('fteInput');
   const hoursInput = document.getElementById('hoursInput');
+
   function toggleInputs() {
     const val = levelSelect.value;
     fteInput.style.display = val === 'practice' ? 'block' : 'none';
     hoursInput.style.display = val === 'individual' ? 'block' : 'none';
   }
+
   levelSelect.addEventListener('change', toggleInputs);
   toggleInputs();
+
+  const medSelect = document.getElementById('medicine');
+  medSelect.addEventListener('change', () => {
+    document.getElementById('prescribedLabel').textContent =
+      `Number of ${medSelect.value} prescribed using the criteria above`;
+  });
+
+  document.getElementById('software').addEventListener('change', (e) => {
+    document.getElementById('softwareText').textContent =
+      e.target.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${e.target.value}` : '';
+  });
 });
 
 function generateReport() {
@@ -115,11 +121,11 @@ function generateReport() {
   const prescribed = parseFloat(document.getElementById('prescribed').value);
   const fte = parseFloat(document.getElementById('fte').value);
   const hours = parseFloat(document.getElementById('hours').value);
-  
+
   if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
       (level === 'practice' && (isNaN(fte) || fte <= 0)) ||
       (level === 'individual' && (isNaN(hours) || hours <= 0))) {
-    alert('Complete all fields');
+    alert('Please complete all fields with valid numbers.');
     return;
   }
 
@@ -128,11 +134,11 @@ function generateReport() {
 
   document.getElementById('resultText').textContent = `Average Prescribing per Week: ${rate.toFixed(2)}`;
 
-  const analysis = document.getElementById('resultAnalysis');
-  if (rate < 10) analysis.textContent = 'On average in bottom 25%';
-  else if (rate < 20) analysis.textContent = 'On average below average';
-  else if (rate < 30) analysis.textContent = 'On average above average';
-  else analysis.textContent = 'On average top 25%';
+  const analysisEl = document.getElementById('resultAnalysis');
+  if (rate < 10) analysisEl.textContent = 'On average in bottom 25%';
+  else if (rate < 20) analysisEl.textContent = 'On average below average';
+  else if (rate < 30) analysisEl.textContent = 'On average above average';
+  else analysisEl.textContent = 'On average top 25%';
 
   document.getElementById('report').style.display = 'block';
 }
@@ -147,9 +153,9 @@ function printReport() {
 
 function downloadAuditCSV() {
   const data = JSON.parse(localStorage.getItem('auditLog') || '[]');
-  if (!data.length) { alert('No data'); return; }
+  if (!data.length) { alert('No data to export.'); return; }
   const headers = Object.keys(data[0]);
-  const csv = [headers.join(','), ...data.map(r => headers.map(h => r[h]).join(','))].join("\n");
+  const csv = [headers.join(','), ...data.map(r => headers.map(h => JSON.stringify(r[h] || '')).join(','))].join("\n");
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   a.download = 'audit-data.csv';
