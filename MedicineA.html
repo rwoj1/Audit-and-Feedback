@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proton Pump Inhibitor – Deprescribing Guidance</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background: #f7f9fb;
+    }
+    h1 {
+      color: #2c3e50;
+    }
+    .accordion {
+      background-color: #e3efff;
+      color: #333;
+      cursor: pointer;
+      padding: 18px;
+      width: 100%;
+      border: none;
+      text-align: left;
+      outline: none;
+      font-size: 18px;
+      margin-top: 10px;
+      transition: background-color 0.3s ease;
+    }
+    .accordion:hover {
+      background-color: #d0e4ff;
+    }
+    .active, .accordion:focus {
+      background-color: #c6ddff;
+    }
+    .panel {
+      padding: 0 18px;
+      display: none;
+      background-color: white;
+      overflow: hidden;
+      border-left: 4px solid #c6ddff;
+      border-bottom: 1px solid #ddd;
+    }
+    .panel p {
+      padding: 12px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Proton Pump Inhibitor (PPI) – Deprescribing Guidance</h1>
+
+  <!-- Accordion Sections -->
+
+  <button class="accordion">1. Is there an indication for continuing a PPI?</button>
+  <div class="panel">
+    <p>Review whether the original reason for prescribing the PPI still applies (e.g., GERD, ulcer prevention with NSAIDs). Discontinue or taper if the indication is no longer present.</p>
+  </div>
+
+  <button class="accordion">2. Is the PPI dose appropriate?</button>
+  <div class="panel">
+    <p>Many patients remain on high doses unnecessarily. Consider stepping down to the lowest effective dose or switching to an as-needed regimen.</p>
+  </div>
+
+  <button class="accordion">3. Are there adverse effects?</button>
+  <div class="panel">
+    <p>Long-term use of PPIs has been associated with increased risks of kidney disease, fractures, and infections. Weigh risks vs. benefits for continued use.</p>
+  </div>
+
+  <button class="accordion">4. Is tapering required?</button>
+  <div class="panel">
+    <p>Yes. Sudden stopping may cause rebound acid hypersecretion. Reduce the dose gradually (e.g., halve the dose every 1–2 weeks or switch to alternate-day dosing before stopping).</p>
+  </div>
+
+  <button class="accordion">5. What are the withdrawal symptoms?</button>
+  <div class="panel">
+    <p>Rebound acid symptoms (heartburn, dyspepsia) may occur and typically resolve within 1–2 weeks. Offer support with antacids or H2 blockers if needed during tapering.</p>
+  </div>
+
+  <button class="accordion">6. What alternatives are available?</button>
+  <div class="panel">
+    <p>Consider lifestyle interventions (diet, weight loss, head elevation during sleep). Use antacids or H2-receptor antagonists as alternatives where appropriate.</p>
+  </div>
+
+  <button class="accordion">7. Monitoring and follow-up</button>
+  <div class="panel">
+    <p>Monitor symptoms closely after dose reduction. Schedule follow-up within 2–4 weeks to assess symptom control and need for further adjustment.</p>
+  </div>
+
+  <script>
+    // Accordion functionality
+    const acc = document.getElementsByClassName("accordion");
+    for (let i = 0; i < acc.length; i++) {
+      acc[i].addEventListener("click", function () {
+        this.classList.toggle("active");
+        const panel = this.nextElementSibling;
+        if (panel.style.display === "block") {
+          panel.style.display = "none";
+        } else {
+          panel.style.display = "block";
+        }
+      });
+    }
+  </script>
+
+</body>
+</html>
