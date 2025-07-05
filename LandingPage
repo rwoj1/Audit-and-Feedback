@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Medicine Website</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      background-color: #f9f9f9;
+    }
+    nav a {
+      margin-right: 20px;
+      text-decoration: none;
+      color: #0077cc;
+    }
+    nav a:hover {
+      text-decoration: underline;
+    }
+    h1 {
+      color: #333;
+    }
+    ul {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Welcome to the Medicine Portal</h1>
+
+  <!-- Navigation Links -->
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="about.html">About</a>
+    <a href="medicines.html">Medicines</a>
+    <a href="contact.html">Contact</a>
+  </nav>
+
+  <h2>List of Medicines</h2>
+  <ul>
+    <li>Medicine A</li>
+    <li>Medicine B</li>
+    <li>Medicine C</li>
+    <li>Medicine D</li>
+    <li>Medicine E</li>
+    <li>Medicine F</li>
+  </ul>
+
+</body>
+</html>
