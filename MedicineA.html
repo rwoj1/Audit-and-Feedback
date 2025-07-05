@@ -1,104 +1,238 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proton Pump Inhibitor – Deprescribing Guidance</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Medicine A – PPI Tapering Tool</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 40px;
-      background: #f7f9fb;
+      background-color: #f9f9f9;
     }
     h1 {
       color: #2c3e50;
     }
-    .accordion {
-      background-color: #e3efff;
-      color: #333;
-      cursor: pointer;
-      padding: 18px;
-      width: 100%;
+    label {
+      display: block;
+      margin-top: 15px;
+      font-weight: bold;
+    }
+    select, input[type="date"] {
+      padding: 8px;
+      width: 300px;
+      margin-top: 5px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      background-color: #0077cc;
+      color: white;
       border: none;
-      text-align: left;
-      outline: none;
-      font-size: 18px;
-      margin-top: 10px;
-      transition: background-color 0.3s ease;
+      cursor: pointer;
     }
-    .accordion:hover {
-      background-color: #d0e4ff;
+    button:hover {
+      background-color: #005fa3;
     }
-    .active, .accordion:focus {
-      background-color: #c6ddff;
+    table {
+      margin-top: 30px;
+      width: 100%;
+      border-collapse: collapse;
     }
-    .panel {
-      padding: 0 18px;
-      display: none;
-      background-color: white;
-      overflow: hidden;
-      border-left: 4px solid #c6ddff;
-      border-bottom: 1px solid #ddd;
+    th, td {
+      padding: 10px;
+      border: 1px solid #ccc;
     }
-    .panel p {
-      padding: 12px 0;
+    #printBtn {
+      margin-top: 20px;
+      background-color: #555;
+    }
+    @media print {
+      button, select, input, nav {
+        display: none !important;
+      }
+      table {
+        page-break-after: auto;
+      }
     }
   </style>
 </head>
 <body>
 
-  <h1>Proton Pump Inhibitor (PPI) – Deprescribing Guidance</h1>
+  <h1>Proton Pump Inhibitor (PPI) Tapering Tool</h1>
 
-  <!-- Accordion Sections -->
+  <!-- Step-by-step form -->
+  <label for="medicine">1. I currently take:</label>
+  <select id="medicine" onchange="populateDoses()">
+    <option value="">-- Select Medicine --</option>
+    <option value="Pantoprazole">Pantoprazole</option>
+    <option value="Omeprazole">Omeprazole</option>
+    <option value="Esomeprazole">Esomeprazole</option>
+    <option value="Lansoprazole">Lansoprazole</option>
+    <option value="Rabeprazole">Rabeprazole</option>
+  </select>
 
-  <button class="accordion">1. Is there an indication for continuing a PPI?</button>
-  <div class="panel">
-    <p>Review whether the original reason for prescribing the PPI still applies (e.g., GERD, ulcer prevention with NSAIDs). Discontinue or taper if the indication is no longer present.</p>
+  <div id="doseSection" style="display:none;">
+    <label for="dose">2. My dose is:</label>
+    <select id="dose"></select>
   </div>
 
-  <button class="accordion">2. Is the PPI dose appropriate?</button>
-  <div class="panel">
-    <p>Many patients remain on high doses unnecessarily. Consider stepping down to the lowest effective dose or switching to an as-needed regimen.</p>
+  <div id="freqSection" style="display:none;">
+    <label for="frequency">3. Frequency per day:</label>
+    <select id="frequency" onchange="toggleTimeOption()">
+      <option value="">-- Select Frequency --</option>
+      <option value="once">ONCE</option>
+      <option value="twice">TWICE</option>
+    </select>
   </div>
 
-  <button class="accordion">3. Are there adverse effects?</button>
-  <div class="panel">
-    <p>Long-term use of PPIs has been associated with increased risks of kidney disease, fractures, and infections. Weigh risks vs. benefits for continued use.</p>
+  <div id="timeSection" style="display:none;">
+    <label for="timeOfDay">4. Do you take your dose:</label>
+    <select id="timeOfDay">
+      <option value="">-- Select Time --</option>
+      <option value="In the Morning">In the Morning</option>
+      <option value="At Night">At Night</option>
+    </select>
   </div>
 
-  <button class="accordion">4. Is tapering required?</button>
-  <div class="panel">
-    <p>Yes. Sudden stopping may cause rebound acid hypersecretion. Reduce the dose gradually (e.g., halve the dose every 1–2 weeks or switch to alternate-day dosing before stopping).</p>
+  <div id="intervalSection" style="display:none;">
+    <label for="interval">5. I want to reduce my dose every:</label>
+    <select id="interval">
+      <option value="1">1 week</option>
+      <option value="2">2 weeks</option>
+      <option value="3">3 weeks</option>
+      <option value="4">4 weeks</option>
+    </select>
   </div>
 
-  <button class="accordion">5. What are the withdrawal symptoms?</button>
-  <div class="panel">
-    <p>Rebound acid symptoms (heartburn, dyspepsia) may occur and typically resolve within 1–2 weeks. Offer support with antacids or H2 blockers if needed during tapering.</p>
+  <div id="taperTypeSection" style="display:none;">
+    <label for="taperType">6. I want to:</label>
+    <select id="taperType">
+      <option value="">-- Select Taper Type --</option>
+      <option value="fast">Fast Taper</option>
+      <option value="slow">Slow Taper</option>
+    </select>
   </div>
 
-  <button class="accordion">6. What alternatives are available?</button>
-  <div class="panel">
-    <p>Consider lifestyle interventions (diet, weight loss, head elevation during sleep). Use antacids or H2-receptor antagonists as alternatives where appropriate.</p>
+  <div id="startDateSection" style="display:none;">
+    <label for="startDate">7. Start tapering on:</label>
+    <input type="date" id="startDate" />
   </div>
 
-  <button class="accordion">7. Monitoring and follow-up</button>
-  <div class="panel">
-    <p>Monitor symptoms closely after dose reduction. Schedule follow-up within 2–4 weeks to assess symptom control and need for further adjustment.</p>
+  <div id="generateSection" style="display:none;">
+    <button onclick="generateSchedule()">Generate Tapering Schedule</button>
   </div>
+
+  <div id="result"></div>
+  <button id="printBtn" onclick="window.print()" style="display:none;">Print / Save as PDF</button>
 
   <script>
-    // Accordion functionality
-    const acc = document.getElementsByClassName("accordion");
-    for (let i = 0; i < acc.length; i++) {
-      acc[i].addEventListener("click", function () {
-        this.classList.toggle("active");
-        const panel = this.nextElementSibling;
-        if (panel.style.display === "block") {
-          panel.style.display = "none";
-        } else {
-          panel.style.display = "block";
-        }
+    const doseOptions = {
+      Pantoprazole: [20, 40],
+      Omeprazole: [10, 20],
+      Esomeprazole: [20, 40],
+      Lansoprazole: [15, 30],
+      Rabeprazole: [10, 20]
+    };
+
+    function populateDoses() {
+      const med = document.getElementById("medicine").value;
+      const doseSelect = document.getElementById("dose");
+      if (!med) return;
+
+      doseSelect.innerHTML = "";
+      doseOptions[med].forEach(dose => {
+        const opt = document.createElement("option");
+        opt.value = dose;
+        opt.textContent = `${dose} mg`;
+        doseSelect.appendChild(opt);
       });
+
+      document.getElementById("doseSection").style.display = "block";
+      document.getElementById("freqSection").style.display = "block";
+    }
+
+    function toggleTimeOption() {
+      const freq = document.getElementById("frequency").value;
+      document.getElementById("timeSection").style.display = (freq === "once") ? "block" : "none";
+      document.getElementById("intervalSection").style.display = "block";
+      document.getElementById("taperTypeSection").style.display = "block";
+      document.getElementById("startDateSection").style.display = "block";
+      document.getElementById("generateSection").style.display = "block";
+    }
+
+    function generateSchedule() {
+      const med = document.getElementById("medicine").value;
+      const dose = parseInt(document.getElementById("dose").value);
+      const freq = document.getElementById("frequency").value;
+      const time = document.getElementById("timeOfDay").value;
+      const interval = parseInt(document.getElementById("interval").value);
+      const taperType = document.getElementById("taperType").value;
+      const startDate = new Date(document.getElementById("startDate").value);
+
+      const strengths = doseOptions[med].sort((a, b) => a - b);
+      const lowerDose = (dose === strengths[0]) ? null : strengths[0];
+
+      let html = `<h2>Tapering Schedule</h2>`;
+      if (freq === "once" && lowerDose === null && taperType === "fast") {
+        html += `<p>No taper required – this medicine can be stopped.</p>`;
+        document.getElementById("result").innerHTML = html;
+        document.getElementById("printBtn").style.display = "inline-block";
+        return;
+      }
+
+      html += `<table>
+        <tr><th>Week Beginning</th><th>Instructions</th><th>Note</th></tr>`;
+
+      let week = 0;
+      let currentDate = new Date(startDate);
+      let tapering = true;
+      let complete = false;
+
+      while (tapering) {
+        const dateStr = currentDate.toLocaleDateString();
+        let instruction = "";
+        let note = "";
+
+        if (freq === "twice") {
+          instruction = `Take ${dose} mg at dinner time`;
+          if (week >= interval) {
+            if (dose !== lowerDose && lowerDose !== null) {
+              instruction = `Take ${lowerDose} mg at dinner time`;
+              dose = lowerDose;
+            } else {
+              tapering = false;
+              instruction = (taperType === "fast") ? "Completed" : "Take when required";
+              complete = true;
+            }
+          }
+        } else {
+          if (week === 0) {
+            instruction = `Take ${lowerDose} mg ${time}`;
+          } else {
+            tapering = false;
+            instruction = (taperType === "fast") ? "Completed" : "Take when required";
+            complete = true;
+          }
+        }
+
+        note = (complete && taperType === "fast") ? "Completed" :
+               (complete && taperType === "slow") ? "Optional/as needed" : "";
+
+        html += `<tr>
+          <td>${dateStr}</td>
+          <td>${instruction}</td>
+          <td>${note}</td>
+        </tr>`;
+
+        currentDate.setDate(currentDate.getDate() + (interval * 7));
+        week++;
+        if (week > 10) tapering = false; // safety break
+      }
+
+      html += `</table>`;
+      document.getElementById("result").innerHTML = html;
+      document.getElementById("printBtn").style.display = "inline-block";
     }
   </script>
 
