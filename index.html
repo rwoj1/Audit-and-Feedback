@@ -251,7 +251,17 @@ window.barChartInstance = new Chart(ctx, {
   });
 
   const savedLog = JSON.parse(localStorage.getItem("auditLog")) || [];
-  savedLog.push({ timestamp: new Date().toISOString(), practiceLevel: level, medicine, software, prescribed, fte, weeklyRate: weeklyRate.toFixed(2), strengths, challenges });
+  savedLog.push({
+    timestamp: new Date().toISOString(),
+    practiceLevel: level,
+    medicine,
+    software,
+    hours: manualHours || "",
+    fte: fte || "",
+    prescribed,
+    ...Object.fromEntries(strengths.map((s, i) => ["strength_" + (i+1), s])),
+    ...Object.fromEntries(challenges.map((c, i) => ["challenge_" + (i+1), c]))
+  });
   localStorage.setItem("auditLog", JSON.stringify(savedLog));
 }
 function printReport() {
@@ -288,7 +298,8 @@ function downloadAuditCSV() {
 
   const headers = Object.keys(data[0]);
   const rows = data.map(row => headers.map(h => JSON.stringify(row[h] || "")).join(","));
-  const csvContent = [headers.join(","), ...rows].join(",");
+  const csvContent = [headers.join(","), ...rows].join("
+");
 
   const blob = new Blob([csvContent], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
