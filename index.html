@@ -1,125 +1,91 @@
-<!-- SAVE POINT -->
-<!-- ✅ HTML SECTION -->
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <div class="container">
-<h1>Medicine Prescribing Audit</h1>
-<div class="form-group">
-<label for="practiceLevel">Type of data: Practice Level vs Individual Data</label>
-<select id="practiceLevel">
-<option value="">Select...</option>
-<option value="practice">Practice Level Data</option>
-<option value="individual">Individual Level Data</option>
-</select>
+  <h1>Medicine Prescribing Audit</h1>
+
+  <!-- Data Type Selection -->
+  <div class="form-group">
+    <label for="practiceLevel">Type of Data: Practice vs Individual</label>
+    <select id="practiceLevel">
+      <option value="">Select...</option>
+      <option value="practice">Practice Level Data</option>
+      <option value="individual">Individual Level Data</option>
+    </select>
+  </div>
+
+  <!-- Medicine Selection -->
+  <div class="form-group">
+    <label for="medicine">Medicine to Audit</label>
+    <select id="medicine">
+      <option value="">Select...</option>
+      <option>Medicine A</option>
+      <option>Medicine B</option>
+      <option>Medicine C</option>
+      <option>Medicine D</option>
+      <option>Medicine E</option>
+      <option>Medicine F</option>
+    </select>
+  </div>
+
+  <!-- FTE / Hours -->
+  <div id="fteInput" style="display:none;">
+    <label>Total FTE per week</label>
+    <input id="fte" type="number" />
+  </div>
+  <div id="hoursInput" style="display:none;">
+    <label>Hours worked per week</label>
+    <input id="hours" type="number" />
+  </div>
+
+  <!-- Prescribed -->
+  <div class="form-group">
+    <label id="prescribedLabel">Number of prescribed orders</label>
+    <input id="prescribed" type="number" />
+  </div>
+
+  <!-- Generate -->
+  <button onclick="generateReport()">Generate Report</button>
+
+  <!-- Report -->
+  <div id="report" style="display:none;">
+    <h2>Audit Results</h2>
+    <canvas id="barChart"></canvas>
+    <p id="resultText"></p>
+    <p id="resultAnalysis"></p>
+  </div>
 </div>
 
-<div class="form-group">
-<label for="medicine">Medicine Prescribed to Audit:</label>
-<select id="medicine">
-<option value="">Select...</option>
-<option value="Medicine A">Medicine A</option>
-<option value="Medicine B">Medicine B</option>
-<option value="Medicine C">Medicine C</option>
-<option value="Medicine D">Medicine D</option>
-<option value="Medicine E">Medicine E</option>
-<option value="Medicine F">Medicine F</option>
-</select>
-</div>
-
-<div class="form-group">
-<label for="software">Dispensing Software:</label>
-<select id="software">
-<option value="">Select...</option>
-<option value="Best Practice">Best Practice</option>
-<option value="Medical Director Clinical">Medical Director Clinical</option>
-<option value="Medical Director Helix">Medical Director Helix</option>
-</select>
-</div>
-<p id="softwareText"></p>
-
-<div id="fteInput" style="display:none;">
-<label>Total FTE per week within practice:</label>
-<input type="number" id="fte" />
-</div>
-
-<div id="hoursInput" style="display:none;">
-<label>Average number of hours worked per week:</label>
-<input type="number" id="hours" />
-</div>
-
-<label id="prescribedLabel">Number of prescribed orders using the criteria above:</label>
-<input type="number" id="prescribed" />
-
-<h3>Facilitators (Strengths):</h3>
-<div id="strengths">
-<label><input type="checkbox" value="Strength 1" /> Strength 1</label>
-<label><input type="checkbox" value="Strength 2" /> Strength 2</label>
-<label><input type="checkbox" value="Strength 3" /> Strength 3</label>
-<label><input type="checkbox" value="Strength 4" /> Strength 4</label>
-<label><input type="checkbox" value="Strength 5" /> Strength 5</label>
-<label><input type="checkbox" value="Strength 6" /> Strength 6</label>
-<label><input type="checkbox" value="None" /> None</label>
-</div>
-
-<h3>Challenges:</h3>
-<div id="challenges">
-<label><input type="checkbox" value="Challenge 1" /> Challenge 1</label>
-<label><input type="checkbox" value="Challenge 2" /> Challenge 2</label>
-<label><input type="checkbox" value="Challenge 3" /> Challenge 3</label>
-<label><input type="checkbox" value="Challenge 4" /> Challenge 4</label>
-<label><input type="checkbox" value="Challenge 5" /> Challenge 5</label>
-<label><input type="checkbox" value="Challenge 6" /> Challenge 6</label>
-<label><input type="checkbox" value="None" /> None</label>
-</div>
-
-<button onclick="generateReport()">Generate Report</button>
-
-<hr />
-<div id="report" style="display:none;">
-<h2>Audit Results</h2>
-<div id="printableArea">
-<p id="resultText"></p>
-<p id="resultAnalysis"></p>
-<canvas id="barChart" width="400" height="200"></canvas>
-<p><strong>Impact of facilitators:</strong></p>
-<ul id="strengthOutput"></ul>
-<p><strong>How to overcome barriers:</strong></p>
-<ul id="challengeOutput"></ul>
-</div>
-</div>
-
-  <button id="printButton" onclick="printReport()" style="display:none;">Print Report</button>
-  <button id="downloadCSV" onclick="downloadAuditCSV()" style="display:none;">Download All Data (Admin Only)</button>
-  
-  
-</div>
-
-<!-- ✅ JAVASCRIPT SECTION -->
 <script>
-// Restore print & CSV logic
+// Toggle FTE/hours inputs
+document.getElementById('practiceLevel').addEventListener('change', function() {
+  const fteInput = document.getElementById('fteInput');
+  const hoursInput = document.getElementById('hoursInput');
+  if (this.value === 'practice') { fteInput.style.display = 'block'; hoursInput.style.display = 'none'; }
+  else if (this.value === 'individual') { fteInput.style.display = 'none'; hoursInput.style.display = 'block'; }
+});
+
 function generateReport() {
-const level = document.getElementById('practiceLevel').value;
-const medicine = document.getElementById('medicine').value;
-const software = document.getElementById('software').value;
-const prescribed = parseFloat(document.getElementById('prescribed').value);
-const fte = parseFloat(document.getElementById('fte').value);
-const hours = parseFloat(document.getElementById('hours').value);
-if (!level || !medicine || !software || isNaN(prescribed) || prescribed<=0 || (level==='practice'&& (isNaN(fte)||fte<=0))||(level==='individual'&&(isNaN(hours)||hours<=0))) return alert('Complete fields');
-const h = level==='practice'?fte*38:hours;
-const rate = prescribed/h;
-document.getElementById('resultText').textContent=`Average Prescribing per Week: ${rate.toFixed(2)}`;
-const analysis = document.getElementById('resultAnalysis');
-if(rate<10)analysis.textContent=`On average in bottom 25%`;
-else if(rate<20)analysis.textContent=`On average below average`;
-else if(rate<30)analysis.textContent=`On average above average`;
-else analysis.textContent=`On average top 25%`;
-document.getElementById('report').style.display='block';
-  printReport();
-  downloadAuditCSV();
+  const level = document.getElementById('practiceLevel').value;
+  const medicine = document.getElementById('medicine').value;
+  const prescribed = parseFloat(document.getElementById('prescribed').value);
+  const fte = parseFloat(document.getElementById('fte').value) || 0;
+  const hours = parseFloat(document.getElementById('hours').value) || 0;
+  const denom = level === 'practice' ? fte : hours/38;
+  const rate = prescribed / denom;
+
+  // Render chart
+  const ctx = document.getElementById('barChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['Rate'],
+      datasets: [{ data: [rate], label: medicine }]
+    }
+  });
+
+  document.getElementById('resultText').textContent = 'Average Prescribing per Week: ' + rate.toFixed(2);
+  document.getElementById('resultAnalysis').textContent = '';
+  document.getElementById('report').style.display = 'block';
 }
-function printReport(){html2canvas(document.getElementById('printableArea')).then(canvas=>{const w=window.open();w.document.write('<img src='+canvas.toDataURL()+'/>');w.print();});}
-function downloadAuditCSV(){const data=JSON.parse(localStorage.getItem('auditLog')||'[]');const csv=[Object.keys(data[0]).join(','),...data.map(r=>Object.values(r).join(','))].join("\n");const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='data.csv';a.click();}
-);}
-));a.download='data.csv';a.click();}
 </script>
