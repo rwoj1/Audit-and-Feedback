@@ -192,11 +192,18 @@ function generateReport() {
 
 document.getElementById("strengthOutput").innerHTML = strengths.includes("None")
   ? "<li>No facilitators selected.</li>"
-  : strengths.map(s => `<li>${s} → Outcome Y</li>`).join("");
+  : [
+      "<p><em>Selected strengths may support deprescribing by:</em></p>",
+      ...strengths.map(s => `<li>${s} → Outcome Y</li>`)
+    ].join("");
 
 document.getElementById("challengeOutput").innerHTML = challenges.includes("None")
   ? "<li>No barriers selected.</li>"
-  : challenges.map(c => `<li>${c} → Strategy Y</li>`).join("");
+  : [
+      "<p><em>Selected challenges may be addressed by:</em></p>",
+      ...challenges.map(c => `<li>${c} → Strategy Y</li>`)
+    ].join("");
+
 
   document.getElementById("report").style.display = "block";
 document.getElementById("printButton").style.display = "inline-block";
