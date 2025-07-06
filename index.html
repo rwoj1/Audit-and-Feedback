@@ -378,4 +378,260 @@ function clearAuditData() {
   }
 }
 </script>
+// Listen for dropdown changes
+const softwareSelect = document.getElementById("software");
+const medicineSelect = document.getElementById("medicine");
+const prescribedLabel = document.getElementById("prescribedLabel");
+
+softwareSelect.addEventListener("change", function () {
+  const softwareText = this.value ? `Conduct audit as per procedure within the hyperlinked pdf above for ${this.value}` : "";
+  document.getElementById("softwareText").textContent = softwareText;
+});
+
+medicineSelect.addEventListener("change", function () {
+  prescribedLabel.textContent = this.value ? `Number of ${this.value} prescribed in the last 3 months:` : "Number of [medicine] prescribed in the last 3 months:";
+});
+
+// Toggle FTE/hours fields
+const levelSelect = document.getElementById("practiceLevel");
+const fteInput = document.getElementById("fteInput");
+const hoursInput = document.getElementById("hoursInput");
+
+function toggleInputs() {
+  const selectedValue = levelSelect.value;
+  fteInput.style.display = selectedValue === "practice" ? "block" : "none";
+  hoursInput.style.display = selectedValue === "individual" ? "block" : "none";
+}
+
+levelSelect.addEventListener("change", toggleInputs);
+toggleInputs();
+
+// Generate Report
+function generateReport() {
+  const level = levelSelect.value;
+  const medicine = medicineSelect.value;
+  const software = softwareSelect.value;
+  const prescribed = parseFloat(document.getElementById("prescribed").value);
+  const fte = parseFloat(document.getElementById("fte").value);
+  const hours = parseFloat(document.getElementById("hours").value);
+
+  if (!level || !medicine || !software || isNaN(prescribed) || prescribed <= 0 ||
+      (level === "practice" && (isNaN(fte) || fte <= 0)) ||
+      (level === "individual" && (isNaN(hours) || hours <= 0))) {
+    alert("Please complete all required fields with valid numbers.");
+    return;
+  }
+
+  let weeklyRate = level === "practice" ? prescribed / fte : prescribed / (hours / 38);
+  weeklyRate = weeklyRate / 12;
+
+  document.getElementById("resultText").textContent = `The average times per week ${medicine} is prescribed is: ${weeklyRate.toFixed(1)}`;
+
+  const analysis = document.getElementById("resultAnalysis");
+  if (weeklyRate < 10) {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is in the bottom 25% based on national data.`;
+    analysis.style.color = 'green';
+  } else if (weeklyRate < 20) {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is below average based on national data.`;
+    analysis.style.color = 'yellow';
+  } else if (weeklyRate < 30) {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is above average based on national data.`;
+    analysis.style.color = 'orange';
+  } else {
+    analysis.textContent = `On average, the prescribing rate of ${medicine} is in the top 25% based on national data.`;
+    analysis.style.color = 'red';
+  }
+
+  const strengths = [...document.querySelectorAll("#strengths input:checked")].map(el => el.value);
+  const challenges = [...document.querySelectorAll("#challenges input:checked")].map(el => el.value);
+
+  document.getElementById("strengthOutput").innerHTML = strengths.includes("None")
+    ? "<li>No facilitators selected.</li>"
+    : strengths.map(s => `<li>${s} → Outcome Y</li>`).join("");
+
+  document.getElementById("challengeOutput").innerHTML = challenges.includes("None")
+    ? "<li>No barriers selected.</li>"
+    : challenges.map(c => `<li>${c} → Strategy Y</li>`).join("");
+
+  document.getElementById("report").style.display = "block";
+  document.getElementById("printButton").style.display = "inline-block";
+  document.getElementById("downloadCSV").style.display = "inline-block";
+
+  const ctx = document.getElementById("barChart").getContext("2d");
+  if (window.barChartInstance) window.barChartInstance.destroy();
+
+  const q1 = 10, median = 20, q3 = 30;
+  let chartLabels, chartData, barColors;
+
+  if (weeklyRate < q1) {
+    chartLabels = ['Your Data', 'Q1 (10)', 'Median (20)', 'Q3 (30)'];
+    chartData = [weeklyRate, q1, median, q3];
+    barColors = ['green', '#ccc', '#ccc', '#ccc'];
+  } else if (weeklyRate < median) {
+    chartLabels = ['Q1 (10)', 'Your Data', 'Median (20)', 'Q3 (30)'];
+    chartData = [q1, weeklyRate, median, q3];
+    barColors = ['#ccc', 'yellow', '#ccc', '#ccc'];
+  } else if (weeklyRate < q3) {
+    chartLabels = ['Q1 (10)', 'Median (20)', 'Your Data', 'Q3 (30)'];
+    chartData = [q1, median, weeklyRate, q3];
+    barColors = ['#ccc', '#ccc', 'orange', '#ccc'];
+  } else {
+    chartLabels = ['Q1 (10)', 'Median (20)', 'Q3 (30)', 'Your Data'];
+    chartData = [q1, median, q3, weeklyRate];
+    barColors = ['#ccc', '#ccc', '#ccc', 'red'];
+  }
+
+  window.barChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: chartLabels,
+      datasets: [{
+        data: chartData,
+        backgroundColor: barColors,
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        title: {
+          display: true,
+          text: 'Average Prescribing Rate Based on National Data'
+        },
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: `Average Prescribing Rate` }
+        }
+      }
+    }
+  });
+
+  const auditLog = JSON.parse(localStorage.getItem("auditLog")) || {};
+  if (auditLog[medicine]) {
+    alert(`You’ve already submitted an entry for ${medicine}.`);
+    disableFormInputs();
+    return;
+  }
+
+  auditLog[medicine] = {
+    timestamp: new Date().toISOString(),
+    practiceLevel: level,
+    medicine,
+    software,
+    prescribed,
+    fte,
+    hours,
+    weeklyRate: weeklyRate.toFixed(2),
+    strengths,
+    challenges
+  };
+
+  localStorage.setItem("auditLog", JSON.stringify(auditLog));
+}
+
+function disableFormInputs() {
+  const formElements = document.querySelectorAll("input, select, button");
+  formElements.forEach(el => {
+    if (el.id !== "printButton" && el.id !== "downloadCSV") {
+      el.disabled = true;
+    }
+  });
+}
+
+function printReport() {
+  requestAnimationFrame(() => {
+    const originalCanvas = document.getElementById("barChart");
+    const chartImage = new Image();
+    chartImage.src = originalCanvas.toDataURL("image/png");
+    chartImage.style.maxWidth = "100%";
+    chartImage.style.display = "block";
+    chartImage.style.margin = "0 auto";
+
+    const printableArea = document.getElementById("printableArea").cloneNode(true);
+    const canvasClone = printableArea.querySelector("#barChart");
+    if (canvasClone && canvasClone.parentNode) {
+      canvasClone.parentNode.replaceChild(chartImage, canvasClone);
+    }
+
+    const printWindow = window.open('', '', 'width=800,height=600');
+    printWindow.document.write('<html><head><title>Audit Report</title>');
+    printWindow.document.write('<style>body { font-family: Arial, sans-serif; margin: 40px; } img { max-width: 100%; height: auto; display: block; margin: 0 auto; }</style>');
+    printWindow.document.write('</head><body>');
+    printWindow.document.body.appendChild(printableArea);
+    printWindow.document.write('</body></html>');
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  });
+}
+
+function downloadAuditCSV() {
+  const password = prompt("Admin access required. Enter password:");
+  if (password !== "admin123") {
+    alert("Access denied.");
+    return;
+  }
+
+  const auditLog = JSON.parse(localStorage.getItem("auditLog")) || {};
+  const entries = Object.values(auditLog);
+  if (!entries.length) return alert("No data to export.");
+
+  const strengthOptions = ["Strength 1", "Strength 2", "Strength 3", "Strength 4", "Strength 5", "Strength 6", "None"];
+  const challengeOptions = ["Challenge 1", "Challenge 2", "Challenge 3", "Challenge 4", "Challenge 5", "Challenge 6", "None"];
+
+  const headers = [
+    "Timestamp", "Practice Level", "Medicine", "Software", "Hours", "FTE", "Number of Medicines Prescribed", "Prescribing Rate",
+    ...strengthOptions,
+    ...challengeOptions
+  ];
+
+  const rows = entries.map(entry => {
+    const row = [
+      entry.timestamp,
+      entry.practiceLevel,
+      entry.medicine,
+      entry.software,
+      entry.hours || "",
+      entry.fte || "",
+      entry.prescribed,
+      entry.weeklyRate
+    ];
+    strengthOptions.forEach(opt => row.push(entry.strengths.includes(opt) ? "TRUE" : ""));
+    challengeOptions.forEach(opt => row.push(entry.challenges.includes(opt) ? "TRUE" : ""));
+    return row;
+  });
+
+  const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("
+");
+  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "audit-data.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function clearAuditData() {
+  const password = prompt("Admin access required. Enter password:");
+  if (password !== "admin123") {
+    alert("Access denied.");
+    return;
+  }
+
+  if (confirm("Are you sure you want to clear all audit data? This cannot be undone.")) {
+    localStorage.removeItem("auditLog");
+    alert("Audit data cleared.");
+  }
+}
+
+</script>
 </body>
+
