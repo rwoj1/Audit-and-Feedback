@@ -279,10 +279,40 @@ window.barChartInstance = new Chart(ctx, {
     }
   });
 
-  const savedLog = JSON.parse(localStorage.getItem("auditLog")) || [];
-  savedLog.push({ timestamp: new Date().toISOString(), practiceLevel: level, medicine, software, prescribed, fte, weeklyRate: weeklyRate.toFixed(2), strengths, challenges });
-  localStorage.setItem("auditLog", JSON.stringify(savedLog));
+  const auditLog = JSON.parse(localStorage.getItem("auditLog")) || {};
+
+if (auditLog[medicine]) {
+  alert(`You’ve already submitted an entry for ${medicine}.`);
+  disableFormInputs();
+  return;
 }
+
+auditLog[medicine] = {
+  timestamp: new Date().toISOString(),
+  practiceLevel: level,
+  medicine,
+  software,
+  prescribed,
+  fte,
+  hours: manualHours,
+  weeklyRate: weeklyRate.toFixed(2),
+  strengths,
+  challenges
+};
+
+localStorage.setItem("auditLog", JSON.stringify(auditLog));
+
+}
+  
+  function disableFormInputs() {
+  const formElements = document.querySelectorAll("input, select, button");
+  formElements.forEach(el => {
+    if (el.id !== "printButton" && el.id !== "downloadCSV") {
+      el.disabled = true;
+    }
+  });
+}
+
 function printReport() {
   requestAnimationFrame(() => {
     const originalCanvas = document.getElementById("barChart");
