@@ -4,8 +4,8 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
-  <link rel="stylesheet" href="styles.css"/>
-  <!-- PDF export (no config needed) -->
+  <link rel="stylesheet" href="./styles.css?v=1"/>
+  <!-- PDF export -->
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 </head>
 <body>
@@ -22,19 +22,15 @@
         <label>Medicine Class
           <select id="classSelect"></select>
         </label>
-
         <label>Medicine
           <select id="medicineSelect"></select>
         </label>
-
         <label>Form
           <select id="formSelect"></select>
         </label>
-
-        <label>Strength (base tablet/capsule/patch)
+        <label>Strength
           <select id="strengthSelect"></select>
         </label>
-
         <label>Frequency
           <select id="frequencySelect">
             <option value="1">Once daily (morning)</option>
@@ -43,7 +39,6 @@
             <option value="4">Four times daily</option>
           </select>
         </label>
-
         <label>How long have you been on this medicine?
           <select id="durationSelect">
             <option value="">Select…</option>
@@ -52,6 +47,7 @@
           </select>
         </label>
 
+        <!-- Phase controls -->
         <div class="phase">
           <h3>Taper controls</h3>
           <div class="phase-row">
@@ -61,7 +57,7 @@
               <label>Every (days)<input id="p1Interval" type="number" min="1" max="56" value="14"/></label>
             </div>
             <div>
-              <label>Stop Phase 1 at dose (same units as strength)
+              <label>Stop Phase 1 at dose
                 <input id="p1StopDose" type="number" min="0" step="0.125" placeholder="e.g., 5"/>
               </label>
               <div class="or">or</div>
@@ -86,7 +82,6 @@
         <label>Start date
           <input id="startDate" type="date"/>
         </label>
-
         <label>Next review date (optional)
           <input id="reviewDate" type="date"/>
         </label>
@@ -102,7 +97,7 @@
       </div>
     </section>
 
-    <!-- Patient + header block -->
+    <!-- Patient details -->
     <section class="card">
       <h2>Patient & Details</h2>
       <div class="grid">
@@ -133,7 +128,7 @@
 
       <details class="images-note">
         <summary>Your tablet/capsule/patch may look like…</summary>
-        <p>Place images in <code>/images</code>, named <code>medicine_strength.jpg</code> (e.g., <code>diazepam_5mg.jpg</code>). Matching images will appear in the last column.</p>
+        <p>Place images in <code>/images</code>, named <code>medicine_strength.jpg</code>.</p>
       </details>
     </section>
   </main>
@@ -141,12 +136,12 @@
   <footer class="site-footer">
     <p><strong>Evidence & labelling</strong></p>
     <ul>
-      <li>Plain-English directions per the National Standard for Labelling Dispensed Medicines (example: “Take 1 tablet in the morning”).</li>
+      <li>Plain-English directions per the National Standard for Labelling Dispensed Medicines.</li>
       <li>If a tablet must be swallowed whole: “Swallow whole, do not halve or crush”.</li>
     </ul>
     <p>For educational/clinical support use only. Not for commercial use.</p>
   </footer>
 
-  <script src="script.js"></script>
+  <script src="./script.js?v=1"></script>
 </body>
 </html>
