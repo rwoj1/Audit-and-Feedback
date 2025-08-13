@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
   <link rel="stylesheet" href="styles.css"/>
-  <!-- PDF export (client-side) -->
+  <!-- PDF export (no config needed) -->
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 </head>
 <body>
   <header class="site-header">
     <h1>Deprescribing Taper Scheduler</h1>
-    <p class="subtitle">Build a stepwise taper with label-style instructions that follow the Australian standard.</p>
+    <p class="subtitle">Create a plain-English taper plan, printable as a chart or PDF.</p>
   </header>
 
   <main class="container">
@@ -31,25 +31,57 @@
           <select id="formSelect"></select>
         </label>
 
-        <label>Strength
+        <label>Strength (base tablet/capsule/patch)
           <select id="strengthSelect"></select>
         </label>
 
         <label>Frequency
           <select id="frequencySelect">
-            <option value="1">Daily</option>
-            <option value="2">Twice daily</option>
+            <option value="1">Once daily (morning)</option>
+            <option value="2">Twice daily (morning & night)</option>
             <option value="3">Three times daily</option>
-            <option value="4">Four times a day</option>
+            <option value="4">Four times daily</option>
           </select>
         </label>
 
         <label>How long have you been on this medicine?
           <select id="durationSelect">
+            <option value="">Select…</option>
             <option value="<3">&lt; 3 months</option>
             <option value=">3">&gt; 3 months</option>
           </select>
         </label>
+
+        <div class="phase">
+          <h3>Taper controls</h3>
+          <div class="phase-row">
+            <div>
+              <strong>Phase 1</strong><br/>
+              <label>Reduce by (%)<input id="p1Percent" type="number" min="1" max="90" value="25"/></label>
+              <label>Every (days)<input id="p1Interval" type="number" min="1" max="56" value="14"/></label>
+            </div>
+            <div>
+              <label>Stop Phase 1 at dose (same units as strength)
+                <input id="p1StopDose" type="number" min="0" step="0.125" placeholder="e.g., 5"/>
+              </label>
+              <div class="or">or</div>
+              <label>Stop Phase 1 at week #
+                <input id="p1StopWeek" type="number" min="1" placeholder="e.g., 6"/>
+              </label>
+            </div>
+          </div>
+
+          <div class="phase-row">
+            <div>
+              <strong>Phase 2</strong><br/>
+              <label>Reduce by (%)<input id="p2Percent" type="number" min="1" max="90" value="12.5"/></label>
+              <label>Every (days)<input id="p2Interval" type="number" min="1" max="56" value="14"/></label>
+            </div>
+            <div class="phase-note">
+              Leave Phase 2 blank if you only want a single-phase taper.
+            </div>
+          </div>
+        </div>
 
         <label>Start date
           <input id="startDate" type="date"/>
@@ -58,60 +90,21 @@
         <label>Next review date (optional)
           <input id="reviewDate" type="date"/>
         </label>
-
-        <label>Preset (class-based)
-          <select id="presetSelect">
-            <option value="custom" selected>Custom (manual controls below)</option>
-            <option value="bzra">BZRA taper (typical ~25% q2w; 12.5% near end)</option>
-            <option value="ap">Antipsychotic taper (25–50% q1–2w)</option>
-            <option value="ppi_stepdown">PPI: Step-down</option>
-            <option value="ppi_ondemand">PPI: Stop & on-demand</option>
-          </select>
-        </label>
       </div>
 
-      <!-- Two-phase taper controls (no auto pre-fill; presets only show guidance text) -->
-      <fieldset class="phases">
-        <legend>Dose reduction controls (optional)</legend>
-        <div class="grid">
-          <label>Phase 1 % reduction
-            <input id="p1Percent" type="number" min="1" max="50" step="0.5" placeholder="e.g., 25">
-          </label>
-          <label>Phase 1 interval (days)
-            <input id="p1Interval" type="number" min="1" step="1" placeholder="e.g., 14">
-          </label>
-          <label>Stop Phase 1 when dose ≤ (mg)
-            <input id="p1StopDose" type="number" min="0" step="0.1" placeholder="e.g., 25">
-          </label>
-
-          <label>Phase 2 % reduction
-            <input id="p2Percent" type="number" min="1" max="50" step="0.5" placeholder="e.g., 12.5">
-          </label>
-          <label>Phase 2 interval (days)
-            <input id="p2Interval" type="number" min="1" step="1" placeholder="e.g., 14">
-          </label>
-        </div>
-        <p class="hint">Leave blank to use a single-phase taper (the “Reduce by” + “every” controls aren’t shown; use these fields instead).</p>
-      </fieldset>
+      <div id="bestPracticeBox" class="advice muted"></div>
 
       <div class="actions">
         <button id="generateBtn">Generate Chart</button>
         <button id="printBtn" class="secondary">Print</button>
-        <button id="pdfBtn" class="secondary">Save as PDF</button>
-        <button id="resetBtn" class="tertiary">Reset</button>
+        <button id="savePdfBtn" class="secondary">Save as PDF</button>
+        <button id="resetBtn" class="secondary">Reset</button>
       </div>
     </section>
 
-    <!-- Plain-English best-practice guidance (triggered by Duration select) -->
+    <!-- Patient + header block -->
     <section class="card">
-      <h2>Best-practice guidance (plain English)</h2>
-      <div id="guidanceBlock" class="advice small"></div>
-      <p class="tiny-note">Dose wording uses explicit times of day (e.g., “Take 1 tablet in the morning”), per the national standard. :contentReference[oaicite:2]{index=2}</p>
-    </section>
-
-    <!-- Patient & header info -->
-    <section class="card">
-      <h2>Patient & Safety Details</h2>
+      <h2>Patient & Details</h2>
       <div class="grid">
         <label>Patient name
           <input id="patientName" type="text" placeholder="e.g., Alex Smith"/>
@@ -123,24 +116,35 @@
           <input id="hcpName" type="text" placeholder="e.g., Dr Patel / Pharmacist Jones"/>
         </label>
       </div>
-      <p class="hint">Header will display: PATIENT • ALLERGIES • HCP • MEDICINE (e.g., “Morphine Tablet”). No class or strength in this header.</p>
+      <p class="hint">Doses will be written plainly, e.g. “Take 1 tablet in the morning”.</p>
     </section>
 
     <!-- Output -->
-    <section class="card">
-      <h2>Generated Taper Plan</h2>
+    <section class="card" id="outputCard">
+      <div class="plan-header">
+        <div class="badge big" id="hdrPatient">Patient: –</div>
+        <div class="badge big" id="hdrAllergies">Allergies: –</div>
+        <div class="badge big" id="hdrHcp">HCP: –</div>
+        <div class="badge big" id="hdrMedicine">Medicine: –</div>
+        <div class="special-instructions" id="hdrSpecial">Special instructions: –</div>
+      </div>
+
       <div id="scheduleBlock" class="schedule-wrapper"></div>
 
       <details class="images-note">
-        <summary>Your tablet may look like… (images)</summary>
-        <p>Put images in <code>/images</code> as <code>medicine_strength.jpg</code> (e.g., <code>diazepam_5mg.jpg</code>). The app will try to show a matching image for each row.</p>
+        <summary>Your tablet/capsule/patch may look like…</summary>
+        <p>Place images in <code>/images</code>, named <code>medicine_strength.jpg</code> (e.g., <code>diazepam_5mg.jpg</code>). Matching images will appear in the last column.</p>
       </details>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p><strong>Labelling & wording</strong>: Instructions use explicit times and simple text (e.g., “Take 1 tablet in the morning”), per the National standard for labelling dispensed medicines. :contentReference[oaicite:3]{index=3}</p>
-    <p>For education/clinical support only. Not for commercial use.</p>
+    <p><strong>Evidence & labelling</strong></p>
+    <ul>
+      <li>Plain-English directions per the National Standard for Labelling Dispensed Medicines (example: “Take 1 tablet in the morning”).</li>
+      <li>If a tablet must be swallowed whole: “Swallow whole, do not halve or crush”.</li>
+    </ul>
+    <p>For educational/clinical support use only. Not for commercial use.</p>
   </footer>
 
   <script src="script.js"></script>
