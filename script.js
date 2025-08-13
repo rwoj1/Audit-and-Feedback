@@ -1,10 +1,18 @@
 "use strict";
 
-/* ===================== Safety caps (prevent “page unresponsive”) ===================== */
-const MAX_WEEKS = 120;   // cap plan to ~2 years of weekly rows
-const MAX_EVENTS = 200;  // cap patch apply/remove events
+/* ===== Safeguards (prevents “Page unresponsive”) ===== */
+const MAX_WEEKS = 60;        // ~14 months at q2w
+const MAX_EVENTS = 180;      // patch apply/remove rows
+const MAX_RUNTIME_MS = 1200; // bail if generation takes >1.2s
 
-/* ===================== Catalog (oral + patches; injectables removed) ===================== */
+function banner(msg){
+  const b = document.createElement("div");
+  b.style.cssText = "position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:8px 12px;font:14px system-ui;z-index:999999";
+  b.textContent = msg;
+  document.body.appendChild(b);
+}
+
+/* ===== Catalog (oral + patches; injectables removed) ===== */
 const CATALOG = {
   "Opioid": {
     "Morphine": { "Tablet":["5 mg","10 mg","15 mg","30 mg","60 mg","100 mg","200 mg"], "Capsule":["10 mg","20 mg","50 mg","100 mg"], "Oral Liquid":["1 mg/mL"] },
@@ -48,7 +56,7 @@ const HALVABLE = new Set([
   "Haloperidol","Olanzapine","Zopiclone","Zolpidem" // SR handled separately
 ]);
 
-/* ===================== Guidance text & defaults ===================== */
+/* ===== Guidance text & defaults ===== */
 const GUIDANCE = {
   "Benzodiazepines / Z-drugs": {
     text: "Typical: reduce ~25% every 2 weeks; near the end, ~12.5% every 2 weeks. Consider sleep hygiene/CBT. Monitor and slow if needed.",
@@ -68,7 +76,7 @@ const GUIDANCE = {
   }
 };
 
-/* ===================== Utilities ===================== */
+/* ===== Utilities ===== */
 const $ = id => document.getElementById(id);
 const toNum = s => s ? parseFloat(String(s).match(/([\d.]+)/)?.[1] || "0") : 0;
 const fmtDate = d => new Date(d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
@@ -76,7 +84,7 @@ const fmtDateTime = d => new Date(d).toLocaleString(undefined,{year:'numeric',mo
 const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
 function startOfWeek(d){ const dt=new Date(d); const day=dt.getDay(); const diff=(day===0?6:day-1); dt.setDate(dt.getDate()-diff); dt.setHours(0,0,0,0); return dt; }
 
-/* ===================== UI population ===================== */
+/* ===== Populate UI ===== */
 function populateClasses(){
   const cSel = $("classSelect"); cSel.innerHTML = "";
   Object.keys(CATALOG).forEach(cls=>{ const o=document.createElement("option"); o.value=cls; o.textContent=cls; cSel.appendChild(o); });
@@ -96,7 +104,7 @@ function populateStrengths(){
   sSel.innerHTML = ""; (CATALOG[cls][med][form]||[]).forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; sSel.appendChild(o); });
 }
 
-/* Duration only for Opioids */
+/* Duration visibility only for Opioids */
 function updateDurationVisibility(){
   $("durationWrap").style.display = ($("classSelect").value==="Opioid") ? "" : "none";
 }
@@ -146,107 +154,7 @@ function specialInstructionFor(med, form){
   return "Swallow whole, do not halve or crush";
 }
 
-/* ===================== Build plan (two-phase; review stop logic) ===================== */
-function buildPlan(){
-  const cls = $("classSelect").value;
-  const med = $("medicineSelect").value;
-  const form= $("formSelect").value;
-  const strengthStr = $("strengthSelect").value;
-  const baseDose = toNum(strengthStr);
-  const freqMode = $("frequencySelect").value || "AM";
-
-  if(!baseDose){ alert("Please select a strength."); return; }
-
-  // Calendar pickers: use Flatpickr dates if present; else fallback
-  const startDate = $("startDate")._flatpickr?.selectedDates?.[0] || new Date();
-  const reviewDate = $("reviewDate")._flatpickr?.selectedDates?.[0] || null;
-
-  // Checkbox meaning (clarified):
-  //  - If review date exists and checkbox UNCHECKED -> stop at review.
-  //  - If review date exists and checkbox CHECKED -> ignore review, taper to completion.
-  //  - If no review date -> always taper to completion (checkbox has no effect).
-  const taperUntilComplete = $("taperUntilComplete").checked;
-  const shouldStopAtReview = (!!reviewDate && !taperUntilComplete);
-
-  // Phase settings
-  const p1Percent = Math.max(1, parseFloat($("p1Percent").value || "0")); // guard against 0
-  const p1Interval = Math.max(1, parseInt($("p1Interval").value || "0",10));
-  const p1StopWeek = parseInt($("p1StopWeek").value || "0",10) || 0;
-  const p2Percent = parseFloat($("p2Percent").value || "0") || 0;
-  const p2Interval = p2Percent ? Math.max(1, parseInt($("p2Interval").value || "0",10)) : 0;
-
-  if(!p1Percent || !p1Interval){ alert("Please set Phase 1 % and interval."); return; }
-  if(p2Percent && !p2Interval){ alert("Please set Phase 2 interval."); return; }
-
-  // Header badges
-  $("hdrPatient").textContent   = "Patient: " + ($("patientName").value || "–");
-  $("hdrAllergies").textContent = "Allergies: " + ($("allergies").value || "–");
-  $("hdrHcp").textContent       = "HCP: " + ($("hcpName").value || "–");
-  $("hdrMedicine").textContent  = "Medicine: " + med + " " + form;
-  $("hdrSpecial").textContent   = "Special instructions: " + specialInstructionFor(med, form);
-
-  // Build weekly targets (store raw Date in ms to avoid parsing issues)
-  const rowsByWeek = [];
-  let target = baseDose, week = 1;
-  let date = startOfWeek(startDate);
-  let guard = 0;
-
-  const pushWeekRow = (tDose)=>{ rowsByWeek.push({ dateMs: +date, targetDose: tDose }); };
-
-  // Phase 1
-  while(target > 0){
-    pushWeekRow(target);
-    if(p1StopWeek && week >= p1StopWeek) break;
-
-    // Move forward
-    date = addDays(date, p1Interval); week += 1;
-    target = +(target * (1 - p1Percent/100)).toFixed(4);
-
-    if(shouldStopAtReview && date >= reviewDate) break;
-    if(target <= 0.0001) break;
-
-    // safety: cap weeks
-    if(++guard > MAX_WEEKS){ break; }
-  }
-
-  // Phase 2
-  if(target > 0 && p2Percent){
-    let guard2 = 0;
-    while(target > 0.0001){
-      date = addDays(date, p2Interval); week += 1;
-      target = +(target * (1 - p2Percent/100)).toFixed(4);
-      rowsByWeek.push({ dateMs: +date, targetDose: target });
-
-      if(shouldStopAtReview && date >= reviewDate) break;
-      if(target <= 0.0001) break;
-      if(++guard2 > MAX_WEEKS){ break; }
-    }
-  }
-
-  // End row (alternate days / PRN for BZRA/Z-drugs, PPI, AP; opioids: straightforward stop)
-  date = addDays(date, (p2Percent ? p2Interval : p1Interval));
-  const endRow = { dateMs: +date, targetDose: 0, endNote: null };
-  const endEligible = (cls==="Benzodiazepines / Z-drugs" || cls==="Proton Pump Inhibitor" || cls==="Antipsychotic");
-  if(endEligible){
-    endRow.endNote = (cls==="Proton Pump Inhibitor")
-      ? "Use on demand for symptoms; consider alternate days / lowest effective dose."
-      : "Take as required (PRN); consider alternate days before stopping.";
-  }
-  rowsByWeek.push(endRow);
-
-  // Render: standard vs patch chart
-  const isFentanylPatch = (form==="Patch" && med==="Fentanyl");
-  const isBupePatch = (form==="Patch" && med==="Buprenorphine");
-  if(isFentanylPatch || isBupePatch){
-    const intervalDays = isFentanylPatch ? 3 : 7;
-    const timeStr = $("applyTime").value || "09:00";
-    renderPatchTable(rowsByWeek, intervalDays, startDate, timeStr, { med, form });
-  } else {
-    renderStandardTable(rowsByWeek, freqMode, { med, form, strengthStr });
-  }
-}
-
-/* ===================== Dose decomposition for standard table ===================== */
+/* ===== Dose decomposition ===== */
 function decomposeDose(cls, med, form, targetDose){
   const strengths = (CATALOG[cls][med][form]||[]).map(s=>({label:s, val:toNum(s)}))
     .filter(x=>x.val>0).sort((a,b)=>b.val-a.val);
@@ -271,7 +179,20 @@ function decomposeDose(cls, med, form, targetDose){
   return components;
 }
 
-/* ===================== Standard tablet/capsule/liquid table ===================== */
+/* ===== Renderers ===== */
+function marksFor(mode){ return ({ AM:[1,0,0,0], PM:[0,0,0,1], BID:[1,0,0,1], TID:[1,1,0,1], QID:[1,1,1,1] })[mode] || [1,0,0,1]; }
+function td(text, cls){ const el=document.createElement("td"); if(cls) el.className=cls; el.textContent=String(text||""); return el; }
+function imageCell(info){
+  const tdEl=document.createElement("td"); tdEl.className="image-cell";
+  if(!info){ tdEl.textContent=""; return tdEl; }
+  const cont=document.createElement("div"); const img=new Image();
+  const slugMed=String(info.med||"").toLowerCase().replace(/[\s\/\\\+]+/g,"_").replace(/[^\w_]/g,"");
+  const slugStrength=String(info.strength||"").toLowerCase().replace(/[\s\/\\\+]+/g,"").replace(/[^\w]/g,"");
+  img.onload=()=>cont.appendChild(img); img.onerror=()=>{};
+  img.src=`images/${slugMed}_${slugStrength}.jpg`;
+  tdEl.appendChild(cont); return tdEl;
+}
+
 function renderStandardTable(weeks, freqMode, meta){
   $("patchBlock").style.display = "none";
   const wrap = $("scheduleBlock"); wrap.style.display = ""; wrap.innerHTML = "";
@@ -292,7 +213,7 @@ function renderStandardTable(weeks, freqMode, meta){
 
     if(week.targetDose<=0){
       const tr=document.createElement("tr");
-      tr.appendChild(td(fmtDate(week.dateMs)));
+      tr.appendChild(td(week.dateStr));
       tr.appendChild(td(week.endNote || "Stop. Drug-free days; use non-drug strategies and monitoring as agreed."));
       tr.appendChild(td("–"));
       for(let i=0;i<4;i++) tr.appendChild(td("—","center"));
@@ -303,11 +224,9 @@ function renderStandardTable(weeks, freqMode, meta){
     }
     const comps = decomposeDose($("classSelect").value, meta.med, meta.form, week.targetDose);
     if(comps.length===0){
-      tbody.appendChild(makeStdRow(fmtDate(week.dateMs), meta, {strengthLabel:"—",countPerDose:1}, freqMode));
+      tbody.appendChild(makeStdRow(week.dateStr, meta, {strengthLabel:"—",countPerDose:1}, freqMode));
     } else {
-      comps.forEach((cmp, idx)=>{
-        tbody.appendChild(makeStdRow(idx===0?fmtDate(week.dateMs):"", meta, cmp, freqMode));
-      });
+      comps.forEach((cmp, idx)=>tbody.appendChild(makeStdRow(idx===0?week.dateStr:"", meta, cmp, freqMode)));
     }
   }
 
@@ -328,7 +247,6 @@ function makeStdRow(dateTxt, meta, cmp, freqMode){
   return tr;
 }
 
-/* ===================== Patch schedule (fentanyl q3d, bupe q7d) ===================== */
 function renderPatchTable(weeks, intervalDays, startDate, timeStr, meta){
   $("scheduleBlock").style.display = "none";
   const wrap = $("patchBlock"); wrap.style.display = ""; wrap.innerHTML = "";
@@ -337,7 +255,7 @@ function renderPatchTable(weeks, intervalDays, startDate, timeStr, meta){
   const startDT = new Date(startDate); startDT.setHours(hh||9, mm||0, 0, 0);
 
   const lastWeek = weeks[weeks.length-1];
-  const endDT = addDays(new Date(lastWeek.dateMs), intervalDays);
+  const endDT = addDays(new Date(lastWeek.dateStr), intervalDays);
 
   const table = document.createElement("table"); table.className="table";
   const thead = document.createElement("thead");
@@ -375,24 +293,12 @@ function renderPatchTable(weeks, intervalDays, startDate, timeStr, meta){
 function findActiveWeek(weeks, dateTime){
   const d = +new Date(dateTime);
   for(let i=weeks.length-1;i>=0;i--){
-    if(weeks[i].dateMs <= d) return weeks[i];
+    if(+new Date(weeks[i].dateStr) <= d) return weeks[i];
   }
   return weeks[0];
 }
 
-/* ===================== Shared helpers ===================== */
-function marksFor(mode){ return ({ AM:[1,0,0,0], PM:[0,0,0,1], BID:[1,0,0,1], TID:[1,1,0,1], QID:[1,1,1,1] })[mode] || [1,0,0,1]; }
-function td(text, cls){ const el=document.createElement("td"); if(cls) el.className=cls; el.textContent=String(text||""); return el; }
-function imageCell(info){
-  const tdEl=document.createElement("td"); tdEl.className="image-cell";
-  if(!info){ tdEl.textContent=""; return tdEl; }
-  const cont=document.createElement("div"); const img=new Image();
-  const slugMed=String(info.med||"").toLowerCase().replace(/[\s\/\\\+]+/g,"_").replace(/[^\w_]/g,"");
-  const slugStrength=String(info.strength||"").toLowerCase().replace(/[\s\/\\\+]+/g,"").replace(/[^\w]/g,"");
-  img.onload=()=>cont.appendChild(img); img.onerror=()=>{};
-  img.src=`images/${slugMed}_${slugStrength}.jpg`;
-  tdEl.appendChild(cont); return tdEl;
-}
+/* ===== Wording ===== */
 function formatCount(count, form){
   if(form==="Patch"){ if(count===1) return "1 patch"; if(count===0.5) return "½ patch"; if(Number.isInteger(count)) return `${count} patches`; return `${count} patch(es)`; }
   if(Number.isInteger(count)) return count===1 ? "1 tablet" : `${count} tablets`;
@@ -401,21 +307,131 @@ function formatCount(count, form){
 }
 function buildPlainDose(countStr, strengthLabel, mode, form){
   if(form==="Patch") return `Apply ${countStr} of ${strengthLabel} as directed. Do not cut patches.`;
-  const whenMap = { AM:["in the morning"], PM:["at night"], BID:["in the morning","at night"], TID:["in the morning","at midday","at night"], QID:["in the morning","at midday","at dinner","at night"] };
-  const when = whenMap[mode] || ["in the morning","at night"];
+  const when = { AM:["in the morning"], PM:["at night"], BID:["in the morning","at night"], TID:["in the morning","at midday","at night"], QID:["in the morning","at midday","at dinner","at night"] }[mode] || ["in the morning"];
   return when.map(t=>`Take ${countStr} of ${strengthLabel} ${t}`).join(". ");
 }
 
-/* ===================== Init (with Flatpickr calendars) ===================== */
-function init(){
-  // Flatpickr calendars (pop-out)
-  const onDom = document.querySelectorAll(".datepick");
-  if(window.flatpickr){
-    onDom.forEach(el=>flatpickr(el, { dateFormat: "Y-m-d", allowInput: true }));
-  } else {
-    // Fallback: make sure the fields are plain text inputs; we’ll still parse YYYY-MM-DD.
-    onDom.forEach(el => { el.type = "date"; });
+/* ===== Plan builder (safe-mode) ===== */
+function buildPlan(){
+  const t0 = performance.now();
+  try{
+    const cls = $("classSelect").value;
+    const med = $("medicineSelect").value;
+    const form= $("formSelect").value;
+    const strengthStr = $("strengthSelect").value;
+    const baseDose = toNum(strengthStr);
+    const freqMode = $("frequencySelect").value || "AM";
+    if(!baseDose){ alert("Please select a strength."); return; }
+
+    const startDate = $("startDate")._flatpickr?.selectedDates?.[0] || new Date();
+    const reviewDate = $("reviewDate")._flatpickr?.selectedDates?.[0] || null;
+
+    // Checkbox semantics:
+    //  - If review date exists and UNCHECKED -> stop at review.
+    //  - If review date exists and CHECKED   -> ignore review, continue to completion.
+    //  - If no review date -> always continue to completion.
+    const taperUntilComplete = $("taperUntilComplete").checked;
+    const stopAtReview = (!!reviewDate && !taperUntilComplete);
+
+    // Phase entries
+    let p1Percent = Math.max(1, parseFloat($("p1Percent").value || "0"));
+    let p1Interval = Math.max(1, parseInt($("p1Interval").value || "0",10));
+    const p1StopWeek = parseInt($("p1StopWeek").value || "0",10) || 0;
+    let p2Percent = parseFloat($("p2Percent").value || "0") || 0;
+    let p2Interval = p2Percent ? Math.max(1, parseInt($("p2Interval").value || "0",10)) : 0;
+
+    // Special-case defensives for your PPI test (prevents silly tiny steps):
+    if(cls==="Proton Pump Inhibitor"){
+      p1Percent = Math.min(Math.max(p1Percent, 10), 80);
+      p1Interval = Math.min(Math.max(p1Interval, 3), 28);
+      if(!p2Percent) { p2Percent = 0; p2Interval = 0; }
+    }
+
+    if(!p1Percent || !p1Interval){ alert("Please set Phase 1 % and interval."); return; }
+    if(p2Percent && !p2Interval){ alert("Please set Phase 2 interval."); return; }
+
+    // Header badges
+    $("hdrPatient").textContent   = "Patient: " + ($("patientName").value || "–");
+    $("hdrAllergies").textContent = "Allergies: " + ($("allergies").value || "–");
+    $("hdrHcp").textContent       = "HCP: " + ($("hcpName").value || "–");
+    $("hdrMedicine").textContent  = "Medicine: " + med + " " + form;
+    $("hdrSpecial").textContent   = "Special instructions: " + specialInstructionFor(med, form);
+
+    // Build rows
+    const weeks = [];
+    let target = baseDose;
+    let week = 1;
+    let date = startOfWeek(startDate);
+
+    const pushRow = (tDose)=>weeks.push({ dateStr: fmtDate(date), targetDose: tDose });
+
+    // Phase 1
+    let guard = 0;
+    while(target > 0){
+      if(performance.now() - t0 > MAX_RUNTIME_MS) { banner("Stopped: generation taking too long."); break; }
+      pushRow(target);
+      if(p1StopWeek && week >= p1StopWeek) break;
+
+      // move
+      date = addDays(date, p1Interval); week += 1;
+      target = +(target * (1 - p1Percent/100)).toFixed(4);
+
+      if(stopAtReview && reviewDate && date >= reviewDate) break;
+      if(target <= 0.0001) break;
+      if(++guard > MAX_WEEKS) break;
+    }
+
+    // Phase 2
+    if(target > 0 && p2Percent){
+      let guard2 = 0;
+      while(target > 0.0001){
+        if(performance.now() - t0 > MAX_RUNTIME_MS) { banner("Stopped: generation taking too long."); break; }
+        date = addDays(date, p2Interval); week += 1;
+        target = +(target * (1 - p2Percent/100)).toFixed(4);
+        weeks.push({ dateStr: fmtDate(date), targetDose: target });
+        if(stopAtReview && reviewDate && date >= reviewDate) break;
+        if(target <= 0.0001) break;
+        if(++guard2 > MAX_WEEKS) break;
+      }
+    }
+
+    // End row (BZRA/Z-drugs, PPI, AP = add PRN/alt-days note; opioids = direct stop)
+    date = addDays(date, (p2Percent ? p2Interval : p1Interval));
+    const endRow = { dateStr: fmtDate(date), targetDose: 0, endNote: null };
+    const endEligible = (cls==="Benzodiazepines / Z-drugs" || cls==="Proton Pump Inhibitor" || cls==="Antipsychotic");
+    if(endEligible){
+      endRow.endNote = (cls==="Proton Pump Inhibitor")
+        ? "Use on demand for symptoms; consider alternate days / lowest effective dose."
+        : "Take as required (PRN); consider alternate days before stopping.";
+    }
+    weeks.push(endRow);
+
+    // Render: standard for tablets/liquids; patch table for fentanyl/buprenorphine
+    const isFentanylPatch = (form==="Patch" && med==="Fentanyl");
+    const isBupePatch = (form==="Patch" && med==="Buprenorphine");
+    if(isFentanylPatch || isBupePatch){
+      const intervalDays = isFentanylPatch ? 3 : 7;
+      const timeStr = $("applyTime").value || "09:00";
+      renderPatchTable(weeks, intervalDays, startDate, timeStr, { med, form });
+    } else {
+      renderStandardTable(weeks, freqMode, { med, form, strengthStr });
+    }
+  }catch(err){
+    console.error(err);
+    banner("Generator error: " + (err && err.message ? err.message : String(err)));
   }
+}
+
+/* ===== Init (calendar + hooks) ===== */
+function init(){
+  // calendars (Flatpickr if present; fallback = native date)
+  document.querySelectorAll(".datepick").forEach(el=>{
+    if(window.flatpickr){
+      flatpickr(el, { dateFormat: "Y-m-d", allowInput: true });
+    } else {
+      el.type = "date";
+    }
+  });
 
   populateClasses(); populateMedicines(); populateForms(); populateStrengths();
   updateDurationVisibility(); updateBestPracticeAndPrefill();
