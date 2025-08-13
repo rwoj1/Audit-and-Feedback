@@ -7,7 +7,7 @@ const CATALOG = {
       "Tablet": ["5 mg","10 mg","15 mg","30 mg","60 mg","100 mg","200 mg"],
       "Capsule": ["10 mg","20 mg","50 mg","100 mg"],
       "Oral Liquid": ["1 mg/mL"],
-      "Patch": [] // uncommon for morphine; left empty safely
+      "Patch": [] // uncommon; placeholder to keep Form list consistent
     },
     "Oxycodone": { "Tablet": ["5 mg","10 mg","15 mg","20 mg","30 mg","40 mg","80 mg"] },
     "Oxycodone / Naloxone": { "Tablet": ["2.5/1.25 mg","5/2.5 mg","10/5 mg","15/7.5 mg","20/10 mg","30/15 mg","40/20 mg","60/30 mg","80/40 mg"] },
@@ -70,19 +70,19 @@ const CLASS_INFO = {
    -------------------------- */
 const $ = id => document.getElementById(id);
 const toNum = s => s ? parseFloat(String(s).match(/([\d.]+)/)?.[1] || "0") : 0;
-const unitOf = s => s?.replace(/^[\d.\s/]+/,'').trim(); // e.g., " mg", " mcg/hr", " mg/mL"
+const unitOf = s => s?.replace(/^[\d.\s/]+/,'').trim(); // e.g., "mg", "mcg/hr", "mg/mL"
 const fmtDate = d => new Date(d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
 const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
 function startOfWeek(d){ const dt=new Date(d); const day=dt.getDay(); const diff=(day===0?6:day-1); dt.setDate(dt.getDate()-diff); dt.setHours(0,0,0,0); return dt; }
 
-/* Split rules text */
+/* Special instruction per form/medicine */
 function specialInstructionFor(med, form){
   if(form === "Patch") return "Patches: apply to intact skin as directed. Do not cut patches.";
   if(HALVABLE.has(med)) return "May be halved. If quartering is required, check brand-specific guidance.";
   return "Swallow whole, do not halve or crush";
 }
 
-/* Build dependent selects */
+/* Dependent selects */
 function populateClasses(){
   const cSel = $("classSelect");
   cSel.innerHTML = "";
@@ -106,7 +106,7 @@ function populateForms(){
   Object.keys(CATALOG[cls][med]).forEach(f=>{
     if(f==="IM/IV") return; // ensure injectables are removed
     const strengths = CATALOG[cls][med][f];
-    if(Array.isArray(strengths)) { // allow Patch + oral forms
+    if(Array.isArray(strengths)) {
       const o=document.createElement("option"); o.value=f; o.textContent=f; fSel.appendChild(o);
     }
   });
@@ -143,7 +143,7 @@ function buildPlan(){
   const med = $("medicineSelect").value;
   const form= $("formSelect").value;
   const strengthStr = $("strengthSelect").value;
-  const baseUnit = unitOf(strengthStr); // e.g., " mg"
+  const baseUnit = unitOf(strengthStr); // e.g., "mg"
   const baseDose = toNum(strengthStr);  // e.g., 20
   const freq = parseInt($("frequencySelect").value,10);
 
@@ -169,15 +169,13 @@ function buildPlan(){
   $("hdrMedicine").textContent  = "Medicine: " + med + " " + form;
   $("hdrSpecial").textContent   = "Special instructions: " + specialInstructionFor(med, form);
 
-  // Build a taper timeline of target total doses
-  const rowsByWeek = []; // [{date, components:[{strengthLabel, countPerDose}], instructions, special, imageSlug}]
+  // Build taper timeline of target per-dose amounts
+  const rowsByWeek = []; // [{date, components:[{strengthLabel, countPerDose}], targetDose}]
   let target = baseDose; // start from selected strength as the initial per-dose amount
   let week = 1;
   let date = startOfWeek(startDate);
-  const unit = baseUnit;
 
   function pushWeek(targetDose){
-    // Convert targetDose (same units as base) into components using available strengths of the selected form.
     const components = decomposeDose(cls, med, form, targetDose);
     rowsByWeek.push({ date: fmtDate(date), components, targetDose });
   }
@@ -185,7 +183,6 @@ function buildPlan(){
   // Phase 1
   while(target > 0){
     pushWeek(target);
-    // Stop conditions for Phase 1
     if((p1StopDose && target <= p1StopDose) || (p1StopWeek && week >= p1StopWeek)) break;
     date = addDays(date, p1Interval);
     week += 1;
@@ -210,11 +207,11 @@ function buildPlan(){
   date = addDays(date, (p2Percent ? p2Interval : p1Interval));
   rowsByWeek.push({ date: fmtDate(date), components: [], targetDose: 0 });
 
-  renderTable(rowsByWeek, freq, { med, form, unit });
+  renderTable(rowsByWeek, freq, { med, form });
 }
 
-/* Turn a target dose into strength components (multiple rows per week).
-   Greedy: use largest available strength first. If splitting allowed, support halves. */
+/* Convert a target dose into strength components (multiple rows per week).
+   Greedy: use largest strength first; allow halves if tablet is splittable. */
 function decomposeDose(cls, med, form, targetDose){
   const strengths = (CATALOG[cls][med][form]||[]).map(s=>({label:s, val:toNum(s)}))
     .filter(x=>x.val>0)
@@ -223,16 +220,16 @@ function decomposeDose(cls, med, form, targetDose){
   const components = [];
   let remaining = targetDose;
 
-  const canSplit = form !== "Patch" && HALVABLE.has(med); // conservative: patches not splittable
-  const minStep = canSplit ? 0.5 : 1; // half-tablet as smallest step if allowed
-
+  const canSplit = form !== "Patch" && HALVABLE.has(med); // patches not splittable
   for(const s of strengths){
     if(remaining <= 0.0001) break;
+
+    // whole tablets first
     let count = Math.floor(remaining / s.val);
     remaining = +(remaining - count*s.val).toFixed(3);
 
+    // try half-tablet if allowed and helpful
     if(canSplit && remaining >= s.val*0.5 - 1e-6){
-      // try a half if it doesn’t exceed remaining by much
       count += 0.5;
       remaining = +(remaining - s.val*0.5).toFixed(3);
     }
@@ -242,17 +239,17 @@ function decomposeDose(cls, med, form, targetDose){
     }
   }
 
-  // if still remaining but too small, round up a half/whole of smallest
+  // if tiny remainder, round up with smallest strength (half if allowed)
   if(remaining > 0.0001 && strengths.length){
     const smallest = strengths[strengths.length-1];
-    let addCount = canSplit ? 0.5 : 1;
+    const addCount = (canSplit ? 0.5 : 1);
     components.push({ strengthLabel: smallest.label, countPerDose: addCount });
   }
 
   return components;
 }
 
-/* Render the table exactly as specified */
+/* Render the table to match required layout */
 function renderTable(weeks, freq, meta){
   const wrap = $("scheduleBlock");
   wrap.innerHTML = "";
@@ -276,9 +273,7 @@ function renderTable(weeks, freq, meta){
       tr.appendChild(td(week.date));
       tr.appendChild(td("Stop. Drug-free days; use non-drug strategies and monitoring as agreed."));
       tr.appendChild(td("–"));
-      ["Morning","Midday","Dinner","Night"].slice(0,4).forEach((_,i)=>{
-        tr.appendChild(td("—","center"));
-      });
+      for(let i=0;i<4;i++){ tr.appendChild(td("—","center")); }
       tr.appendChild(td("—"));
       tr.appendChild(imageCell(null));
       tbody.appendChild(tr);
@@ -286,11 +281,11 @@ function renderTable(weeks, freq, meta){
     }
 
     if(week.components.length===0){
-      // fallback single row if decomposition failed
-      tbody.appendChild(makeRow(week.date, meta.form, meta.unit, [{strengthLabel: `${meta.unit}`, countPerDose: 1}], freq, meta));
+      // fallback single row
+      tbody.appendChild(makeRow(week.date, meta, {strengthLabel: "—", countPerDose: 1}, freq, true));
     } else {
       week.components.forEach((cmp, idx)=>{
-        tbody.appendChild(makeRow( idx===0 ? week.date : "", meta.form, meta.unit, [cmp], freq, meta));
+        tbody.appendChild(makeRow(idx===0 ? week.date : "", meta, cmp, freq, false));
       });
     }
   });
@@ -300,34 +295,35 @@ function renderTable(weeks, freq, meta){
 }
 
 /* Build one row */
-function makeRow(dateTxt, form, unit, components, freq, meta){
+function makeRow(dateTxt, meta, cmp, freq, isFallback){
   const tr=document.createElement("tr");
+
+  // Week beginning
   tr.appendChild(td(dateTxt || " "));
 
   // Instructions (plain English)
-  const c = components[0];
-  const countStr = formatCount(c.countPerDose);
-  const instr = buildPlainEnglishDose(countStr, c.strengthLabel, freq, form);
+  const countStr = formatCount(cmp.countPerDose, meta.form);
+  const instr = buildPlainEnglishDose(countStr, cmp.strengthLabel, freq, meta.form);
   tr.appendChild(td(instr));
 
   // Strength
-  tr.appendChild(td(c.strengthLabel));
+  tr.appendChild(td(cmp.strengthLabel));
 
   // Time-of-day cells with X
-  const times = ["Morning","Midday","Dinner","Night"];
   for(let i=0;i<4;i++){
     tr.appendChild(td(i<freq ? "X" : "","center"));
   }
 
-  // Special instruction
-  tr.appendChild(td(specialInstructionFor(meta.med || "", form)));
+  // Special instruction (outside header version remains too)
+  tr.appendChild(td(specialInstructionFor(meta.med || "", meta.form)));
 
-  // Image
-  tr.appendChild(imageCell({ med: meta.med, strength: c.strengthLabel }));
+  // Image cell
+  tr.appendChild(imageCell({ med: meta.med, strength: cmp.strengthLabel }));
 
   return tr;
 }
 
+/* Cells & images */
 function td(text, cls){
   const el=document.createElement("td");
   if(cls) el.className = cls;
@@ -343,29 +339,35 @@ function imageCell(info){
   const slugMed = (info.med||"").toLowerCase().replace(/\s+|\/|\\|\+/g,'_').replace(/[^\w_]/g,'');
   const slugStrength = info.strength.toLowerCase().replace(/\s+|\/|\\|\+/g,'').replace(/[^\w]/g,'');
   img.onload = ()=>{ cont.appendChild(img); };
-  img.onerror = ()=>{ /* silent if missing */ };
+  img.onerror = ()=>{ /* no image available */ };
   img.src = `images/${slugMed}_${slugStrength}.jpg`;
   tdEl.appendChild(cont);
   return tdEl;
 }
 
-/* Format helpers */
-function formatCount(count){
-  if(count===Math.floor(count)) return `${count} tablet`;
-  if(count%1===0.5) return `½ tablet`;
+/* Wording helpers */
+function formatCount(count, form){
+  if(form==="Patch"){
+    if(count===1) return "1 patch";
+    if(count===0.5) return "½ patch";
+    if(Number.isInteger(count)) return `${count} patches`;
+    return `${count} patch(es)`;
+  }
+  if(count===Math.floor(count)){
+    return count===1 ? "1 tablet" : `${count} tablets`;
+  }
+  if(count%1===0.5) return "½ tablet";
   return `${count} tablet(s)`;
 }
 function buildPlainEnglishDose(countStr, strengthLabel, freq, form){
-  // e.g., "Take 1 tablet in the morning and 1 tablet at night"
+  if(form==="Patch"){
+    // keep frequency text simple for patches
+    return `Apply ${countStr} of ${strengthLabel} as directed. Do not cut patches.`;
+  }
   const parts = [];
   const when = ["in the morning","at midday","at dinner","at night"];
   for(let i=0;i<freq;i++){
     parts.push(`Take ${countStr} of ${strengthLabel} ${when[i]}`);
-  }
-  // For patches, simplify wording
-  if(form==="Patch"){
-    parts.length = 0;
-    parts.push(`Apply ${countStr.replace("tablet","patch")} of ${strengthLabel} once, change as directed`);
   }
   return parts.join(". ");
 }
@@ -390,13 +392,17 @@ function init(){
   $("printBtn").addEventListener("click", ()=>window.print());
   $("savePdfBtn").addEventListener("click", ()=>{
     const element = document.getElementById("outputCard");
-    html2pdf().set({
-      filename: 'taper_plan.pdf',
-      margin:       10,
-      image:        { type: 'jpeg', quality: 0.95 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    }).from(element).save();
+    if(typeof html2pdf === "function"){
+      html2pdf().set({
+        filename: 'taper_plan.pdf',
+        margin: 10,
+        image: { type: 'jpeg', quality: 0.95 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(element).save();
+    } else {
+      alert("PDF library not loaded. Please check your internet connection and try again.");
+    }
   });
 }
 document.addEventListener("DOMContentLoaded", init);
