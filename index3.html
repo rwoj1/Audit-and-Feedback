@@ -1,1 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Deprescribing Taper Scheduler</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <header class="site-header">
+    <h1>Deprescribing Taper Scheduler</h1>
+    <p class="subtitle">Generate a tapering plan, schedule table, and printable chart.</p>
+  </header>
+
+  <main class="container">
+    <!-- Inputs (from your Instruction.docx structure) -->
+    <section class="card">
+      <h2>Medicine Chart Input</h2>
+      <div class="grid">
+        <label>Medicine Class
+          <select id="classSelect"></select>
+        </label>
+
+        <label>Medicine
+          <select id="medicineSelect"></select>
+        </label>
+
+        <label>Form
+          <select id="formSelect"></select>
+        </label>
+
+        <label>Strength
+          <select id="strengthSelect"></select>
+        </label>
+
+        <label>Frequency
+          <select id="frequencySelect">
+            <option value="1">Daily</option>
+            <option value="2">Twice daily</option>
+            <option value="3">Three times daily</option>
+            <option value="4">Four times a day</option>
+          </select>
+        </label>
+
+        <label>How long have you been on this medicine?
+          <select id="durationSelect">
+            <option value="<3">&lt; 3 months</option>
+            <option value=">3">&gt; 3 months</option>
+          </select>
+        </label>
+
+        <label>Reduce my dose every
+          <select id="intervalSelect">
+            <option value="7">1 week</option>
+            <option value="14" selected>2 weeks</option>
+            <option value="21">3 weeks</option>
+            <option value="28">4 weeks</option>
+          </select>
+        </label>
+
+        <label>Reduce by
+          <select id="percentSelect">
+            <option value="5">5%</option>
+            <option value="10">10%</option>
+            <option value="15">15%</option>
+            <option value="20">20%</option>
+            <option value="25" selected>25%</option>
+          </select>
+        </label>
+
+        <label>Start date
+          <input id="startDate" type="date"/>
+        </label>
+
+        <label>Next review date (optional)
+          <input id="reviewDate" type="date"/>
+        </label>
+
+        <label>Preset (class-based best practice)
+          <select id="presetSelect">
+            <option value="custom" selected>Custom (use settings above)</option>
+            <option value="bzra">Benzodiazepine/Z-Drug taper (~25% q2w; 12.5% near end)</option>
+            <option value="ap">Antipsychotic taper (25–50% q1–2w)</option>
+            <option value="ppi_stepdown">PPI: Step-down to lower dose</option>
+            <option value="ppi_ondemand">PPI: Stop & use on-demand</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="generateBtn">Generate Chart</button>
+        <button id="resetBtn" class="secondary">Reset</button>
+      </div>
+    </section>
+
+    <!-- Patient + HCP info block -->
+    <section class="card">
+      <h2>Patient & Safety Details</h2>
+      <div class="grid">
+        <label>Patient name
+          <input id="patientName" type="text" placeholder="e.g., Alex Smith"/>
+        </label>
+        <label>Allergies
+          <input id="allergies" type="text" placeholder="e.g., NKDA"/>
+        </label>
+        <label>Health professional
+          <input id="hcpName" type="text" placeholder="e.g., Dr Patel / Pharmacist Jones"/>
+        </label>
+      </div>
+      <p class="hint">Written instructions will be auto-generated per dose/strength. Table includes Morning / Midday / Dinner / Night columns.</p>
+    </section>
+
+    <!-- Output -->
+    <section class="card">
+      <h2>Generated Taper Plan</h2>
+
+      <div id="adviceBlock" class="advice"></div>
+
+      <div id="scheduleBlock" class="schedule-wrapper">
+        <!-- Filled by script -->
+      </div>
+
+      <div class="actions">
+        <button onclick="window.print()">Print / Save as PDF</button>
+        <button id="downloadBtn" class="secondary">Download JSON</button>
+      </div>
+
+      <details class="images-note">
+        <summary>Your capsule/tablet may look like… (images)</summary>
+        <p>Place images in <code>/images</code>, name them <code>medicine_strength.jpg</code> (e.g., <code>diazepam_5mg.jpg</code>). This section will try to show them automatically if available.</p>
+        <div id="imagesRow" class="images-row"></div>
+      </details>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p><strong>Evidence & Licensing</strong></p>
+    <ul>
+      <li>BZRA algorithm (2019) — CC BY-NC-SA 4.0, deprescribing.org. See algorithm for ~25% q2w and 12.5% near end guidance, monitoring q1-2 w, CBT/sleep hygiene. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1} :contentReference[oaicite:2]{index=2}</li>
+      <li>Antipsychotic algorithm (2018) — CC BY-NC-SA 4.0, deprescribing.org. Consider 25–50% reduction q1-2 w; monitor q1-2 w. :contentReference[oaicite:3]{index=3} :contentReference[oaicite:4]{index=4}</li>
+      <li>PPI algorithm (2018) — CC BY-NC-SA 4.0, deprescribing.org. Step-down dose or stop & use on-demand both supported options; monitor 4 & 12 weeks. :contentReference[oaicite:5]{index=5} :contentReference[oaicite:6]{index=6}</li>
+      <li>UI structure and chart requirements based on your instructions document (inputs, table columns, labels, print/download). :contentReference[oaicite:7]{index=7} :contentReference[oaicite:8]{index=8}</li>
+    </ul>
+    <p>For educational/clinical support use only. Not for commercial use.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
 
