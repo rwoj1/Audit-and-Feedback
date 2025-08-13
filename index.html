@@ -4,7 +4,15 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
-  <link rel="stylesheet" href="./styles.css?v=3"/>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="./styles.css?v=4"/>
+
+  <!-- Flatpickr (calendar picker) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <!-- PDF export -->
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 </head>
 <body>
@@ -28,7 +36,7 @@
           <input id="hcpName" type="text" placeholder="e.g., Dr Patel / Pharmacist Jones"/>
         </label>
       </div>
-      <p class="hint">Date fields use a calendar picker. Dose directions are plain English (e.g., “Take 1 tablet in the morning”).</p>
+      <p class="hint">Date fields use a pop-out calendar. Dose directions are plain English (e.g., “Take 1 tablet in the morning”).</p>
     </section>
 
     <!-- 2) MEDICINE INPUTS -->
@@ -61,7 +69,7 @@
           </select>
         </label>
 
-        <!-- Duration only when relevant (Opioids) -->
+        <!-- Duration (relevant for Opioids) -->
         <label id="durationWrap" style="display:none">How long on this medicine?
           <select id="durationSelect">
             <option value="">Select…</option>
@@ -71,11 +79,11 @@
         </label>
 
         <label>Start date
-          <input id="startDate" type="date"/>
+          <input id="startDate" class="datepick" type="text" placeholder="Select date"/>
         </label>
 
         <label>Next review date (optional)
-          <input id="reviewDate" type="date"/>
+          <input id="reviewDate" class="datepick" type="text" placeholder="Select date"/>
         </label>
 
         <!-- Shown only for patches -->
@@ -97,10 +105,7 @@
             <label>Every (days)<input id="p1Interval" type="number" min="1" max="56"/></label>
           </div>
           <div>
-            <label>Stop Phase 1 at dose (same units as strength)
-              <input id="p1StopDose" type="number" min="0" step="0.125" placeholder="optional"/>
-            </label>
-            <div class="or">or</div>
+            <!-- Removed “Stop at dose” per your request -->
             <label>Stop Phase 1 at week #
               <input id="p1StopWeek" type="number" min="1" placeholder="optional"/>
             </label>
@@ -119,8 +124,8 @@
         </div>
 
         <label class="until-review">
-          <input id="taperUntilReview" type="checkbox"/>
-          <span>Stop tapering at the review date (if set), otherwise continue until complete.</span>
+          <input id="taperUntilComplete" type="checkbox" />
+          <span><strong>Taper until complete</strong> (if unchecked and a review date is set, taper will stop at the review date).</span>
         </label>
       </div>
 
@@ -163,6 +168,6 @@
     <p>For educational/clinical support use only. Not for commercial use.</p>
   </footer>
 
-  <script src="./script.js?v=3.1"></script>
+  <script src="./script.js?v=4"></script>
 </body>
 </html>
