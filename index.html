@@ -5,10 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
 
-  <!-- Styles -->
-  <link rel="stylesheet" href="./styles.css?v=4"/>
+  <link rel="stylesheet" href="./styles.css?v=4.6"/>
 
-  <!-- Flatpickr (calendar picker) -->
+  <!-- Flatpickr calendar (optional; native date input still works without it) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
@@ -22,9 +21,9 @@
   </header>
 
   <main class="container">
-    <!-- 1) DETAILS FIRST -->
+    <!-- DETAILS (optional) -->
     <section class="card" id="detailsCard">
-      <h2>Details</h2>
+      <h2>Details (optional)</h2>
       <div class="grid">
         <label>Patient name
           <input id="patientName" type="text" placeholder="e.g., Alex Smith"/>
@@ -32,14 +31,13 @@
         <label>Allergies
           <input id="allergies" type="text" placeholder="e.g., NKDA"/>
         </label>
-        <label>Health professional
-          <input id="hcpName" type="text" placeholder="e.g., Dr Patel / Pharmacist Jones"/>
+        <label>Health Care Professional
+          <input id="hcpName" type="text" placeholder="e.g., Dr Smith / Pharmacist Jones"/>
         </label>
       </div>
-      <p class="hint">Date fields use a pop-out calendar. Dose directions are plain English (e.g., “Take 1 tablet in the morning”).</p>
     </section>
 
-    <!-- 2) MEDICINE INPUTS -->
+    <!-- MEDICINE INPUTS -->
     <section class="card">
       <h2>Medicine Chart Input</h2>
       <div class="grid">
@@ -55,6 +53,7 @@
           <select id="formSelect"></select>
         </label>
 
+        <!-- PRIMARY DOSE LINE (line #1) -->
         <label>Strength
           <select id="strengthSelect"></select>
         </label>
@@ -62,6 +61,8 @@
         <label>Frequency
           <select id="frequencySelect">
             <option value="AM">Daily in the morning</option>
+            <option value="MID">Daily at midday</option>
+            <option value="DIN">Daily at dinner</option>
             <option value="PM">Daily at night</option>
             <option value="BID">Twice daily (morning & night)</option>
             <option value="TID">Three times daily</option>
@@ -86,13 +87,21 @@
           <input id="reviewDate" class="datepick" type="text" placeholder="Select date"/>
         </label>
 
-        <!-- Shown only for patches -->
-        <label id="applyTimeWrap" style="display:none">Patch apply time
-          <input id="applyTime" type="time" value="09:00"/>
-        </label>
+        <!-- Patch apply time removed per new rules -->
+        <span></span>
       </div>
 
-      <!-- BEST PRACTICE FOR SELECTED MEDICINE -->
+      <!-- MULTI-DOSE LINES -->
+      <div class="advice" id="doseLinesBox">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <strong>Dose lines</strong>
+          <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
+        </div>
+        <div id="doseLinesContainer" style="margin-top:8px"></div>
+        <p class="hint">Additional lines must use the same medicine & form. Only strength and frequency can be changed.</p>
+      </div>
+
+      <!-- RECOMMENDED PRACTICE -->
       <div id="bestPracticeBox" class="advice"></div>
 
       <!-- TAPER CONTROLS -->
@@ -103,30 +112,25 @@
             <strong>Phase 1</strong><br/>
             <label>Reduce by (%)<input id="p1Percent" type="number" min="1" max="90"/></label>
             <label>Every (days)<input id="p1Interval" type="number" min="1" max="56"/></label>
-          </div>
-          <div>
-            <!-- Removed “Stop at dose” per your request -->
-            <label>Stop Phase 1 at week #
+            <label>Stop Phase 1 at week # (optional)
               <input id="p1StopWeek" type="number" min="1" placeholder="optional"/>
             </label>
+          </div>
+          <div class="phase-note">
+            Set Phase 2 as 0 if you only want a single-phase taper.
           </div>
         </div>
 
         <div class="phase-row">
           <div>
             <strong>Phase 2</strong><br/>
-            <label>Reduce by (%)<input id="p2Percent" type="number" min="1" max="90"/></label>
-            <label>Every (days)<input id="p2Interval" type="number" min="1" max="56"/></label>
+            <label>Reduce by (%)<input id="p2Percent" type="number" min="0" max="90" value="0"/></label>
+            <label>Every (days)<input id="p2Interval" type="number" min="1" max="56" value="0"/></label>
           </div>
           <div class="phase-note">
-            Leave Phase 2 blank if you only want a single-phase taper.
+            Taper will stop at the earliest of: completion, 3 months, or the review date (if set).
           </div>
         </div>
-
-        <label class="until-review">
-          <input id="taperUntilComplete" type="checkbox" />
-          <span><strong>Taper until complete</strong> (if unchecked and a review date is set, taper will stop at the review date).</span>
-        </label>
       </div>
 
       <div class="actions">
@@ -137,37 +141,35 @@
       </div>
     </section>
 
-    <!-- 3) OUTPUT -->
+    <!-- OUTPUT -->
     <section class="card" id="outputCard">
       <div class="plan-header">
         <div class="badge big" id="hdrPatient">Patient: –</div>
         <div class="badge big" id="hdrAllergies">Allergies: –</div>
-        <div class="badge big" id="hdrHcp">HCP: –</div>
+        <div class="badge big" id="hdrHcp">Health Care Professional: –</div>
         <div class="badge big" id="hdrMedicine">Medicine: –</div>
         <div class="special-instructions" id="hdrSpecial">Special instructions: –</div>
       </div>
 
-      <!-- Standard tablet/capsule/liquid table -->
+      <!-- Standard schedule -->
       <div id="scheduleBlock" class="schedule-wrapper"></div>
 
-      <!-- Patch schedule (shown only for fentanyl/buprenorphine patches) -->
+      <!-- Patch schedule (Fentanyl/Buprenorphine) -->
       <div id="patchBlock" class="schedule-wrapper" style="display:none"></div>
-
-      <details class="images-note">
-        <summary>Your tablet/capsule/patch may look like…</summary>
-        <p>Place images in <code>/images</code>, named <code>medicine_strength.jpg</code>.</p>
-      </details>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p><strong>Evidence & labelling</strong></p>
-    <ul>
-      <li>Plain-English directions (e.g., “Take 1 tablet in the morning”). If a tablet must be swallowed whole: “Swallow whole, do not halve or crush”.</li>
-    </ul>
-    <p>For educational/clinical support use only. Not for commercial use.</p>
+    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div style="flex:1 1 200px;min-height:50px;border:1px dashed var(--border);border-radius:10px;padding:6px;text-align:center">Logo space</div>
+      <div style="flex:3 1 260px">
+        <p><strong>Expected Benefits</strong> (class-specific): <span id="expBenefits">—</span></p>
+        <p><strong>Withdrawal</strong> (class-specific): <span id="withdrawalInfo">—</span></p>
+        <p class="hint" id="disclaimer">For educational/clinical support use only. Not for commercial use.</p>
+      </div>
+    </div>
   </footer>
 
-  <script src="./script.js?v=4"></script>
+  <script src="./script.js?v=4.6"></script>
 </body>
 </html>
