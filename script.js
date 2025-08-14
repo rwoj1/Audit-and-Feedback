@@ -1,6 +1,6 @@
 "use strict";
 
-/* ===== basic helpers ===== */
+/* ===== helpers ===== */
 const $ = id => document.getElementById(id);
 const safeVal = id => { const el = $(id); return el ? el.value : ""; };
 const fmtDate = d => new Date(d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
@@ -56,7 +56,7 @@ const CATALOG = {
   }
 };
 
-/* ===== recommended practice ===== */
+/* ===== recommended practice text ===== */
 const RECOMMEND = {
   "Opioid": [
     "Tailor the plan to clinical characteristics, goals and preferences.",
@@ -78,7 +78,7 @@ const RECOMMEND = {
   ]
 };
 
-/* ===== dropdowns (ensure these run on load) ===== */
+/* ===== dropdowns ===== */
 function populateClasses(){
   const cSel = $("classSelect"); if(!cSel) return;
   cSel.innerHTML = "";
@@ -186,27 +186,8 @@ function addDoseLine(){
   renderDoseLines();
 }
 
-/* ===== recommended practice box ===== */
-const RECOMMEND_TEXT = {
-  "Opioid": [
-    "Tailor the plan to clinical characteristics, goals and preferences.",
-    "< 3 months use: reduce 10–25% every week.",
-    "> 3 months use: reduce 10–25% every 4 weeks.",
-    "Long-term/high doses: slower taper and frequent monitoring."
-  ],
-  "Benzodiazepines / Z-Drug (BZRA)": [
-    "Taper slowly with the patient; e.g., 25% every 2 weeks.",
-    "Near end: consider 12.5% reductions and/or planned drug-free days."
-  ],
-  "Proton Pump Inhibitor": [
-    "Step-down to lowest effective dose, alternate-day dosing, or stop and use on-demand.",
-    "Review at 4–12 weeks."
-  ],
-  "Antipsychotic": [
-    "Reduce ~25–50% every 1–2 weeks with close monitoring.",
-    "Slower taper may be appropriate depending on symptoms."
-  ]
-};
+/* ===== special instructions & recommended box ===== */
+const RECOMMEND_TEXT = RECOMMEND;
 function specialInstructionFor(med, form){
   if(form==="Patch") return "Apply to intact skin as directed. Do not cut patches. Rotate site of application.";
   if(med==="Zolpidem" && /Slow Release/i.test(form)) return "Swallow whole, do not halve or crush";
@@ -229,6 +210,7 @@ function slotsForReduction(counts, percent, useSlotOrder){
   let toDrop = Math.max(1, Math.round(total * (percent/100)));
   const c = {...counts};
   if(useSlotOrder){
+    // Dinner first, then Midday, then AM/PM equally
     while(toDrop>0 && c.DIN>0){ c.DIN--; toDrop--; }
     while(toDrop>0 && c.MID>0){ c.MID--; toDrop--; }
     while(toDrop>0 && (c.AM>0 || c.PM>0)){
@@ -247,6 +229,17 @@ function slotsForReduction(counts, percent, useSlotOrder){
   return c;
 }
 
+/* Map a week’s per-slot tablet counts into one or more “strength rows”
+   For v5.2 we keep a single combined “Strength” text (all strengths used) and
+   we can split the week into multiple rows if *distinct* strengths are used.
+   Later we’ll pack to nearest strengths automatically. */
+function strengthSummary(med, form){
+  // combine unique strengths from selected dose lines (user’s available packs)
+  const uniq = Array.from(new Set(doseLines.map(l=>`${med} ${l.strengthStr} ${form.toLowerCase()}`)));
+  return uniq.length ? uniq : [`${med} ${form.toLowerCase()}`];
+}
+
+/* ===== build plan & render ===== */
 function buildPlan(){
   try{
     const classSelect = $("classSelect"), medicineSelect = $("medicineSelect"), formSelect = $("formSelect");
@@ -254,7 +247,7 @@ function buildPlan(){
 
     const cls = classSelect.value, med = medicineSelect.value, form = formSelect.value;
 
-    // Header (Details were removed; keep badges but leave blanks)
+    // Header (you removed the details inputs; keep badges but blank)
     const hdrPatient = $("hdrPatient"), hdrAllergies = $("hdrAllergies"), hdrHcp = $("hdrHcp");
     if(hdrPatient)   hdrPatient.textContent   = "Patient: " + (safeVal("patientName") || "–");
     if(hdrAllergies) hdrAllergies.textContent = "Allergies: " + (safeVal("allergies") || "–");
@@ -282,32 +275,33 @@ function buildPlan(){
 
     const useSlotOrder = CLASSES_WITH_SLOT_ORDER.has(cls);
 
-    // strength text
-    const strengthText = (() => {
-      const uniq = Array.from(new Set(doseLines.map(l=>`${med} ${l.strengthStr} ${form.toLowerCase()}`)));
-      return uniq.join(" + ");
-    })();
-
     const rows = [];
     let date = startOfWeek(startDate);
     let week = 1;
 
+    // *** Start at second step (first row already reduced once) ***
+    counts = slotsForReduction(counts, p1Percent, useSlotOrder);
     function pushRow(note=null){
       let lines=[];
+      // Morning before Night in ordering (and midday/dinner in between as they exist)
       if(counts.AM>0)  lines.push(plural(counts.AM,"Take {n} tablet in the morning","Take {n} tablets in the morning"));
       if(counts.MID>0) lines.push(plural(counts.MID,"Take {n} tablet at midday","Take {n} tablets at midday"));
       if(counts.DIN>0) lines.push(plural(counts.DIN,"Take {n} tablet at dinner","Take {n} tablets at dinner"));
       if(counts.PM>0)  lines.push(plural(counts.PM,"Take {n} tablet at night","Take {n} tablets at night"));
       if(note) lines.push(note);
+
+      // For now, strength column shows all distinct strengths available this week
+      const strengths = strengthSummary(med, form);
+
       rows.push({
         date: fmtDate(date),
-        strength: strengthText || `${med} ${form.toLowerCase()}`,
+        strengths, // array; renderer will make 1..N rows with merged date cell
         instructions: lines.join("\n"),
         am: counts.AM||0, mid: counts.MID||0, din: counts.DIN||0, pm: counts.PM||0
       });
     }
 
-    // Phase 1
+    // Phase 1 loop
     pushRow();
     while((counts.AM+counts.MID+counts.DIN+counts.PM) > 0){
       if(p1StopWeek && week >= p1StopWeek) break;
@@ -319,7 +313,7 @@ function buildPlan(){
       if(rows.length >= MAX_WEEKS) break;
     }
 
-    // Phase 2
+    // Phase 2 loop
     if((counts.AM+counts.MID+counts.DIN+counts.PM) > 0 && p2Percent){
       while((counts.AM+counts.MID+counts.DIN+counts.PM) > 0){
         date = addDays(date, p2Interval); week += 1;
@@ -331,7 +325,7 @@ function buildPlan(){
       }
     }
 
-    // end row notes
+    // end row
     let endNote = null;
     if(cls==="Proton Pump Inhibitor"){
       endNote = "Use on demand for symptoms; consider alternate days / lowest effective dose.";
@@ -339,12 +333,21 @@ function buildPlan(){
       endNote = "Take as required (PRN); consider alternate days before stopping.";
     }
     date = addDays(date, (p2Percent? Math.max(1,p2Interval) : Math.max(1,p1Interval)));
-    rows.push({ date: fmtDate(date), strength: strengthText || `${med} ${form.toLowerCase()}`, instructions: endNote || "Stop.", am:0, mid:0, din:0, pm:0 });
+    rows.push({
+      date: fmtDate(date),
+      strengths: strengthSummary(med, form),
+      instructions: endNote || "Stop.",
+      am: 0, mid: 0, din: 0, pm: 0
+    });
 
-    // render
+    // Render
     const isFentanyl = (form==="Patch" && med==="Fentanyl");
-    const isBupe = (form==="Patch" && med==="Buprenorphine");
-    if(isFentanyl || isBupe){ renderPatchTable(rows, isFentanyl?3:7); } else { renderStandardTable(rows, med, form); }
+    const isBupe     = (form==="Patch" && med==="Buprenorphine");
+    if(isFentanyl || isBupe){
+      renderPatchTable(rows, isFentanyl?3:7);
+    } else {
+      renderStandardTable(rows, med, form);
+    }
     setFooterText(cls);
   } catch(err){
     console.error(err); banner("Error: " + (err?.message || String(err)));
@@ -363,6 +366,7 @@ function imgTd(info){
   img.src=`images/${slugMed}_${slugStrength}.jpg`;
   tdEl.appendChild(cont); return tdEl;
 }
+
 function renderStandardTable(rows, med, form){
   const patchBlock = $("patchBlock"), scheduleBlock = $("scheduleBlock");
   if(patchBlock) patchBlock.style.display="none";
@@ -376,25 +380,44 @@ function renderStandardTable(rows, med, form){
   thead.appendChild(hr); table.appendChild(thead);
 
   const tbody=document.createElement("tbody");
+
+  // Build rows with date cell merged across multiple strength rows (rowspan)
   rows.forEach(r=>{
-    const tr=document.createElement("tr");
-    tr.appendChild(td(r.date));
-    tr.appendChild(td(r.strength));
-    const instr=td(r.instructions); instr.className="instructions-pre"; tr.appendChild(instr);
-    tr.appendChild(td(r.am,"center"));
-    tr.appendChild(td(r.mid,"center"));
-    tr.appendChild(td(r.din,"center"));
-    tr.appendChild(td(r.pm,"center"));
-    // image (use first strength token)
-    let first=(r.strength.split("+")[0]||"").trim();
-    const doseMatch = first.match(/([\d.]+(?:\/[\d.]+)?\s*\w+)/i);
-    const info = doseMatch ? { med, strength: doseMatch[1] } : null;
-    tr.appendChild(imgTd(info));
-    tbody.appendChild(tr);
+    const strengths = r.strengths && r.strengths.length ? r.strengths : [""];
+    strengths.forEach((s,idx)=>{
+      const tr=document.createElement("tr");
+
+      // date (only first row shows it; others get merged effect)
+      if(idx===0){
+        const dateTd = td(r.date);
+        if(strengths.length>1) dateTd.rowSpan = strengths.length;
+        tr.appendChild(dateTd);
+      }
+
+      // strength text (“Pantoprazole 40 mg tablet” etc)
+      tr.appendChild(td(s));
+
+      // instructions: keep AM line before PM line
+      const instr=td(r.instructions); instr.className="instructions-pre"; tr.appendChild(instr);
+
+      tr.appendChild(td(r.am,"center"));
+      tr.appendChild(td(r.mid,"center"));
+      tr.appendChild(td(r.din,"center"));
+      tr.appendChild(td(r.pm,"center"));
+
+      // Image: we try to derive the first dose numeric bit from strength text
+      const doseMatch = s.match(/([\d.]+(?:\/[\d.]+)?\s*\w+)/i);
+      const info = doseMatch ? { med, strength: doseMatch[1] } : null;
+      tr.appendChild(imgTd(info));
+
+      tbody.appendChild(tr);
+    });
   });
+
   table.appendChild(tbody);
   scheduleBlock.appendChild(table);
 }
+
 function renderPatchTable(rows, everyDays){
   const scheduleBlock = $("scheduleBlock"), patchBlock = $("patchBlock");
   if(scheduleBlock) scheduleBlock.style.display="none";
