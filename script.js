@@ -14,8 +14,7 @@ const plural = (n, s1, sN)=> (n===1 ? s1 : sN).replace("{n}", String(n));
 const MAX_WEEKS = 60;
 const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 const SLOT_KEYS = ["AM","MID","DIN","PM"];
-const CLASS_ORDER = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor"];
-const CLASSES_WITH_SLOT_ORDER = new Set(CLASS_ORDER);
+const CLASS_ORDERED = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor"];
 
 /* ===== catalog (no oral liquids) ===== */
 const CATALOG = {
@@ -54,27 +53,42 @@ const CATALOG = {
     "Rabeprazole": { "Tablet":["10 mg","20 mg"] }
   }
 };
-const CLASS_ORDERED = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor"];
 
-/* ===== splitting rules ===== */
-// allow halves for IR/non-SR tablets; never for SR/wafer/capsule unless explicitly allowed
-function isSR(form){ return /slow\s*release|modified|cr/i.test(form); }
+/* ===== splitting rules (UPDATED) ===== */
+// Helpers to read current class on demand
+function currentClass(){ return $("classSelect")?.value || ""; }
+
+// allow halves for IR/non-SR tablets unless:
+//   - class is Opioid  OR
+//   - class is Proton Pump Inhibitor  OR
+//   - Zolpidem Slow Release  OR
+//   - form is SR/Capsule/Wafer/Patch
 function canHalf(med, form){
-  if(form==="Patch") return false;
-  if(/Slow Release/i.test(form) || /Capsule/i.test(form) || /Wafer/i.test(form)) return false;
-  return true; // default: IR tablets can be halved
+  const cls = currentClass();
+  if(cls === "Opioid") return false;
+  if(cls === "Proton Pump Inhibitor") return false;
+  if(med === "Zolpidem" && /Slow Release/i.test(form)) return false;
+
+  if(form === "Patch") return false;
+  if(/Slow\s*Release/i.test(form) || /Capsule/i.test(form) || /Wafer/i.test(form)) return false;
+  return true; // default: immediate-release tablets can be halved
 }
-function canQuarter(med, form, strengthMg, cls){
-  // Conservative: diazepam IR only (2 mg & 5 mg). Extend if you want others.
+
+// quarters only for Diazepam IR (2 mg & 5 mg), and never if opioid/PPI/Zolpidem SR
+function canQuarter(med, form, strengthMg){
+  const cls = currentClass();
+  if(cls === "Opioid") return false;
+  if(cls === "Proton Pump Inhibitor") return false;
+  if(med === "Zolpidem" && /Slow Release/i.test(form)) return false;
+
   if(med==="Diazepam" && /Tablet/i.test(form) && (strengthMg===2 || strengthMg===5)) return true;
   return false;
 }
 
 /* ===== parsing utils ===== */
 function parseMgFromStrength(str, med){
-  // "10 mg" -> 10; "2.5/1.25 mg" (oxycodone/naloxone) -> 2.5 (ignore naloxone)
   if(!str) return 0;
-  const slash = String(str).split("/")[0]; // before "/"
+  const slash = String(str).split("/")[0];
   const m = slash.match(/([\d.]+)\s*mg/i);
   return m ? parseFloat(m[1]) : 0;
 }
@@ -229,7 +243,7 @@ function updateRecommended(){
 }
 
 /* ===== mg model ===== */
-// Build initial per-slot mg totals from the entered dose lines
+function parseMgFromStrengthList(list){ return list.map(s=>parseMgFromStrength(s)).filter(v=>v>0); }
 function baseSlotMg(){
   const med = $("medicineSelect")?.value, form = $("formSelect")?.value;
   let slot = { AM:0, MID:0, DIN:0, PM:0 };
@@ -240,31 +254,24 @@ function baseSlotMg(){
   return slot;
 }
 function totalMg(slot){ return SLOT_KEYS.reduce((a,k)=>a+(slot[k]||0),0); }
-
-// Reduce total mg by percent using slot order: DIN -> MID -> (AM & PM equally)
 function reduceByPercent(slot, percent){
   let remaining = { ...slot };
   let drop = totalMg(slot) * (percent/100);
-  const step = 0.01; // work in 0.01 mg steps to avoid FP noise (virtual granularity)
+  const step = 0.01;
 
-  // helper to remove mg from a key up to amount
   const take = (key, amt)=>{
     const takeAmt = Math.min(remaining[key], amt);
     remaining[key] = +(remaining[key] - takeAmt).toFixed(4);
     return amt - takeAmt;
   };
 
-  // DIN first
   drop = take("DIN", drop);
-  // MID next
   if(drop>0) drop = take("MID", drop);
-  // AM & PM equally
   while(drop > step && (remaining.AM>0 || remaining.PM>0)){
     const half = drop/2;
     drop = take("AM", half);
     if(drop>0) drop = take("PM", half);
   }
-  // If a tiny residue remains, shave from AM then PM
   if(drop>0){
     drop = take("AM", drop);
     if(drop>0) drop = take("PM", drop);
@@ -273,30 +280,25 @@ function reduceByPercent(slot, percent){
 }
 
 /* ===== strength packer ===== */
-// Build the allowed piece sizes (mg) for a medicine/form (includes halves/quarters if allowed)
 function allowedPiecesMg(med, form){
   const strengths = strengthsForSelected()
     .map(s=>parseMgFromStrength(s, med))
     .filter(v=>v>0);
   const uniq = Array.from(new Set(strengths)).sort((a,b)=>a-b);
 
-  let pieces = uniq.slice(); // whole tablets
+  let pieces = uniq.slice(); // whole tablets always allowed (if form is tablet/capsule/wafer we’ll handle above)
   if(canHalf(med, form)){
     uniq.forEach(v => pieces.push(v/2));
   }
-  // conservative quarters: diazepam only (2 mg & 5 mg)
   uniq.forEach(v=>{
     if(canQuarter(med, form, v)) pieces.push(v/4);
   });
 
-  // round to 0.01 and unique
   pieces = Array.from(new Set(pieces.map(v=>+v.toFixed(2)))).sort((a,b)=>a-b);
   return pieces;
 }
-
-// Greedy packer: choose pieces from largest to smallest to not exceed target mg (round down)
 function packSlot(targetMg, med, form){
-  const pieces = allowedPiecesMg(med, form).slice().sort((a,b)=>b-a); // desc
+  const pieces = allowedPiecesMg(med, form).slice().sort((a,b)=>b-a);
   let remaining = +targetMg.toFixed(2);
   const used = {};
   for(const p of pieces){
@@ -307,54 +309,32 @@ function packSlot(targetMg, med, form){
       remaining = +(remaining - n * p).toFixed(2);
     }
   }
-  // result mg we actually achieved
   const achieved = Object.entries(used).reduce((sum,[mg,count])=>sum + parseFloat(mg)*count, 0);
   return { used, achieved: +achieved.toFixed(2) };
 }
-
-// Turn packed pieces into friendly text & strength labels
 function packToTextAndLabels(pack, med, form){
-  // instruction text: “Take 1 tablet + 1/2 tablet in the morning”
-  // We don’t print strengths in the instruction; they go in the Strength column.
-  const entries = Object.entries(pack.used).sort((a,b)=>parseFloat(b[0])-parseFloat(a[0])); // big to small
-  let totalTablets = 0, halves=0, quarters=0, wholes=0;
-
-  // for Strength column, list distinct “med X mg tablet” items used
+  const entries = Object.entries(pack.used).sort((a,b)=>parseFloat(b[0])-parseFloat(a[0]));
   const strengthLabels = [];
+  const wholesList = parseMgFromStrengthList(strengthsForSelected());
 
-  entries.forEach(([mgStr, n])=>{
-    const mg = parseFloat(mgStr);
-    // classify as whole/half/quarter relative to any base tablet sizes
-    // We'll derive labels from mg amount itself.
-    // Strength label (single piece)
-    const label = `${med} ${mg} mg ${form.toLowerCase()}`;
-    strengthLabels.push(label);
-    // Count into tablets/fractions by comparing against allowed whole sizes.
-    // Simpler: treat each piece as "tablet" if equals a whole strength, else "half/quarter".
-    // We can detect halves/quarters by checking if piece is exactly half or quarter of any whole.
-    totalTablets += n;
-  });
-
-  // For text, we only mention number of “tablets” (not mg), but include halves/quarters words when piece < min whole.
-  // Build a human phrase from pieces
   const piecePhrases = [];
   entries.forEach(([mgStr, n])=>{
     const mg = parseFloat(mgStr);
-    // try to detect half/quarter by seeing if any whole equals 2x or 4x this piece
-    const wholesList = strengthsForSelected().map(s=>parseMgFromStrength(s));
     const isHalf = wholesList.some(w=>Math.abs(w/2 - mg) < 0.01);
     const isQuarter = wholesList.some(w=>Math.abs(w/4 - mg) < 0.01);
     let name = "tablet";
     if(isQuarter) name = "quarter tablet";
     else if(isHalf) name = "half tablet";
-    else name = "tablet";
+
     if(n===1) piecePhrases.push(`1 ${name}`);
     else piecePhrases.push(`${n} ${name}s`);
+
+    strengthLabels.push(`${med} ${mg} mg ${form.toLowerCase()}`);
   });
 
   return {
     instructionFragment: piecePhrases.join(" + "),
-    strengthLabels: Array.from(new Set(strengthLabels)) // unique
+    strengthLabels: Array.from(new Set(strengthLabels))
   };
 }
 
@@ -383,27 +363,25 @@ function buildPlan(){
 
     if(!doseLines.length) addDoseLine();
 
-    // PATCH medicines: separate path
+    // PATCH path
     if(form==="Patch"){
       const rows = [];
       let date = startOfWeek(startDate);
-      rows.push({ date: fmtDate(date), strengths:[`${med} X mcg/hr ${form.toLowerCase()}`], instructions:`Apply 1 patch to the skin every ${med==="Fentanyl" ? 3 : 7} days. Rotate sites.`, am:0,mid:0,din:0,pm:0 });
       const isF = (med==="Fentanyl"); const interval = isF?3:7;
+      rows.push({ date: fmtDate(date), strengths:[`${med} X mcg/hr ${form.toLowerCase()}`], instructions:`Apply 1 patch to the skin every ${interval} days. Rotate sites.`, am:0,mid:0,din:0,pm:0 });
       const end = addDays(date, 90);
       while(date <= end){
         date = addDays(date, interval);
         rows.push({ date: fmtDate(date), strengths:[`${med} X mcg/hr ${form.toLowerCase()}`], instructions:`Apply 1 patch to the skin every ${interval} days. Rotate sites.`, am:0,mid:0,din:0,pm:0 });
         if(reviewDate && date >= reviewDate) break;
       }
-      renderPatchTable(rows, (med==="Fentanyl")?3:7);
+      renderPatchTable(rows, interval);
       setFooterText(cls);
       return;
     }
 
     // TABLET/CAPSULE path
-    // 1) compute baseline per-slot mg
     let slotMg = baseSlotMg();
-    // Safety: if everything is zero (e.g., user picked a form/strength but didn’t add lines), force 1 high-strength AM line
     if(totalMg(slotMg)===0){
       const sList = strengthsForSelected().sort((a,b)=>parseMgFromStrength(a)-parseMgFromStrength(b));
       const mg = parseMgFromStrength(sList[sList.length-1], med);
@@ -414,15 +392,14 @@ function buildPlan(){
     let date = startOfWeek(startDate);
     let week = 1;
 
-    // Helper to render one week from current slotMg
+    function countPieces(pack){ return Object.values(pack.used).reduce((a,b)=>a+b,0); }
+
     function pushWeek(note=null){
-      // Pack each slot to available pieces
       const packAM = packSlot(slotMg.AM, med, form);
       const packMID= packSlot(slotMg.MID, med, form);
       const packDIN= packSlot(slotMg.DIN, med, form);
       const packPM = packSlot(slotMg.PM, med, form);
 
-      // Build instruction lines (Morning → Midday → Dinner → Night)
       const instrLines = [];
       if(packAM.achieved>0){ instrLines.push(`${packToTextAndLabels(packAM, med, form).instructionFragment} in the morning`); }
       if(packMID.achieved>0){ instrLines.push(`${packToTextAndLabels(packMID, med, form).instructionFragment} at midday`); }
@@ -430,7 +407,6 @@ function buildPlan(){
       if(packPM.achieved>0){ instrLines.push(`${packToTextAndLabels(packPM, med, form).instructionFragment} at night`); }
       if(note) instrLines.push(note);
 
-      // Collect all strength labels used this week
       const labels = new Set();
       packToTextAndLabels(packAM, med, form).strengthLabels.forEach(s=>labels.add(s));
       packToTextAndLabels(packMID, med, form).strengthLabels.forEach(s=>labels.add(s));
@@ -445,19 +421,13 @@ function buildPlan(){
       });
     }
 
-    function countPieces(pack){
-      // total number of pieces used in that slot (whole/half/quarter all count as “1 piece” in the table cells)
-      return Object.values(pack.used).reduce((a,b)=>a+b,0);
-    }
-
-    // === Phase 1: start at second step (apply first reduction before first row) ===
+    // Phase 1: start at second step
     slotMg = reduceByPercent(slotMg, p1Percent);
     pushWeek();
     while(totalMg(slotMg) > 0.01){
       if(p1StopWeek && week >= p1StopWeek) break;
       date = addDays(date, p1Interval); week += 1;
       slotMg = reduceByPercent(slotMg, p1Percent);
-      // clamp negatives
       SLOT_KEYS.forEach(k=>{ if(slotMg[k]<0) slotMg[k]=0; });
       pushWeek();
       if(reviewDate && date >= reviewDate) break;
@@ -465,7 +435,7 @@ function buildPlan(){
       if(rows.length >= MAX_WEEKS) break;
     }
 
-    // === Phase 2 ===
+    // Phase 2
     if(totalMg(slotMg) > 0.01 && p2Percent){
       while(totalMg(slotMg) > 0.01){
         date = addDays(date, p2Interval); week += 1;
@@ -480,21 +450,16 @@ function buildPlan(){
 
     // End advice
     let endNote = null;
-    if($("classSelect").value==="Proton Pump Inhibitor"){
+    if(currentClass()==="Proton Pump Inhibitor"){
       endNote = "Use on demand for symptoms; consider alternate days / lowest effective dose.";
-    } else if(["Benzodiazepines / Z-Drug (BZRA)","Antipsychotic"].includes($("classSelect").value)){
+    } else if(["Benzodiazepines / Z-Drug (BZRA)","Antipsychotic"].includes(currentClass())){
       endNote = "Take as required (PRN); consider alternate days before stopping.";
     }
     date = addDays(date, (p2Percent? Math.max(1,p2Interval) : Math.max(1,p1Interval)));
-    rows.push({
-      date: fmtDate(date),
-      strengths: rows.length ? rows[rows.length-1].strengths : [],
-      instructions: endNote || "Stop.",
-      am:0, mid:0, din:0, pm:0
-    });
+    rows.push({ date: fmtDate(date), strengths: rows.length ? rows[rows.length-1].strengths : [], instructions: endNote || "Stop.", am:0, mid:0, din:0, pm:0 });
 
     renderStandardTable(rows, med, form);
-    setFooterText(cls);
+    setFooterText(currentClass());
   } catch(err){
     console.error(err); banner("Error: " + (err?.message || String(err)));
   }
@@ -512,7 +477,6 @@ function imgTd(info){
   img.src=`images/${slugMed}_${slugStrength}.jpg`;
   tdEl.appendChild(cont); return tdEl;
 }
-
 function renderStandardTable(rows, med, form){
   const patchBlock = $("patchBlock"), scheduleBlock = $("scheduleBlock");
   if(patchBlock) patchBlock.style.display="none";
@@ -527,17 +491,14 @@ function renderStandardTable(rows, med, form){
 
   const tbody=document.createElement("tbody");
   rows.forEach(r=>{
-    // If multiple distinct strengths appear this week, we’ll render each on its own line and rowspan the date.
     const strengths = r.strengths && r.strengths.length ? r.strengths : [""];
     strengths.forEach((s,idx)=>{
       const tr=document.createElement("tr");
-
       if(idx===0){
         const dateTd = td(r.date);
         if(strengths.length>1) dateTd.rowSpan = strengths.length;
         tr.appendChild(dateTd);
       }
-
       tr.appendChild(td(s));
       const instr=td(r.instructions); instr.className="instructions-pre"; tr.appendChild(instr);
       tr.appendChild(td(r.am,"center"));
@@ -556,7 +517,6 @@ function renderStandardTable(rows, med, form){
   table.appendChild(tbody);
   scheduleBlock.appendChild(table);
 }
-
 function renderPatchTable(rows, everyDays){
   const scheduleBlock = $("scheduleBlock"), patchBlock = $("patchBlock");
   if(scheduleBlock) scheduleBlock.style.display="none";
@@ -604,7 +564,6 @@ function setFooterText(cls){
 
 /* ===== init ===== */
 function init(){
-  // calendars
   document.querySelectorAll(".datepick").forEach(el=>{
     if(window.flatpickr){ flatpickr(el,{dateFormat:"Y-m-d",allowInput:true}); }
     else { el.type="date"; }
@@ -614,11 +573,9 @@ function init(){
   populateMedicines();
   populateForms();
 
-  // pre-populate one dose line
   doseLines = [];
   addDoseLine();
 
-  // listeners
   $("classSelect")?.addEventListener("change", ()=>{
     populateMedicines(); populateForms();
     updateRecommended();
