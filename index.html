@@ -34,23 +34,7 @@
   </header>
 
   <main class="container">
-    <!-- DETAILS (optional) -->
-    <section class="card" id="detailsCard">
-      <h2>Details (optional)</h2>
-      <div class="grid">
-        <label>Patient name
-          <input id="patientName" type="text" placeholder="e.g., Alex Smith">
-        </label>
-        <label>Allergies
-          <input id="allergies" type="text" placeholder="e.g., NKDA">
-        </label>
-        <label>Health Care Professional
-          <input id="hcpName" type="text" placeholder="e.g., Dr Smith / Pharmacist Jones">
-        </label>
-      </div>
-    </section>
-
-    <!-- MEDICINE INPUTS -->
+    <!-- MEDICINE INPUTS ONLY -->
     <section class="card">
       <h2>Medicine Chart Input</h2>
       <div class="grid">
@@ -125,4 +109,39 @@
 
       <div class="actions">
         <button id="generateBtn" type="button">Generate Chart</button>
-        <button id
+        <button id="printBtn" class="secondary" type="button">Print</button>
+        <button id="savePdfBtn" class="secondary" type="button">Save as PDF</button>
+        <button id="resetBtn" class="secondary" type="button">Reset</button>
+      </div>
+    </section>
+
+    <!-- OUTPUT -->
+    <section class="card" id="outputCard">
+      <div class="plan-header">
+        <div class="badge big" id="hdrPatient">Patient: –</div>
+        <div class="badge big" id="hdrAllergies">Allergies: –</div>
+        <div class="badge big" id="hdrHcp">Health Care Professional: –</div>
+        <div class="badge big" id="hdrMedicine">Medicine: –</div>
+        <div class="special-instructions" id="hdrSpecial">Special instructions: –</div>
+      </div>
+
+      <div id="scheduleBlock" class="schedule-wrapper"></div>
+      <div id="patchBlock" class="schedule-wrapper" style="display:none"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div style="flex:1 1 200px;min-height:50px;border:1px dashed #ccc;border-radius:10px;padding:6px;text-align:center">Logo space</div>
+      <div style="flex:3 1 260px">
+        <p><strong>Expected Benefits</strong> (class-specific): <span id="expBenefits">—</span></p>
+        <p><strong>Withdrawal</strong> (class-specific): <span id="withdrawalInfo">—</span></p>
+        <p class="hint" id="disclaimer">For educational/clinical support use only. Not for commercial use.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- keep last -->
+  <script src="./script.js"></script>
+</body>
+</html>
