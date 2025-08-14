@@ -5,14 +5,31 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
 
-  <link rel="stylesheet" href="./styles.css?v=4.6"/>
+  <link rel="stylesheet" href="./styles.css?v=4.8"/>
 
-  <!-- Flatpickr calendar (optional; native date input still works without it) -->
+  <!-- Flatpickr (calendar) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
   <!-- PDF export -->
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+
+  <!-- Print-only tweaks to fit A4 and hide inputs -->
+  <style>
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      header, .container > .card:not(#outputCard), .actions, .site-footer { display: none !important; }
+      #outputCard { display: block !important; }
+      .table { font-size: 11px; }
+      .table th, .table td { padding: 6px 8px; }
+      .plan-header .badge.big { font-size: 12px; }
+      @page { size: A4; margin: 12mm; }
+    }
+    /* Make the output table a touch more compact overall */
+    .table td.center { text-align: center; }
+    .table td img { max-height: 36px; width: auto; }
+    .instructions-pre { white-space: pre-line; }
+  </style>
 </head>
 <body>
   <header class="site-header">
@@ -53,23 +70,6 @@
           <select id="formSelect"></select>
         </label>
 
-        <!-- PRIMARY DOSE LINE (line #1) -->
-        <label>Strength
-          <select id="strengthSelect"></select>
-        </label>
-
-        <label>Frequency
-          <select id="frequencySelect">
-            <option value="AM">Daily in the morning</option>
-            <option value="MID">Daily at midday</option>
-            <option value="DIN">Daily at dinner</option>
-            <option value="PM">Daily at night</option>
-            <option value="BID">Twice daily (morning & night)</option>
-            <option value="TID">Three times daily</option>
-            <option value="QID">Four times daily</option>
-          </select>
-        </label>
-
         <!-- Duration (relevant for Opioids) -->
         <label id="durationWrap" style="display:none">How long on this medicine?
           <select id="durationSelect">
@@ -86,19 +86,16 @@
         <label>Next review date (optional)
           <input id="reviewDate" class="datepick" type="text" placeholder="Select date"/>
         </label>
-
-        <!-- Patch apply time removed per new rules -->
-        <span></span>
       </div>
 
-      <!-- MULTI-DOSE LINES -->
+      <!-- DOSE LINES (strength & frequency live here only) -->
       <div class="advice" id="doseLinesBox">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <strong>Dose lines</strong>
           <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
         </div>
         <div id="doseLinesContainer" style="margin-top:8px"></div>
-        <p class="hint">Additional lines must use the same medicine & form. Only strength and frequency can be changed.</p>
+        <p class="hint">Additional lines must use the same medicine &amp; form. Only <em>Strength</em> and <em>Frequency</em> can be changed.</p>
       </div>
 
       <!-- RECOMMENDED PRACTICE -->
@@ -117,7 +114,7 @@
             </label>
           </div>
           <div class="phase-note">
-            Set Phase 2 as 0 if you only want a single-phase taper.
+            Set Phase 2 as 0 if you only want a single-phase taper. Hard limit: 3 months (or review date, if earlier).
           </div>
         </div>
 
@@ -126,9 +123,6 @@
             <strong>Phase 2</strong><br/>
             <label>Reduce by (%)<input id="p2Percent" type="number" min="0" max="90" value="0"/></label>
             <label>Every (days)<input id="p2Interval" type="number" min="1" max="56" value="0"/></label>
-          </div>
-          <div class="phase-note">
-            Taper will stop at the earliest of: completion, 3 months, or the review date (if set).
           </div>
         </div>
       </div>
@@ -170,6 +164,6 @@
     </div>
   </footer>
 
-  <script src="./script.js?v=4.6"></script>
+  <script src="./script.js?v=4.8"></script>
 </body>
 </html>
