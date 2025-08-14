@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
 
-  <link rel="stylesheet" href="./styles.css?v=4.8"/>
+  <link rel="stylesheet" href="./styles.css?v=4.9"/>
 
   <!-- Flatpickr (calendar) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -14,7 +14,7 @@
   <!-- PDF export -->
   <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 
-  <!-- Print-only tweaks to fit A4 and hide inputs -->
+  <!-- Print: output-only & A4 fit -->
   <style>
     @media print {
       body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -25,10 +25,9 @@
       .plan-header .badge.big { font-size: 12px; }
       @page { size: A4; margin: 12mm; }
     }
-    /* Make the output table a touch more compact overall */
-    .table td.center { text-align: center; }
-    .table td img { max-height: 36px; width: auto; }
+    .table td.center { text-align:center; }
     .instructions-pre { white-space: pre-line; }
+    .image-cell img { max-height: 36px; width: auto; }
   </style>
 </head>
 <body>
@@ -88,7 +87,7 @@
         </label>
       </div>
 
-      <!-- DOSE LINES (strength & frequency live here only) -->
+      <!-- DOSE LINES -->
       <div class="advice" id="doseLinesBox">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
           <strong>Dose lines</strong>
@@ -164,6 +163,6 @@
     </div>
   </footer>
 
-  <script src="./script.js?v=4.8"></script>
+  <script src="./script.js?v=4.9"></script>
 </body>
 </html>
