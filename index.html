@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Deprescribing Taper Scheduler</title>
 
-  <link rel="stylesheet" href="./styles.css?v=4.9"/>
+  <link rel="stylesheet" href="./styles.css"/>
 
   <!-- Flatpickr (calendar) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
@@ -17,15 +17,12 @@
   <!-- Print: output-only & A4 fit -->
   <style>
     @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       header, .container > .card:not(#outputCard), .actions, .site-footer { display: none !important; }
       #outputCard { display: block !important; }
       .table { font-size: 11px; }
       .table th, .table td { padding: 6px 8px; }
-      .plan-header .badge.big { font-size: 12px; }
       @page { size: A4; margin: 12mm; }
     }
-    .table td.center { text-align:center; }
     .instructions-pre { white-space: pre-line; }
     .image-cell img { max-height: 36px; width: auto; }
   </style>
@@ -42,13 +39,13 @@
       <h2>Details (optional)</h2>
       <div class="grid">
         <label>Patient name
-          <input id="patientName" type="text" placeholder="e.g., Alex Smith"/>
+          <input id="patientName" type="text" placeholder="e.g., Alex Smith">
         </label>
         <label>Allergies
-          <input id="allergies" type="text" placeholder="e.g., NKDA"/>
+          <input id="allergies" type="text" placeholder="e.g., NKDA">
         </label>
         <label>Health Care Professional
-          <input id="hcpName" type="text" placeholder="e.g., Dr Smith / Pharmacist Jones"/>
+          <input id="hcpName" type="text" placeholder="e.g., Dr Smith / Pharmacist Jones">
         </label>
       </div>
     </section>
@@ -69,7 +66,7 @@
           <select id="formSelect"></select>
         </label>
 
-        <!-- Duration (relevant for Opioids) -->
+        <!-- Duration (opioids only) -->
         <label id="durationWrap" style="display:none">How long on this medicine?
           <select id="durationSelect">
             <option value="">Select…</option>
@@ -79,11 +76,11 @@
         </label>
 
         <label>Start date
-          <input id="startDate" class="datepick" type="text" placeholder="Select date"/>
+          <input id="startDate" class="datepick" type="text" placeholder="Select date">
         </label>
 
         <label>Next review date (optional)
-          <input id="reviewDate" class="datepick" type="text" placeholder="Select date"/>
+          <input id="reviewDate" class="datepick" type="text" placeholder="Select date">
         </label>
       </div>
 
@@ -105,11 +102,11 @@
         <h3>Taper controls</h3>
         <div class="phase-row">
           <div>
-            <strong>Phase 1</strong><br/>
-            <label>Reduce by (%)<input id="p1Percent" type="number" min="1" max="90"/></label>
-            <label>Every (days)<input id="p1Interval" type="number" min="1" max="56"/></label>
+            <strong>Phase 1</strong><br>
+            <label>Reduce by (%)<input id="p1Percent" type="number" min="1" max="90"></label>
+            <label>Every (days)<input id="p1Interval" type="number" min="1" max="56"></label>
             <label>Stop Phase 1 at week # (optional)
-              <input id="p1StopWeek" type="number" min="1" placeholder="optional"/>
+              <input id="p1StopWeek" type="number" min="1" placeholder="optional">
             </label>
           </div>
           <div class="phase-note">
@@ -119,50 +116,13 @@
 
         <div class="phase-row">
           <div>
-            <strong>Phase 2</strong><br/>
-            <label>Reduce by (%)<input id="p2Percent" type="number" min="0" max="90" value="0"/></label>
-            <label>Every (days)<input id="p2Interval" type="number" min="1" max="56" value="0"/></label>
+            <strong>Phase 2</strong><br>
+            <label>Reduce by (%)<input id="p2Percent" type="number" min="0" max="90" value="0"></label>
+            <label>Every (days)<input id="p2Interval" type="number" min="1" max="56" value="0"></label>
           </div>
         </div>
       </div>
 
       <div class="actions">
-        <button id="generateBtn">Generate Chart</button>
-        <button id="printBtn" class="secondary">Print</button>
-        <button id="savePdfBtn" class="secondary">Save as PDF</button>
-        <button id="resetBtn" class="secondary">Reset</button>
-      </div>
-    </section>
-
-    <!-- OUTPUT -->
-    <section class="card" id="outputCard">
-      <div class="plan-header">
-        <div class="badge big" id="hdrPatient">Patient: –</div>
-        <div class="badge big" id="hdrAllergies">Allergies: –</div>
-        <div class="badge big" id="hdrHcp">Health Care Professional: –</div>
-        <div class="badge big" id="hdrMedicine">Medicine: –</div>
-        <div class="special-instructions" id="hdrSpecial">Special instructions: –</div>
-      </div>
-
-      <!-- Standard schedule -->
-      <div id="scheduleBlock" class="schedule-wrapper"></div>
-
-      <!-- Patch schedule (Fentanyl/Buprenorphine) -->
-      <div id="patchBlock" class="schedule-wrapper" style="display:none"></div>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <div style="flex:1 1 200px;min-height:50px;border:1px dashed var(--border);border-radius:10px;padding:6px;text-align:center">Logo space</div>
-      <div style="flex:3 1 260px">
-        <p><strong>Expected Benefits</strong> (class-specific): <span id="expBenefits">—</span></p>
-        <p><strong>Withdrawal</strong> (class-specific): <span id="withdrawalInfo">—</span></p>
-        <p class="hint" id="disclaimer">For educational/clinical support use only. Not for commercial use.</p>
-      </div>
-    </div>
-  </footer>
-
-  <script src="./script.js?v=4.9"></script>
-</body>
-</html>
+        <button id="generateBtn" type="button">Generate Chart</button>
+        <button id
