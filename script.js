@@ -1,8 +1,6 @@
 "use strict";
 
-/* ================================
-   Utilities
-================================ */
+/* =============== utils =============== */
 const $ = id => document.getElementById(id);
 const fmtDate = d => new Date(d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'});
 const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
@@ -13,27 +11,18 @@ const SLOT_KEYS = ["AM","MID","DIN","PM"];
 const MAX_WEEKS = 60;
 const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 
-/* ================================
-   Catalog (hard-coded; solids only)
-   - SR opioids fully enumerated
-   - BZRA & Antipsychotics IR allow splits
-   - PPIs tablets/capsules, no splits
-================================ */
+/* =============== catalog (hard-coded) =============== */
 const CATALOG = {
   "Opioid": {
-    // SR tablets ONLY; no splitting.
     "Morphine": { "SR Tablet":[ "5 mg","10 mg","15 mg","20 mg","30 mg","60 mg","100 mg","200 mg" ] },
     "Oxycodone": { "SR Tablet":[ "5 mg","10 mg","15 mg","20 mg","30 mg","40 mg","60 mg","80 mg" ] },
-    // Display full strength (e.g., "10/5 mg SR Tablet"), but calculations use the FIRST (oxycodone) number only.
     "Oxycodone / Naloxone": { "SR Tablet":[ "2.5/1.25 mg","5/2.5 mg","10/5 mg","15/7.5 mg","20/10 mg","30/15 mg","40/20 mg","60/30 mg","80/40 mg" ] },
     "Tapentadol": { "SR Tablet":[ "50 mg","100 mg","150 mg","200 mg","250 mg" ] },
     "Tramadol": { "SR Tablet":[ "50 mg","100 mg","150 mg","200 mg" ] },
-    // Patches (no splitting)
     "Buprenorphine": { "Patch":[ "5 mcg/hr","10 mcg/hr","15 mcg/hr","20 mcg/hr","25 mcg/hr","30 mcg/hr","40 mcg/hr" ] },
     "Fentanyl": { "Patch":[ "12 mcg/hr","25 mcg/hr","50 mcg/hr","75 mcg/hr","100 mcg/hr" ] }
   },
   "Benzodiazepines / Z-Drug (BZRA)": {
-    // IR tablets can be halved/quartered (except Zolpidem SR).
     "Alprazolam": { "Tablet":["0.25 mg","0.5 mg","1 mg","2 mg"] },
     "Clonazepam": { "Tablet":["0.5 mg","2 mg"] },
     "Diazepam": { "Tablet":["2 mg","5 mg"] },
@@ -46,7 +35,6 @@ const CATALOG = {
     "Zopiclone": { "Tablet":["7.5 mg"] }
   },
   "Antipsychotic": {
-    // Allow halves/quarters for IR only. SR/XL etc. never split.
     "Haloperidol": { "Tablet":["0.5 mg","1 mg","2 mg","5 mg","10 mg","20 mg"] },
     "Olanzapine": { "Tablet":["2.5 mg","5 mg","7.5 mg","10 mg","15 mg","20 mg"], "Wafer":["5 mg","10 mg","15 mg","20 mg"] },
     "Quetiapine": { "Immediate Release Tablet":["25 mg","100 mg","200 mg","300 mg"], "Slow Release Tablet":["50 mg","150 mg","200 mg","300 mg","400 mg"] },
@@ -62,15 +50,12 @@ const CATALOG = {
 };
 const CLASS_ORDER = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor"];
 
-/* ================================
-   Splitting Rules
-================================ */
+/* =============== rules =============== */
 function currentClass(){ return $("classSelect")?.value || ""; }
 function isMR(form){ return /slow\s*release|modified|controlled|extended|sustained/i.test(form) || /\b(SR|MR|CR|ER|XR|PR|CD)\b/i.test(form); }
 function canHalf(med, form){
   const cls = currentClass();
-  if(cls==="Opioid") return false;
-  if(cls==="Proton Pump Inhibitor") return false;
+  if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return false;
   if(isMR(form)) return false;
   if(/Capsule|Wafer|Patch/i.test(form)) return false;
   if(med==="Zolpidem" && /Slow Release/i.test(form)) return false;
@@ -78,21 +63,16 @@ function canHalf(med, form){
 }
 function canQuarter(med, form){
   const cls = currentClass();
-  if(cls==="Opioid") return false;
-  if(cls==="Proton Pump Inhibitor") return false;
+  if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return false;
   if(isMR(form)) return false;
   if(med==="Zolpidem" && /Slow Release/i.test(form)) return false;
-  // IR BZRA + Antipsychotics may be quartered (IR only)
-  return true;
+  return true; // IR BZRA/Antipsychotics only
 }
 
-/* ================================
-   Parsing & dropdowns
-================================ */
+/* =============== parsing & dropdowns =============== */
 function parseMgFromStrength(str){
   if(!str) return 0;
-  // Handle combo like "10/5 mg": only use the FIRST number (oxycodone component)
-  const lead = String(str).split("/")[0];
+  const lead = String(str).split("/")[0]; // use first number if combo (e.g., oxycodone/naloxone)
   const m = lead.match(/([\d.]+)\s*mg/i);
   return m ? parseFloat(m[1]) : 0;
 }
@@ -120,9 +100,7 @@ function strengthsForSelected(){
   return (CATALOG[cls]?.[med]?.[form]||[]).slice();
 }
 
-/* ================================
-   Dose lines (user inputs)
-================================ */
+/* =============== dose lines =============== */
 let doseLines=[]; let nextLineId=1;
 function slotsForFreq(mode){
   switch(mode){
@@ -178,9 +156,7 @@ function addDoseLine(){
   renderDoseLines();
 }
 
-/* ================================
-   Best practice box & headers
-================================ */
+/* =============== best practice & headers =============== */
 const RECOMMEND = {
   "Opioid":[
     "Tailor the plan to clinical characteristics, goals and preferences.",
@@ -215,9 +191,7 @@ function updateRecommended(){
   ["hdrPatient","hdrAllergies","hdrHcp"].forEach(id=>{ const el=$(id); if(el) el.style.display="none"; });
 }
 
-/* ================================
-   Tablet-piece engine
-================================ */
+/* =============== tablet-piece engine =============== */
 function allowedPiecesMg(med, form){
   const strengths=strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0);
   const uniq=Array.from(new Set(strengths)).sort((a,b)=>a-b);
@@ -265,78 +239,70 @@ function removeFromPackByMg(pack, amount){
 function countPieces(pack){ return Object.values(pack).reduce((a,b)=>a+b,0); }
 function smallestPiece(med, form){ return allowedPiecesMg(med, form)[0] || 0; }
 
-/* ================================
-   Opioid BID logic (SR tablets)
-   - Prefer reduce DIN→MID first if present
-   - If only AM/PM, maintain BID split, PM ≥ AM
-   - Keep BID until can reach lowest tablet BID
-   - Then lowest tablet nocte
-================================ */
-function distributeToAMPM_withFloor(totalTargetMg, med, form){
-  const pieces=allowedPiecesMg(med, form).slice().sort((a,b)=>b-a);
-  const min=smallestPiece(med, form);
-  let am={}, pm={};
-  let remaining=+totalTargetMg.toFixed(2);
+/* =============== BID split & opioid step (FIXED) =============== */
+// Build AM/PM exactly from whole SR tablets, PM ≥ AM, fewest pieces.
+function splitDailyToBID_exact(totalDailyMg, med, form) {
+  const strengths = strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>b-a); // e.g., [30,20,15,10,5]
 
-  // Reserve floor (try to keep BID until late)
-  if(min>0 && remaining >= 2*min){
-    am[min]=(am[min]||0)+1; pm[min]=(pm[min]||0)+1;
-    remaining = +(remaining - 2*min).toFixed(2);
+  function composeExact(target){
+    // greedy exact (works for canonical SR sets like 30/20/15/10/5)
+    let rem = target, used = {};
+    for (const s of strengths){
+      const n = Math.floor(rem / s);
+      if(n>0){ used[s]=(used[s]||0)+n; rem = +(rem - n*s).toFixed(2); }
+    }
+    return (rem===0) ? {sum: target, used} : null;
   }
 
-  for(const p of pieces){
-    while(remaining >= p - 1e-9){
-      const amMg=packTotalMg(am), pmMg=packTotalMg(pm);
-      if(pmMg <= amMg){ pm[p]=(pm[p]||0)+1; }
-      else { am[p]=(am[p]||0)+1; }
-      remaining = +(remaining - p).toFixed(2);
+  // Aim for an even split; if not possible, bias PM upward.
+  const half = Math.floor(totalDailyMg/2);
+  for(let amTarget = half; amTarget >= 0; amTarget -= 1){
+    const pmTarget = totalDailyMg - amTarget;
+    const am = composeExact(amTarget);
+    if(!am) continue;
+    const pm = composeExact(pmTarget);
+    if(pm && pmTarget >= amTarget){
+      return { AM: am.used, PM: pm.used };
     }
   }
-  return { AM:am, PM:pm };
+  // Fallback: everything nocte if we can't split (very rare for these sets)
+  const fallback = composeExact(totalDailyMg) || {used:{[strengths[strengths.length-1]]:1}};
+  return { AM: {}, PM: fallback.used };
 }
+
 function opioidStep(packs, percent, med, form){
-  const total=packsTotalMg(packs);
-  if(total<=0.01) return packs;
+  const current = packsTotalMg(packs);
+  if(current <= 0.01) return packs;
 
-  const drop = +(total * (percent/100)).toFixed(4);
+  // 1) compute new total daily
+  let targetDaily = Math.round(current * (1 - percent/100));
+  if(targetDaily < 0) targetDaily = 0;
 
+  // If any MID/DIN exists, strip them first toward the needed drop
+  const dropNeeded = current - targetDaily;
   if(packTotalMg(packs.MID)>0 || packTotalMg(packs.DIN)>0){
-    // Remove from DIN then MID first
-    let rem = drop;
+    let rem = dropNeeded;
     rem = removeFromPackByMg(packs.DIN, rem);
     rem = removeFromPackByMg(packs.MID, rem);
-
-    // Then trim AM/PM while trying to keep BID (until ≤ 2*min)
-    const min=smallestPiece(med, form) || 0;
-    while(rem>0.0001 && (packTotalMg(packs.AM)>0 || packTotalMg(packs.PM)>0)){
-      const slot = (packTotalMg(packs.PM) >= packTotalMg(packs.AM)) ? "PM" : "AM";
-      const sizes=Object.keys(packs[slot]).map(parseFloat).sort((a,b)=>b-a);
-      let removed=false;
-      for(const p of sizes){
-        const newSlot=+(packTotalMg(packs[slot]) - p).toFixed(4);
-        const other=slot==="PM"?"AM":"PM";
-        const newTotalBID=newSlot + packTotalMg(packs[other]);
-        const keepBID = (newTotalBID >= 2*min - 1e-6);
-        if(keepBID || newTotalBID < 2*min + 1e-6){
-          packs[slot][p]-=1; if(packs[slot][p]===0) delete packs[slot][p];
-          rem = +(rem - p).toFixed(4);
-          removed=true; break;
-        }
-      }
-      if(!removed) break;
-    }
-    return packs;
-  } else {
-    // Only AM/PM doses → compute target and re-distribute (PM ≥ AM)
-    const target = Math.max(0, +(total * (1 - percent/100)).toFixed(2));
-    const dist = distributeToAMPM_withFloor(target, med, form);
-    return { AM:dist.AM, MID:{}, DIN:{}, PM:dist.PM };
+    // Recompute actual target after removing MID/DIN
+    targetDaily = Math.round(packsTotalMg(packs) - rem);
   }
+
+  // 2) split to BID using whole SR tablets only
+  const bid = splitDailyToBID_exact(targetDaily, med, form);
+
+  const toPack = k => {
+    const obj = {};
+    Object.entries(k).forEach(([mg,count])=>{
+      const m = parseFloat(mg);
+      obj[m] = (obj[m]||0) + count;
+    });
+    return obj;
+  };
+  return { AM: toPack(bid.AM), MID: {}, DIN: {}, PM: toPack(bid.PM) };
 }
 
-/* ================================
-   Other class reduction orders
-================================ */
+/* =============== reduction order for other classes =============== */
 function reduceByPercentWithOrder(packs, percent, order){
   const total=packsTotalMg(packs);
   let rem=+(total*(percent/100)).toFixed(4);
@@ -346,11 +312,9 @@ function reduceByPercentWithOrder(packs, percent, order){
   }
 }
 
-/* ================================
-   Instruction & Strength labels
-================================ */
+/* =============== instruction & strength labels =============== */
 function formatFormLabel(form){
-  // Ensure "SR" is capitalised in labels
+  // Ensure "SR" capitalised
   return form.replace(/\bsr\b/ig,"SR").replace(/Slow Release/ig,"Slow Release");
 }
 function buildInstructionLine(pack, tail){
@@ -373,21 +337,20 @@ function buildInstructionLine(pack, tail){
   });
   return `Take ${parts.join(" + ")} ${tail}`;
 }
+
+// Keep multiple strength rows; capitalise SR in labels
 function strengthLabelsFromPacks(packs, med, form){
   const labels=new Set();
-  const formLabel = formatFormLabel(form.toLowerCase()).replace("tablet","tablet"); // keep 'tablet' lower-case; SR capitalised
-  [packs.AM,packs.MID,packs.DIN,packs.PM].forEach(pack=>{
-    Object.keys(pack).forEach(mgStr=>{
-      const mg=parseFloat(mgStr);
-      labels.add(`${med} ${(+mg.toFixed(2)).toString().replace(/\.00$/,'')} mg ${formLabel}`);
-    });
+  const formLabel = formatFormLabel(form.toLowerCase());
+  const addFrom = pack => Object.keys(pack).forEach(mgStr=>{
+    const mg = (+parseFloat(mgStr).toFixed(2)).toString().replace(/\.00$/,'');
+    labels.add(`${med} ${mg} mg ${formLabel}`);
   });
+  addFrom(packs.AM); addFrom(packs.MID); addFrom(packs.DIN); addFrom(packs.PM);
   return Array.from(labels);
 }
 
-/* ================================
-   Builders: Tablets vs Patches
-================================ */
+/* =============== builders: tablets vs patches =============== */
 function buildPlanTablets(){
   const cls=$("classSelect").value, med=$("medicineSelect").value, form=$("formSelect").value;
   const p1Percent=Math.max(1, parseFloat($("p1Percent")?.value||"0"));
@@ -425,7 +388,7 @@ function buildPlanTablets(){
     else if(cls==="Proton Pump Inhibitor"){ reduceByPercentWithOrder(packs, percent, ["MID","AM","PM"]); }
   };
 
-  // Apply first reduction before first printed week (per your workflow)
+  // First reduction before first printed week
   doOneStep(p1Percent);
   pushRow();
 
@@ -524,9 +487,7 @@ function buildPlanPatch(){
   return rows;
 }
 
-/* ================================
-   Rendering
-================================ */
+/* =============== rendering =============== */
 function td(text, cls){ const el=document.createElement("td"); if(cls) el.className=cls; el.textContent=String(text||""); return el; }
 
 function renderStandardTable(rows){
@@ -584,9 +545,7 @@ function renderPatchTable(rows){
   patchBlock.appendChild(table);
 }
 
-/* ================================
-   Footer
-================================ */
+/* =============== footer =============== */
 function setFooterText(cls){
   const exp = {
     "Opioid":"Expected benefits: Improved function and reduced opioid-related harms.",
@@ -604,9 +563,7 @@ function setFooterText(cls){
   $("withdrawalInfo").textContent = wdr;
 }
 
-/* ================================
-   Build & Init
-================================ */
+/* =============== build & init =============== */
 function buildPlan(){
   try{
     const cls=$("classSelect")?.value, med=$("medicineSelect")?.value, form=$("formSelect")?.value;
