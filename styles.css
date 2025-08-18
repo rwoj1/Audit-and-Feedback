@@ -1,73 +1,65 @@
 :root{
-  --bg:#0f172a; --card:#111827; --text:#e5e7eb; --muted:#9ca3af;
-  --accent:#60a5fa; --border:#1f2937; --table:#0b1222; --ink:#061121;
+  --bg:#0f172a; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#60a5fa; --border:#1f2937;
+  --row:#0b1220; --rowAlt:#0d1528; --rowPrint:#ffffff; --rowPrintAlt:#f5f7fa;
+  --bpBlue:#0b3b6d; --bpBlueSoft:#0e4b8a;
 }
 *{box-sizing:border-box}
-html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-  font:16px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-.site-header{padding:28px 16px;text-align:center;border-bottom:1px solid var(--border)}
-.site-header h1{margin:0 0 6px;font-size:28px}
-.subtitle{margin:0;color:var(--muted)}
-.container{max-width:1200px;margin:0 auto;padding:20px}
-.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 16px;margin:16px 0;box-shadow:0 10px 24px rgba(0,0,0,.3)}
-.card h2{margin:0 0 12px;font-size:20px}
-.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-label{display:flex;flex-direction:column;gap:6px;font-size:14px}
-input,select{background:#0b1222;border:1px solid var(--border);color:var(--text);padding:10px;border-radius:10px}
-.hint{color:var(--muted);margin-top:8px}
-.actions{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
-button{background:var(--accent);color:var(--ink);border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
-button.secondary{background:#334155;color:#cbd5e1}
-button:disabled{opacity:.6;cursor:not-allowed}
-.advice{background:#0b1222;border:1px dashed var(--border);border-radius:12px;padding:12px;margin-top:12px;color:#cbd5e1}
-.plan-header{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;align-items:flex-end}
-.badge{background:#1e293b;color:#cbd5e1;border:1px solid var(--border);border-radius:12px;padding:6px 10px}
-.badge.big{font-size:16px;font-weight:700}
-.special-instructions{margin-left:auto;background:#1e293b;border:1px solid var(--border);border-radius:12px;padding:6px 10px;color:#cbd5e1}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
 
-.schedule-wrapper{overflow-x:auto}
-.table{width:100%;border-collapse:separate;border-spacing:0;min-width:860px}
-.table th,.table td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;vertical-align:top}
-.table thead th{position:sticky;top:0;background:#111827;z-index:1}
-.table tbody tr:nth-child(odd){background:var(--table)}
-.table td.center{text-align:center}
+.container{max-width:1000px;margin:24px auto;padding:0 16px}
+h1{font-size:22px;margin:0 0 12px}
+h2{font-size:18px;margin:0 0 10px}
+h3{font-size:14px;margin:0 0 8px;color:var(--muted)}
 
-.images-note{margin-top:12px}
-.image-cell{min-width:110px}
-.image-cell img{height:70px;border-radius:10px;border:1px solid var(--border)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:12px 0}
+.grid.compact{grid-template-columns:repeat(2,1fr)}
+label{display:flex;flex-direction:column;gap:6px}
+select,input{background:#0b1220;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px}
 
-.site-footer{padding:20px 16px;color:#cbd5e1;border-top:1px solid var(--border);font-size:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin:14px 0}
+.card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.pill{background:#0b1220;border:1px solid var(--border);border-radius:999px;padding:6px 10px;color:#cbd5e1}
 
-.phase{grid-column:1 / -1;background:#0b1222;border:1px solid var(--border);border-radius:12px;padding:10px}
-.phase h3{margin:0 0 8px}
-.phase-row{display:flex;gap:16px;flex-wrap:wrap}
-.phase-row > div{display:flex;gap:10px;align-items:flex-end}
-.phase-row label{gap:4px}
-.until-review{display:flex;gap:8px;align-items:center;margin-top:8px}
-.or{align-self:center;color:var(--muted);padding:0 6px}
-.phase-note{color:var(--muted);align-items:center}
+/* Suggested Practice box */
+.bp{background:#0b1220;border:1px solid #1e293b;border-radius:12px;padding:12px}
+.bp.opioid{background:var(--bpBlue); border-color:var(--bpBlueSoft)}
+.bp strong{display:block;margin-bottom:6px}
+.bp ul{margin:6px 0 0 18px}
+.bp li{margin:2px 0}
 
-/* Mobile responsiveness */
-@media (max-width:900px){
+button{background:var(--accent);border:none;color:#04121f;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+button.secondary{background:#374151;color:#e5e7eb}
+button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+.dose-lines .badge{background:#1f2937;padding:4px 8px;border-radius:999px;color:#d1d5db}
+.hint{color:var(--muted);margin:6px 0 0}
+
+/* table */
+.table{width:100%;border-collapse:separate;border-spacing:0 8px}
+.table thead th{font-weight:600;text-align:left;padding:8px;color:#dbeafe}
+.table tbody td{background:var(--row);border:1px solid var(--border);padding:10px;vertical-align:top}
+.table tbody tr:nth-child(even) td{background:var(--rowAlt)}
+.table tbody tr td:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px}
+.table tbody tr td:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px}
+.center{text-align:center}
+.instructions-pre{white-space:pre-line}
+.output-head{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px}
+.footer-notes{margin-top:12px;color:#cbd5e1}
+
+@media (max-width:800px){
   .grid{grid-template-columns:1fr}
-  .special-instructions{margin-left:0}
-  .badge.big{font-size:15px}
-  .site-header h1{font-size:24px}
-  .table{min-width:720px}
-}
-@media (max-width:600px){
-  .container{padding:12px}
-  .card{padding:14px}
-  .badge.big{font-size:14px}
-  .table{min-width:680px}
+  .grid.compact{grid-template-columns:1fr}
+  .actions{flex-direction:column;align-items:flex-start}
 }
 
+/* Print/PDF set to A4 with light zebra rows */
 @media print{
+  @page{ size:A4; margin:10mm }
   body{background:#fff;color:#000}
-  .card,.site-header,.site-footer{border:0;box-shadow:none}
-  .actions,.images-note{display:none}
-  .container{max-width:100%;padding:0}
-  .table th,.table td{border:1px solid #000}
-  .badge,.special-instructions{background:#fff;border:1px solid #000;color:#000}
+  .card, .container{box-shadow:none;border:none}
+  .actions, .hint, .pill{display:none}
+  .table thead th{color:#000}
+  .table tbody td{background:var(--rowPrint);border-color:#bfc4cc;color:#000}
+  .table tbody tr:nth-child(even) td{background:var(--rowPrintAlt)}
 }
-
