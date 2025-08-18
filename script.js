@@ -7,8 +7,35 @@ const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x
 function startOfWeek(d){ const dt=new Date(d); const day=dt.getDay(); const diff=(day===0?6:day-1); dt.setDate(dt.getDate()-diff); dt.setHours(0,0,0,0); return dt; }
 function banner(msg){ const b=document.createElement("div"); b.style.cssText="position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:8px 12px;font:14px system-ui;z-index:999999"; b.textContent=msg; document.body.appendChild(b); }
 function roundToNearest(x, step){ return Math.round(x/step)*step; }
+function floorToStep(x, step){ return Math.floor(x/step)*step; }
 function clamp(n,min,max){ return Math.max(min, Math.min(max,n)); }
 const MAX_WEEKS=60, THREE_MONTHS_MS=90*24*3600*1000;
+
+/* ========= number-to-words for tablet counts (quarters) ========= */
+const WORDS_0_20 = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen","twenty"];
+function intToWords(n){ if(n>=0 && n<=20) return WORDS_0_20[n]; return String(n); }
+function fractionWords(fr){
+  if(Math.abs(fr-0.25)<1e-6) return "a quarter";
+  if(Math.abs(fr-0.5)<1e-6)  return "a half";
+  if(Math.abs(fr-0.75)<1e-6) return "three quarters";
+  return `${fr}`; // fallback
+}
+function tabletsToWords(q){
+  // q is in quarter units (e.g., 5 => 1.25 tablets)
+  const tabs = q/4;
+  const whole = Math.floor(tabs + 1e-6);
+  const frac = +(tabs - whole).toFixed(2);
+  if(whole===0){
+    if(frac===0.25) return "a quarter of a tablet";
+    if(frac===0.5)  return "half a tablet";
+    if(frac===0.75) return "three quarters of a tablet";
+  }
+  if(frac===0){
+    return whole===1 ? "one tablet" : `${intToWords(whole)} tablets`;
+  }
+  const joiner = (frac===0.25)?"a quarter":(frac===0.5)?"a half":"three quarters";
+  return `${intToWords(whole)} and ${joiner} of a tablet`;
+}
 
 /* ========= catalog ========= */
 const CATALOG = {
@@ -34,7 +61,7 @@ const CATALOG = {
     "Zopiclone": { "Tablet":["7.5 mg"] }
   },
   "Antipsychotic": {
-    "Haloperidol": { "Tablet":["0.5 mg","1.5 mg","5 mg"] }, /* corrected */
+    "Haloperidol": { "Tablet":["0.5 mg","1.5 mg","5 mg"] },
     "Olanzapine": { "Tablet":["2.5 mg","5 mg","7.5 mg","10 mg","15 mg","20 mg"], "Wafer":["5 mg","10 mg","15 mg","20 mg"] },
     "Quetiapine": { "Immediate Release Tablet":["25 mg","100 mg","200 mg","300 mg"], "Slow Release Tablet":["50 mg","150 mg","200 mg","300 mg","400 mg"] },
     "Risperidone": { "Tablet":["0.5 mg","1 mg","2 mg","3 mg","4 mg"] }
@@ -67,6 +94,7 @@ function populateMedicines(){ const mSel=$("medicineSelect"), cls=$("classSelect
 function populateForms(){ const fSel=$("formSelect"), cls=$("classSelect")?.value, med=$("medicineSelect")?.value; if(!fSel || !cls || !med) return; fSel.innerHTML=""; const forms=Object.keys((CATALOG[cls]||{})[med]||[]); forms.sort((a,b)=>{ const at=/tablet/i.test(a)?0:1, bt=/tablet/i.test(b)?0:1; return at!==bt?at-bt:a.localeCompare(b); }); forms.forEach(f=>{ const o=document.createElement("option"); o.value=f; o.textContent=f; fSel.appendChild(o); }); }
 function strengthsForSelected(){ const cls=$("classSelect")?.value, med=$("medicineSelect")?.value, form=$("formSelect")?.value; return (CATALOG[cls]?.[med]?.[form]||[]).slice(); }
 
+let doseLines=[]; let nextLineId=1;
 function resetDoseLinesToLowest(){
   const cls=$("classSelect").value, med=$("medicineSelect").value, form=$("formSelect").value;
   const sList=strengthsForSelected().sort((a,b)=>parseMgFromStrength(a)-parseMgFromStrength(b));
@@ -80,11 +108,9 @@ function resetDoseLinesToLowest(){
   renderDoseLines();
 }
 
-/* ========= dose lines UI (with qty) ========= */
-let doseLines=[]; let nextLineId=1;
+/* ========= dose lines UI ========= */
 function slotsForFreq(mode){ switch(mode){ case "AM":return["AM"]; case "MID":return["MID"]; case "DIN":return["DIN"]; case "PM":return["PM"]; case "BID":return["AM","PM"]; case "TID":return["AM","MID","PM"]; case "QID":return["AM","MID","DIN","PM"]; case "PATCH":return["PATCH"]; default:return["AM"]; } }
 function patchFreqLabel(med){ return med==="Fentanyl"?"Every 3 days":"Every 7 days"; }
-
 function renderDoseLines(){
   const box=$("doseLinesContainer"); if(!box) return; box.innerHTML="";
   if(doseLines.length===0){ const p=document.createElement("p"); p.textContent="(No dose lines)"; p.style.color="#9ca3af"; box.appendChild(p); return; }
@@ -95,18 +121,16 @@ function renderDoseLines(){
     row.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0";
     row.innerHTML=`<span class="badge">Line ${idx+1}</span>
       <span>Strength:</span><select data-id="${ln.id}" class="dl-strength"></select>
-      <span>Number of tablets:</span><input type="number" step="0.25" min="0" value="${ln.qty ?? 1}" class="dl-qty" data-id="${ln.id}" style="width:100px" />
+      <span>Number of tablets:</span><input type="number" step="0.25" min="0" value="${ln.qty ?? 1}" class="dl-qty" data-id="${ln.id}" style="width:110px" />
       <span>Frequency:</span><select data-id="${ln.id}" class="dl-freq"></select>
       <button type="button" data-id="${ln.id}" class="secondary dl-remove">Remove</button>`;
     box.appendChild(row);
 
-    // Strengths (ascending)
     const sSel=row.querySelector(".dl-strength");
     const sList=strengthsForSelected().sort((a,b)=>parseMgFromStrength(a)-parseMgFromStrength(b));
     sSel.innerHTML=""; sList.forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; sSel.appendChild(o); });
     sSel.value=ln.strengthStr || sList[0];
 
-    // Frequency options (BZRA → night only; Patch fixed)
     const fSel=row.querySelector(".dl-freq"); fSel.innerHTML="";
     if(form==="Patch"){
       const o=document.createElement("option"); o.value="PATCH"; o.textContent=patchFreqLabel(med); fSel.appendChild(o); fSel.disabled=true;
@@ -119,7 +143,6 @@ function renderDoseLines(){
     }
     fSel.value=ln.freqMode || fSel.options[0].value;
 
-    // Listeners
     sSel.addEventListener("change", e=>{ const id=+e.target.dataset.id; const l=doseLines.find(x=>x.id===id); if(l) l.strengthStr=e.target.value; });
     fSel.addEventListener("change", e=>{ const id=+e.target.dataset.id; const l=doseLines.find(x=>x.id===id); if(l) l.freqMode=e.target.value; });
     row.querySelector(".dl-qty").addEventListener("change", e=>{
@@ -175,7 +198,7 @@ function updateRecommended(){
   bp.innerHTML=`<strong>Suggested Practice for ${cls||""}</strong><ul>${(RECOMMEND[cls]||[]).map(t=>`<li>${t}</li>`).join("")}</ul>`;
   const med=$("medicineSelect")?.value, form=$("formSelect")?.value;
   $("hdrMedicine").textContent=`Medicine: ${med} ${form||""}`;
-  $("hdrSpecial").textContent=`Special instructions: ${specialInstructionFor(med, form)}`;
+  $("hdrSpecial").textContent=`${specialInstructionFor(med, form)}`;
 }
 
 /* ========= math & packing ========= */
@@ -210,7 +233,6 @@ function baseFromPieceMg(pieceMg){
   for(const s of mgList){ if(Math.abs(pieceMg - s/4) < 1e-6) return {base:s, factor:0.25};
                           if(Math.abs(pieceMg - s/2) < 1e-6) return {base:s, factor:0.5};
                           if(Math.abs(pieceMg - s)   < 1e-6) return {base:s, factor:1}; }
-  // fallback: pick nearest s
   let nearest=mgList[0]||pieceMg, factor=1;
   return {base:nearest, factor};
 }
@@ -245,6 +267,16 @@ function buildPacksFromDoseLines(){
 }
 
 /* compose helpers */
+function composeExactOrLower(target, pieceSet, step){
+  // Try exact; if not possible, step downward to avoid loops.
+  let t = target;
+  while(t>0){
+    const used = composeExact(t, pieceSet);
+    if(used) return used;
+    t = +(t - step).toFixed(3);
+  }
+  return {};
+}
 function composeExact(target, pieceSet){
   let rem=target, used={}; const arr=pieceSet.slice().sort((a,b)=>b-a);
   for(const s of arr){ const n=Math.floor(rem/s+1e-9); if(n>0){ used[s]=(used[s]||0)+n; rem=+(rem-n*s).toFixed(3); } }
@@ -261,7 +293,7 @@ function splitDailyPreferred(total, pieceSet){
   return {AM:{}, PM:all};
 }
 
-/* opioid & PPI (whole tabs) */
+/* opioid & PPI */
 function opioidOrPpiStep(packs, percent, med, form){
   const current=packsTotalMg(packs); if(current<=0.0001) return packs;
   const strengths=strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>a-b);
@@ -272,36 +304,52 @@ function opioidOrPpiStep(packs, percent, med, form){
   return { AM:bid.AM, MID:{}, DIN:{}, PM:bid.PM };
 }
 
-/* antipsychotic SR → opioid style; IR → reduce DIN→MID→AM→PM */
+/* antipsychotic SR -> opioid style; IR -> reduce DIN→MID→AM→PM and round to med-specific step */
+function antipsychoticRoundStep(med){
+  if(/Haloperidol/i.test(med)) return 0.5;
+  if(/Risperidone/i.test(med)) return 0.25;
+  if(/Quetiapine/i.test(med)) return 12.5;
+  if(/Olanzapine/i.test(med)) return 1.25;
+  return 0.25; // default
+}
 function isAntipsychoticIR(form){
   if(/Slow\s*Release/i.test(form) || /\bSR\b/i.test(form)) return false;
-  return true; // Tablet or Immediate Release Tablet or Wafer -> treat as IR for reduction order
+  return true;
 }
 function antipsychoticStep(packs, percent, med, form){
   if(!isAntipsychoticIR(form)) return opioidOrPpiStep(packs,percent,med,form);
+
   const total=packsTotalMg(packs); if(total<=0.0001) return packs;
-  let rem=+(total*(percent/100)).toFixed(4);
-  for(const key of ["DIN","MID","AM","PM"]){
-    if(rem<=0) break;
-    rem = removeFromPackByMg(packs[key], rem);
-  }
-  return packs;
+  const step=antipsychoticRoundStep(med);
+  // Remove from DIN -> MID -> AM -> PM by % then round to step
+  let target = total*(1 - percent/100);
+  target = roundToNearest(target, step);
+  if(target===total && total>0){ target = Math.max(0, total - step); target = roundToNearest(target, step); }
+
+  // Allocate to PM>=AM using piece set (commercial pieces incl. halves/quarters)
+  const pieceSet = allowedPiecesMg("Antipsychotic", med, form);
+  const used = composeExactOrLower(target, pieceSet, step);
+  const bid = splitDailyPreferred(Object.entries(used).reduce((s,[mg,c])=>s+mg*c,0), pieceSet);
+  return { AM:bid.AM, MID:{}, DIN:{}, PM:bid.PM };
 }
 
-/* BZRA (PM only; split allowed) */
+/* BZRA (PM only) */
 function bzraStep(packs, percent, med, form){
-  const cls="Benzodiazepines / Z-Drug (BZRA)";
   const current=packsTotalMg(packs); if(current<=0.0001) return packs;
-  const pieceSet=allowedPiecesMg(cls,med,form); const step=lowestTitrationStepMg(cls,med,form)||0.125;
+  const pieceSet=allowedPiecesMg("Benzodiazepines / Z-Drug (BZRA)",med,form);
+  const step=lowestTitrationStepMg("Benzodiazepines / Z-Drug (BZRA)",med,form)||0.125;
   let target=roundToNearest(current*(1-percent/100), step);
   if(target===current && current>0){ target=Math.max(0,current-step); target=roundToNearest(target,step); }
-  // PM only
-  const pm=composeExact(target, pieceSet) || {};
+  const pm=composeExactOrLower(target, pieceSet, step);
   return { AM:{}, MID:{}, DIN:{}, PM:pm };
 }
 
-/* ========= builders ========= */
+/* ========= builders + stopping reasons ========= */
 function deepCopy(o){ return JSON.parse(JSON.stringify(o)); }
+function stoppingReason({complete, hit3mo, hitReview, hitP1Stop}) {
+  if (complete) return "stop";
+  return "review";
+}
 
 function buildPlanTablets(){
   const cls=$("classSelect").value, med=$("medicineSelect").value, form=$("formSelect").value;
@@ -317,6 +365,7 @@ function buildPlanTablets(){
   if(packsTotalMg(packs)===0){ const mgList=strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>a-b); if(mgList.length) packs.PM[mgList[0]]=1; }
 
   const rows=[]; let date=startOfWeek(startDate); let week=1;
+  const endBy = { complete:false, hit3mo:false, hitReview:false, hitP1Stop:false };
 
   const stepOnce=()=>{
     if(cls==="Opioid"||cls==="Proton Pump Inhibitor") packs=opioidOrPpiStep(packs,p1Percent,med,form);
@@ -327,36 +376,48 @@ function buildPlanTablets(){
   stepOnce(); rows.push({ week, date:fmtDate(date), packs:deepCopy(packs), med, form });
 
   while(packsTotalMg(packs)>0.0001){
-    if(p1StopWeek && week>=p1StopWeek) break;
-    date=addDays(date,p1Interval); week++;
+    if(p1StopWeek && p2Percent===0 && p2Interval===0 && week>=p1StopWeek){ endBy.hitP1Stop=true; break; }
+    const nextDate=addDays(date,p1Interval);
+    if(reviewDate && nextDate>=reviewDate){ date=nextDate; endBy.hitReview=true; break; }
+    if((+nextDate - +startDate) >= THREE_MONTHS_MS){ date=nextDate; endBy.hit3mo=true; break; }
+
+    date=nextDate; week++;
     stepOnce(); rows.push({ week, date:fmtDate(date), packs:deepCopy(packs), med, form });
 
-    if(reviewDate && date>=reviewDate) break;
-    if((+date - +startDate) >= THREE_MONTHS_MS) break;
     if(rows.length>=MAX_WEEKS) break;
   }
 
-  if(p2Percent && packsTotalMg(packs)>0.0001){
-    const stepP2=()=>{
+  if(packsTotalMg(packs)<=0.0001){ endBy.complete=true; }
+
+  // Phase 2 if not done and not forced stop
+  if(!endBy.complete && !(endBy.hit3mo||endBy.hitReview||endBy.hitP1Stop) && p2Percent>0){
+    while(packsTotalMg(packs)>0.0001){
+      const nextDate=addDays(date,p2Interval);
+      if(reviewDate && nextDate>=reviewDate){ date=nextDate; endBy.hitReview=true; break; }
+      if((+nextDate - +startDate) >= THREE_MONTHS_MS){ date=nextDate; endBy.hit3mo=true; break; }
+
+      date=nextDate; week++;
+      // same stepper per class
       if(cls==="Opioid"||cls==="Proton Pump Inhibitor") packs=opioidOrPpiStep(packs,p2Percent,med,form);
       else if(cls==="Benzodiazepines / Z-Drug (BZRA)") packs=bzraStep(packs,p2Percent,med,form);
       else packs=antipsychoticStep(packs,p2Percent,med,form);
-    };
-    while(packsTotalMg(packs)>0.0001){
-      date=addDays(date,p2Interval); week++;
-      stepP2(); rows.push({ week, date:fmtDate(date), packs:deepCopy(packs), med, form });
-      if(reviewDate && date>=reviewDate) break;
-      if((+date - +startDate) >= THREE_MONTHS_MS) break;
+
+      rows.push({ week, date:fmtDate(date), packs:deepCopy(packs), med, form });
       if(rows.length>=MAX_WEEKS) break;
     }
+    if(packsTotalMg(packs)<=0.0001){ endBy.complete=true; }
   }
 
-  // Ensure single Stop row only if not already empty last row
-  if(rows.length===0 || packsTotalMg(rows[rows.length-1].packs)>0.0001){
-    date=addDays(date,p1Interval); rows.push({ week:week+1, date:fmtDate(date), packs:{AM:{},MID:{},DIN:{},PM:{}}, med, form, stop:true });
-  } else if(!rows[rows.length-1].stop){
-    rows[rows.length-1].stop=true;
-  }
+  const reason = stoppingReason(endBy);
+  date = addDays(date, p1Interval); // final row date marker
+  rows.push({
+    week: week+1,
+    date: fmtDate(date),
+    packs:{AM:{},MID:{},DIN:{},PM:{}},
+    med, form,
+    stop: (reason==="stop"),
+    review: (reason==="review")
+  });
 
   return rows;
 }
@@ -380,62 +441,74 @@ function buildPlanPatch(){
     return { value: used.reduce((a,b)=>a+b,0), used };
   }
 
-  const rows=[]; let date=startOfWeek(startDate);
-  let step=nextDose(total); rows.push({ week:1, date:fmtDate(date), patches:step.used, med, form:"Patch" });
-  let curr=step.value; const smallest=strengths[strengths.length-1]; const endDate=addDays(startDate,90); let w=1;
+  const rows=[]; let date=startOfWeek(startDate); let week=1;
+  let step=nextDose(total); rows.push({ week, date:fmtDate(date), patches:step.used, med, form:"Patch" });
+  let curr=step.value; const smallest=strengths[strengths.length-1]; const endDate=addDays(startDate,90);
+  const endBy = { complete:false, hit3mo:false, hitReview:false, hitP1Stop:false };
 
   while(curr>smallest){
-    date=addDays(date,p1Interval); w++;
+    const nextDate=addDays(date,p1Interval);
+    if(reviewDate && nextDate>=reviewDate){ date=nextDate; endBy.hitReview=true; break; }
+    if(nextDate>endDate){ date=nextDate; endBy.hit3mo=true; break; }
+    date=nextDate; week++;
     const nxt=nextDose(curr); curr=nxt.value;
-    rows.push({ week:w, date:fmtDate(date), patches:nxt.used, med, form:"Patch" });
-    if(reviewDate && date>=reviewDate) break;
-    if(date>endDate) break;
+    rows.push({ week, date:fmtDate(date), patches:nxt.used, med, form:"Patch" });
     if(rows.length>=MAX_WEEKS) break;
   }
-  date=addDays(date,p1Interval); w++; rows.push({ week:w, date:fmtDate(date), patches:[smallest], med, form:"Patch" });
-  // Single stop row
-  date=addDays(date,p1Interval); w++; rows.push({ week:w, date:fmtDate(date), patches:[], med, form:"Patch", stop:true });
+
+  if(curr<=smallest) endBy.complete=true;
+
+  // Final row with reason
+  date = addDays(date,p1Interval);
+  rows.push({ week:week+1, date:fmtDate(date), patches: endBy.complete? []: [smallest], med, form:"Patch", stop:endBy.complete, review:!endBy.complete });
+
   return rows;
 }
 
-/* ========= rendering (group by commercial strength, zebra per week) ========= */
+/* ========= rendering ========= */
 function td(text, cls){ const el=document.createElement("td"); if(cls) el.className=cls; el.textContent=String(text??""); return el; }
 
-function quantToWords(n){
-  if(Math.abs(n-0.25)<1e-6) return "a quarter of a tablet";
-  if(Math.abs(n-0.5)<1e-6)  return "half a tablet";
-  if(Math.abs(n-0.75)<1e-6) return "three quarters of a tablet";
-  if(Math.abs(n-1)<1e-6)    return "1 tablet";
-  return `${+n.toFixed(2)} tablets`;
+function quantToWordsFromQuarters(q){ // q in quarter units
+  return tabletsToWords(q);
 }
 
 function buildGroupedByCommercial(packs){
-  // Convert piece mg keys (could be s, s/2, s/4) into groups per commercial base s
-  const groups={}; // baseMg -> {AM, MID, DIN, PM} in tablet units
+  // Convert piece mg (could be s, s/2, s/4) into groups per commercial base s, expressed in quarter-tablet units
+  const groups={}; // baseMg -> {AM, MID, DIN, PM} in quarters
   ["AM","MID","DIN","PM"].forEach(slot=>{
     Object.entries(packs[slot]).forEach(([pieceStr,count])=>{
       const piece=parseFloat(pieceStr);
-      const {base, factor}=baseFromPieceMg(piece);
+      const {base, factor}=baseFromPieceMg(piece); // factor = 1, 0.5, 0.25 tablet
       if(!groups[base]) groups[base]={AM:0,MID:0,DIN:0,PM:0};
-      groups[base][slot]+= count*factor;
+      groups[base][slot]+= Math.round(count*factor*4); // store as quarters
     });
   });
-  return groups; // keys are commercial base mg
+  return groups;
 }
 
 function labelCommercial(med, baseMg, form){
   const mgTxt=(+baseMg.toFixed(3)).toString().replace(/\.000$/,'').replace(/(\.\d)0+$/,'$1');
+  // Form token for images & display
   if (/Slow\s*Release/i.test(form) || /\bSR\b/i.test(form)) return `${med} ${mgTxt} mg SR tablet`;
   if (/Immediate\s*Release/i.test(form)) return `${med} ${mgTxt} mg IR tablet`;
-  return `${med} ${mgTxt} mg ${form.toLowerCase()}`;
+  if (/Capsule/i.test(form)) return `${med} ${mgTxt} mg capsule`;
+  if (/Wafer/i.test(form)) return `${med} ${mgTxt} mg wafer`;
+  return `${med} ${mgTxt} mg tablet`;
+}
+function formTokenForImage(form){
+  if (/Slow\s*Release/i.test(form) || /\bSR\b/i.test(form)) return "SR_Tablet";
+  if (/Immediate\s*Release/i.test(form)) return "IR_Tablet";
+  if (/Capsule/i.test(form)) return "Capsule";
+  if (/Wafer/i.test(form)) return "Wafer";
+  return "Tablet";
 }
 
-function instructionFromTablets(am, mid, din, pm){
+function instructionFromQuarters(amQ, midQ, dinQ, pmQ){
   const lines=[];
-  if(am)  lines.push(`Take ${quantToWords(am)} in the morning`);
-  if(mid) lines.push(`Take ${quantToWords(mid)} at midday`);
-  if(din) lines.push(`Take ${quantToWords(din)} at dinner`);
-  if(pm)  lines.push(`Take ${quantToWords(pm)} at night`);
+  if(amQ)  lines.push(`Take ${quantToWordsFromQuarters(amQ)} in the morning`);
+  if(midQ) lines.push(`Take ${quantToWordsFromQuarters(midQ)} at midday`);
+  if(dinQ) lines.push(`Take ${quantToWordsFromQuarters(dinQ)} at dinner`);
+  if(pmQ)  lines.push(`Take ${quantToWordsFromQuarters(pmQ)} at night`);
   return lines.join("\n");
 }
 
@@ -444,15 +517,22 @@ function renderStandardTable(rows){
   scheduleBlock.style.display=""; patchBlock.style.display="none"; scheduleBlock.innerHTML="";
   const table=document.createElement("table"); table.className="table";
   const thead=document.createElement("thead"); const hr=document.createElement("tr");
-  ["Week beginning","Strength","Instructions","Morning","Midday","Dinner","Night"].forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
+  ["Date beginning","Strength","Instructions","Morning","Midday","Dinner","Night"].forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
   thead.appendChild(hr); table.appendChild(thead);
   const tbody=document.createElement("tbody");
 
+  // Collect strengths used for images
+  const imageSet = new Set();
+  const medGlobal = $("medicineSelect").value;
+  const formGlobal = $("formSelect").value;
+  const formToken = formTokenForImage(formGlobal);
+
   rows.forEach((r, idxWeek)=>{
-    if(r.stop){
+    if(r.stop || r.review){
       const tr=document.createElement("tr");
       tr.appendChild(td(r.date));
-      tr.appendChild(td("")); tr.appendChild(td("Stop.", "instructions-pre"));
+      tr.appendChild(td(""));
+      tr.appendChild(td(r.stop ? "Stop." : "Review ongoing plan with the doctor","instructions-pre"));
       tr.appendChild(td("", "center")); tr.appendChild(td("", "center")); tr.appendChild(td("", "center")); tr.appendChild(td("", "center"));
       if(idxWeek%2===1) tr.classList.add("week-even");
       tbody.appendChild(tr);
@@ -473,18 +553,24 @@ function renderStandardTable(rows){
       const tr=document.createElement("tr");
       if(i===0){ const d=td(r.date); if(bases.length>1) d.rowSpan=bases.length; tr.appendChild(d); }
       tr.appendChild(td(labelCommercial(r.med, baseMg, r.form)));
-      tr.appendChild(td(instructionFromTablets(g.AM,g.MID,g.DIN,g.PM),"instructions-pre"));
-      tr.appendChild(td(g.AM||"", "center"));
-      tr.appendChild(td(g.MID||"", "center"));
-      tr.appendChild(td(g.DIN||"", "center"));
-      tr.appendChild(td(g.PM||"", "center"));
+      tr.appendChild(td(instructionFromQuarters(g.AM,g.MID,g.DIN,g.PM),"instructions-pre"));
+      tr.appendChild(td(g.AM? tabletsToWords(g.AM) : "", "center"));
+      tr.appendChild(td(g.MID? tabletsToWords(g.MID) : "", "center"));
+      tr.appendChild(td(g.DIN? tabletsToWords(g.DIN) : "", "center"));
+      tr.appendChild(td(g.PM? tabletsToWords(g.PM) : "", "center"));
       if(idxWeek%2===1) tr.classList.add("week-even");
       tbody.appendChild(tr);
+
+      // record for images
+      imageSet.add(`${r.med}||${baseMg}||${formToken}`);
     });
   });
 
   table.appendChild(tbody);
   scheduleBlock.appendChild(table);
+
+  // Render images block (skip missing)
+  renderImagesBlock(imageSet);
 }
 
 function renderPatchTable(rows){
@@ -502,13 +588,50 @@ function renderPatchTable(rows){
     tr.appendChild(td(r.date));
     tr.appendChild(td(fmtDate(addDays(new Date(r.date), everyDays))));
     tr.appendChild(td((r.patches||[]).map(v=>`${v} mcg/hr`).join(" + ")));
-    tr.appendChild(td(r.stop ? "Stop." : `Apply patches every ${everyDays} days.`));
+    tr.appendChild(td(r.stop ? "Stop." : "Review ongoing plan with the doctor"));
     if(idxWeek%2===1) tr.classList.add("week-even");
     tbody.appendChild(tr);
   });
 
   table.appendChild(tbody);
   patchBlock.appendChild(table);
+
+  // Clear images block for patches
+  $("imagesBlock").innerHTML = "";
+}
+
+/* ========= images block ========= */
+function renderImagesBlock(imageSet){
+  const block = $("imagesBlock");
+  block.innerHTML = "";
+  if(!imageSet || imageSet.size===0) return;
+
+  const title = document.createElement("h3");
+  title.textContent = "Your tablets may look like this";
+  block.appendChild(title);
+
+  imageSet.forEach(key=>{
+    const [med, baseMg, formToken] = key.split("||");
+    const mgTxt=(+parseFloat(baseMg).toFixed(3)).toString().replace(/\.000$/,'').replace(/(\.\d)0+$/,'$1');
+    const label = `${med} ${mgTxt} mg ${formToken.replace("_"," ").replace("_"," ").replace("IR","IR").replace("SR","SR")}`;
+    const row = document.createElement("div");
+    row.className = "image-row";
+
+    const img = document.createElement("img");
+    // filename: Medicine_Strength_Form.png
+    const fileName = `${med.replace(/\s+/g,"_")}_${mgTxt}_${formToken}.png`;
+    img.src = `images/${fileName}`;
+    img.alt = label;
+    img.onerror = ()=>{ row.remove(); }; // skip missing images
+
+    const span = document.createElement("span");
+    span.className = "label";
+    span.textContent = label.replace("_Tablet"," tablet").replace("_Capsule"," capsule").replace("_Wafer"," wafer");
+
+    row.appendChild(img);
+    row.appendChild(span);
+    block.appendChild(row);
+  });
 }
 
 /* ========= footer ========= */
@@ -529,7 +652,8 @@ function buildPlan(){
   try{
     const cls=$("classSelect")?.value, med=$("medicineSelect")?.value, form=$("formSelect")?.value;
     if(!cls || !med || !form){ banner("Please select medicine class, medicine, and form."); return; }
-    $("hdrMedicine").textContent=`Medicine: ${med} ${form}`; $("hdrSpecial").textContent=`Special instructions: ${specialInstructionFor(med, form)}`;
+    $("hdrMedicine").textContent=`Medicine: ${med} ${form}`;
+    $("hdrSpecial").textContent=`${specialInstructionFor(med, form)}`;
     const isPatch=(form==="Patch");
     const rows=isPatch?buildPlanPatch():buildPlanTablets();
     if(isPatch) renderPatchTable(rows); else renderStandardTable(rows);
