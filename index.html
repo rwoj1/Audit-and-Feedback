@@ -1,147 +1,90 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Deprescribing Taper Scheduler</title>
-
-  <link rel="stylesheet" href="./styles.css"/>
-
-  <!-- Flatpickr (calendar) -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-
-  <!-- PDF export -->
-  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-
-  <!-- Print: output-only & A4 fit -->
-  <style>
-    @media print {
-      header, .container > .card:not(#outputCard), .actions, .site-footer { display: none !important; }
-      #outputCard { display: block !important; }
-      .table { font-size: 11px; }
-      .table th, .table td { padding: 6px 8px; }
-      @page { size: A4; margin: 12mm; }
-    }
-    .instructions-pre { white-space: pre-line; }
-    .image-cell img { max-height: 36px; width: auto; }
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deprescribing Taper Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
 </head>
 <body>
-  <header class="site-header">
-    <h1>Deprescribing Taper Scheduler</h1>
-    <p class="subtitle">Create a plain-English taper plan, printable as a chart or PDF.</p>
-  </header>
-
   <main class="container">
-    <!-- MEDICINE INPUTS ONLY -->
+    <h1>Medicine Chart Input</h1>
+
+    <div class="grid">
+      <label>Medicine Class
+        <select id="classSelect"></select>
+      </label>
+      <label>Medicine
+        <select id="medicineSelect"></select>
+      </label>
+      <label>Form
+        <select id="formSelect"></select>
+      </label>
+    </div>
+
+    <div class="grid">
+      <label>Start date
+        <input id="startDate" class="datepick" placeholder="Select date" />
+      </label>
+      <label>Next review date (optional)
+        <input id="reviewDate" class="datepick" placeholder="Select date" />
+      </label>
+    </div>
+
     <section class="card">
-      <h2>Medicine Chart Input</h2>
-      <div class="grid">
-        <label>Medicine Class
-          <select id="classSelect"></select>
-        </label>
-
-        <label>Medicine
-          <select id="medicineSelect"></select>
-        </label>
-
-        <label>Form
-          <select id="formSelect"></select>
-        </label>
-
-        <!-- Duration (opioids only) -->
-        <label id="durationWrap" style="display:none">How long on this medicine?
-          <select id="durationSelect">
-            <option value="">Select…</option>
-            <option value="<3">&lt; 3 months</option>
-            <option value=">3">&gt; 3 months</option>
-          </select>
-        </label>
-
-        <label>Start date
-          <input id="startDate" class="datepick" type="text" placeholder="Select date">
-        </label>
-
-        <label>Next review date (optional)
-          <input id="reviewDate" class="datepick" type="text" placeholder="Select date">
-        </label>
+      <div class="card-head">
+        <h2>Dose lines</h2>
+        <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
       </div>
+      <div id="doseLinesContainer" class="dose-lines"></div>
+      <p class="hint">Additional lines must use the same medicine &amp; form. Only <strong>Strength</strong> and <strong>Frequency</strong> can be changed.</p>
+    </section>
 
-      <!-- DOSE LINES -->
-      <div class="advice" id="doseLinesBox">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-          <strong>Dose lines</strong>
-          <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
+    <section class="card">
+      <div id="bestPracticeBox" class="bp"></div>
+    </section>
+
+    <section class="card">
+      <h2>Taper controls</h2>
+      <div class="grid compact">
+        <div>
+          <h3>Phase 1</h3>
+          <label>Reduce by (%)<input id="p1Percent" type="number" min="1" max="100" value="25" /></label>
+          <label>Every (days)<input id="p1Interval" type="number" min="1" value="7" /></label>
+          <label>Stop Phase 1 at week # (optional)<input id="p1StopWeek" type="number" min="0" placeholder="optional" /></label>
         </div>
-        <div id="doseLinesContainer" style="margin-top:8px"></div>
-        <p class="hint">Additional lines must use the same medicine &amp; form. Only <em>Strength</em> and <em>Frequency</em> can be changed.</p>
-      </div>
-
-      <!-- RECOMMENDED PRACTICE -->
-      <div id="bestPracticeBox" class="advice"></div>
-
-      <!-- TAPER CONTROLS -->
-      <div class="phase">
-        <h3>Taper controls</h3>
-        <div class="phase-row">
-          <div>
-            <strong>Phase 1</strong><br>
-            <label>Reduce by (%)<input id="p1Percent" type="number" min="1" max="90"></label>
-            <label>Every (days)<input id="p1Interval" type="number" min="1" max="56"></label>
-            <label>Stop Phase 1 at week # (optional)
-              <input id="p1StopWeek" type="number" min="1" placeholder="optional">
-            </label>
-          </div>
-          <div class="phase-note">
-            Set Phase 2 as 0 if you only want a single-phase taper. Hard limit: 3 months (or review date, if earlier).
-          </div>
-        </div>
-
-        <div class="phase-row">
-          <div>
-            <strong>Phase 2</strong><br>
-            <label>Reduce by (%)<input id="p2Percent" type="number" min="0" max="90" value="0"></label>
-            <label>Every (days)<input id="p2Interval" type="number" min="1" max="56" value="0"></label>
-          </div>
+        <div>
+          <h3>Phase 2</h3>
+          <label>Reduce by (%)<input id="p2Percent" type="number" min="0" max="100" value="0" /></label>
+          <label>Every (days)<input id="p2Interval" type="number" min="0" value="0" /></label>
+          <p class="hint">Set Phase 2 as 0 if you only want a single-phase taper. Hard limit: 3 months (or review date, if earlier).</p>
         </div>
       </div>
-
       <div class="actions">
         <button id="generateBtn" type="button">Generate Chart</button>
-        <button id="printBtn" class="secondary" type="button">Print</button>
-        <button id="savePdfBtn" class="secondary" type="button">Save as PDF</button>
-        <button id="resetBtn" class="secondary" type="button">Reset</button>
+        <button id="printBtn" type="button" class="secondary">Print</button>
+        <button id="savePdfBtn" type="button" class="secondary">Save as PDF</button>
+        <button id="resetBtn" type="button" class="ghost">Reset</button>
       </div>
     </section>
 
-    <!-- OUTPUT -->
-    <section class="card" id="outputCard">
-      <div class="plan-header">
-        <div class="badge big" id="hdrPatient">Patient: –</div>
-        <div class="badge big" id="hdrAllergies">Allergies: –</div>
-        <div class="badge big" id="hdrHcp">Health Care Professional: –</div>
-        <div class="badge big" id="hdrMedicine">Medicine: –</div>
-        <div class="special-instructions" id="hdrSpecial">Special instructions: –</div>
+    <section id="outputCard" class="card output">
+      <div class="output-head">
+        <h2 id="hdrMedicine">Medicine:</h2>
+        <div id="hdrSpecial" class="pill"></div>
       </div>
-
-      <div id="scheduleBlock" class="schedule-wrapper"></div>
-      <div id="patchBlock" class="schedule-wrapper" style="display:none"></div>
+      <div id="scheduleBlock"></div>
+      <div id="patchBlock" style="display:none"></div>
+      <div class="footer-notes">
+        <div><strong>Expected Benefits:</strong> <span id="expBenefits"></span></div>
+        <div><strong>Withdrawal:</strong> <span id="withdrawalInfo"></span></div>
+      </div>
     </section>
   </main>
 
-  <footer class="site-footer">
-    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <div style="flex:1 1 200px;min-height:50px;border:1px dashed #ccc;border-radius:10px;padding:6px;text-align:center">Logo space</div>
-      <div style="flex:3 1 260px">
-        <p><strong>Expected Benefits</strong> (class-specific): <span id="expBenefits">—</span></p>
-        <p><strong>Withdrawal</strong> (class-specific): <span id="withdrawalInfo">—</span></p>
-        <p class="hint" id="disclaimer">For educational/clinical support use only. Not for commercial use.</p>
-      </div>
-    </div>
-  </footer>
-
-  <!-- keep last -->
-  <script src="./script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
