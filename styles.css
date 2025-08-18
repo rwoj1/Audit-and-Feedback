@@ -19,7 +19,7 @@ select,input{background:#0b1220;color:var(--text);border:1px solid var(--border)
 .card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .pill{background:#0b1220;border:1px solid var(--border);border-radius:999px;padding:6px 10px;color:#cbd5e1}
 
-/* Suggested Practice box (same color for all classes now) */
+/* Suggested Practice */
 .bp{background:#0b1220;border:1px solid #1e293b;border-radius:12px;padding:12px}
 .bp strong{display:block;margin-bottom:6px}
 .bp ul{margin:6px 0 0 18px}
@@ -53,13 +53,15 @@ button.ghost{background:transparent;border:1px solid var(--border);color:#e5e7eb
   .actions{flex-direction:column;align-items:flex-start}
 }
 
-/* Print/PDF – ONLY the output card */
+/* Print/PDF – ONLY the output card (no blank first page, zebra visible) */
 @media print{
   @page{ size:A4; margin:10mm }
+  html, body{ height:auto !important }
   body * { visibility:hidden }
   #outputCard, #outputCard * { visibility:visible }
-  #outputCard { position:relative }
-  /* light zebra rows for print */
+  #outputCard{ position:relative; break-before:avoid; page-break-before:auto; }
+  /* ensure backgrounds print */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact }
   .table thead th{color:#000}
   .table tbody td{background:#fff;border-color:#bfc4cc;color:#000}
   .week-even td{background:#f5f7fa !important}
