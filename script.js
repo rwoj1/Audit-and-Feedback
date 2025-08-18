@@ -452,29 +452,103 @@ function perStrengthRowsFractional(r){
   return rows;
 }
 
-/* special label mapping for oxycodone/naloxone */
-function oxyNxLabelForOxyMg(mg){ const nal = mg/2; const nTxt = (nal%1===0)?`${nal}`:`${nal}`; return `Oxycodone / Naloxone ${mg}/${nTxt} mg SR Tablet`; }
-
+// Map oxycodone mg → commercial "oxy/nal" pair from the catalogue
+function oxyNxPairLabel(oxyMg){
+  const list = (CATALOG?.Opioid?.["Oxycodone / Naloxone"]?.["SR Tablet"]) || [];
+  // Entries look like "30/15 mg", "10/5 mg" etc.
+  const hit = list.find(s => {
+    const lead = String(s).split("/")[0];
+    const m = lead.match(/([\d.]+)\s*mg/i);
+    return m && parseFloat(m[1]) === +oxyMg;
+  });
+  const pair = hit ? hit.replace(/\s*mg.*$/i, " mg") : `${oxyMg}/${(oxyMg/2)} mg`;
+  return `Oxycodone / Naloxone ${pair} SR Tablet`;
+}
 function renderStandardTable(rows){
-  const schedule=$("scheduleBlock"), patch=$("patchBlock"); patch.style.display="none"; schedule.style.display=""; schedule.innerHTML="";
+  const schedule=$("scheduleBlock"), patch=$("patchBlock");
+  patch.style.display="none"; schedule.style.display=""; schedule.innerHTML="";
 
   const table=document.createElement("table"); table.className="table";
   const thead=document.createElement("thead"); const hr=document.createElement("tr");
-  ["Date beginning","Strength","Instructions","Morning","Midday","Dinner","Night"].forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
+  ["Date beginning","Strength","Instructions","Morning","Midday","Dinner","Night"]
+    .forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
   thead.appendChild(hr); table.appendChild(thead);
+
   const tbody=document.createElement("tbody");
 
   rows.forEach((r, rowIdx)=>{
-    // final row only
+    // Skip truly empty non-final rows (prevents the “blank spacer” week)
+    if(!(r.stop || r.review)){
+      const anyDose = ["AM","MID","DIN","PM"].some(k => r.packs && Object.keys(r.packs[k]||{}).length);
+      if(!anyDose) return;
+    }
+
+    // Final single row (either Stop OR Review)
     if(r.stop || r.review){
-      const tr=document.createElement("tr"); if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
+      const tr=document.createElement("tr");
+      if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
       tr.appendChild(td(r.date));
       tr.appendChild(td(""));
       tr.appendChild(td(r.stop ? "Stop." : "Review ongoing plan with the doctor.","instructions-pre"));
-      tr.appendChild(td("","center")); tr.appendChild(td("","center")); tr.appendChild(td("","center")); tr.appendChild(td("","center"));
-      tbody.appendChild(tr); return;
+      tr.appendChild(td("","center")); tr.appendChild(td("","center"));
+      tr.appendChild(td("","center")); tr.appendChild(td("","center"));
+      tbody.appendChild(tr);
+      return;
     }
 
+    const packs=r.packs;
+
+    // BZRA or IR-antipsychotics → fractional/words renderer
+    if(r.cls==="Benzodiazepines / Z-Drug (BZRA)" || (r.cls==="Antipsychotic" && !/\bSR\b|Slow\s*Release/i.test(r.form))){
+      const lines = perStrengthRowsFractional(r);
+      lines.forEach((ln,i)=>{
+        const tr=document.createElement("tr");
+        if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
+        // **Always append a Date cell** (blank for sub-rows) so columns never shift
+        tr.appendChild(td(i===0 ? r.date : ""));
+        tr.appendChild(td(ln.strengthLabel));
+        tr.appendChild(td(ln.instructions,"instructions-pre"));
+        tr.appendChild(td(ln.am,"center")); tr.appendChild(td(ln.mid,"center"));
+        tr.appendChild(td(ln.din,"center")); tr.appendChild(td(ln.pm,"center"));
+        tbody.appendChild(tr);
+      });
+      return;
+    }
+
+    // SR opioids / PPI / AP-SR (commercial whole-tablet rows)
+    const allMg=new Set(); ["AM","MID","DIN","PM"].forEach(k=>Object.keys(packs[k]||{}).forEach(m=>allMg.add(+m)));
+    const mgList=Array.from(allMg).sort((a,b)=>a-b);
+    if(mgList.length===0) return;
+
+    mgList.forEach((mg,i)=>{
+      const tr=document.createElement("tr");
+      if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
+      // **Fix:** keep the Date column aligned for sub-rows
+      tr.appendChild(td(i===0 ? r.date : ""));
+
+      const am=packs.AM[mg]||0, mid=packs.MID[mg]||0, din=packs.DIN[mg]||0, pm=packs.PM[mg]||0;
+      const instr=[];
+      if(am) instr.push(`Take ${am===1?"1":am} ${am===1?"tablet":"tablets"} in the morning`);
+      if(mid) instr.push(`Take ${mid===1?"1":mid} ${mid===1?"tablet":"tablets"} at midday`);
+      if(din) instr.push(`Take ${din===1?"1":din} ${din===1?"tablet":"tablets"} at dinner`);
+      if(pm) instr.push(`Take ${pm===1?"1":pm} ${pm===1?"tablet":"tablets"} at night`);
+
+      let strengthLabel = `${r.med} ${(+mg).toString().replace(/\.0+$/,"")} mg ${formLabelCapsSR(r.form)}`;
+      if(r.med==="Oxycodone / Naloxone") strengthLabel = oxyNxPairLabel(+mg); // **Fix label**
+
+      tr.appendChild(td(strengthLabel));
+      tr.appendChild(td(instr.join("\n"),"instructions-pre"));
+      tr.appendChild(td(am?String(am):"","center"));
+      tr.appendChild(td(mid?String(mid):"","center"));
+      tr.appendChild(td(din?String(din):"","center"));
+      tr.appendChild(td(pm?String(pm):"","center"));
+      tbody.appendChild(tr);
+    });
+  });
+
+  table.appendChild(tbody);
+  schedule.appendChild(table);
+}
     // skip empty packs (prevents a blank spacer week)
     const packs=r.packs; const any = ["AM","MID","DIN","PM"].some(k=>Object.keys(packs[k]).length);
     if(!any) return;
