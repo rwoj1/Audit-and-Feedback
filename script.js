@@ -6,6 +6,7 @@ const fmtDate = d => new Date(d).toLocaleDateString(undefined,{year:'numeric',mo
 const addDays = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
 function startOfWeek(d){ const dt=new Date(d); const day=dt.getDay(); const diff=(day===0?6:day-1); dt.setDate(dt.getDate()-diff); dt.setHours(0,0,0,0); return dt; }
 function banner(msg){ const b=document.createElement("div"); b.style.cssText="position:fixed;left:0;right:0;bottom:0;background:#7f1d1d;color:#fff;padding:8px 12px;font:14px system-ui;z-index:999999"; b.textContent=msg; document.body.appendChild(b); }
+function roundToNearestMultiple(x, step) { return Math.round(x / step) * step; }
 
 const SLOT_KEYS = ["AM","MID","DIN","PM"];
 const MAX_WEEKS = 60;
@@ -275,28 +276,25 @@ function opioidStep(packs, percent, med, form){
   const current = packsTotalMg(packs);
   if(current <= 0.01) return packs;
 
-  // 1) compute new total daily
-  let targetDaily = Math.round(current * (1 - percent/100));
-  if(targetDaily < 0) targetDaily = 0;
+  // smallest whole tablet (e.g., 5 mg)
+  const step = smallestPiece(med, form) || 5;
 
-  // If any MID/DIN exists, strip them first toward the needed drop
-  const dropNeeded = current - targetDaily;
-  if(packTotalMg(packs.MID)>0 || packTotalMg(packs.DIN)>0){
-    let rem = dropNeeded;
-    rem = removeFromPackByMg(packs.DIN, rem);
-    rem = removeFromPackByMg(packs.MID, rem);
-    // Recompute actual target after removing MID/DIN
-    targetDaily = Math.round(packsTotalMg(packs) - rem);
+  // compute new total daily, snap to nearest tablet size
+  const rawTarget = current * (1 - percent/100);
+  let targetDaily = roundToNearestMultiple(rawTarget, step);
+  if(targetDaily === current && current > 0){
+    targetDaily = Math.max(0, current - step);
+    targetDaily = roundToNearestMultiple(targetDaily, step);
   }
 
-  // 2) split to BID using whole SR tablets only
+  // split to BID using whole SR tablets only
   const bid = splitDailyToBID_exact(targetDaily, med, form);
 
   const toPack = k => {
     const obj = {};
     Object.entries(k).forEach(([mg,count])=>{
       const m = parseFloat(mg);
-      obj[m] = (obj[m]||0) + count;
+      if(count>0) obj[m] = (obj[m]||0) + count;
     });
     return obj;
   };
@@ -487,13 +485,13 @@ function renderStandardTable(rows){
     [packs.AM,packs.MID,packs.DIN,packs.PM].forEach(pack=>{
       Object.keys(pack).forEach(mgStr=>allMg.add(+mgStr));
     });
-    const mgList = Array.from(allMg).sort((a,b)=>a-b); // ascending for nice grouping
-    const lines = mgList.length ? mgList : [null]; // ensure at least one blank row
+    const mgList = Array.from(allMg).sort((a,b)=>a-b); // ascending
+    const lines = mgList.length ? mgList : [null]; // ensure at least one row
 
     lines.forEach((mg, idx)=>{
       const tr=document.createElement("tr");
       if(idx===0){
-        const d=td(r.stop ? r.date : r.date);
+        const d=td(r.date);
         if(lines.length>1) d.rowSpan=lines.length;
         tr.appendChild(d);
       }
@@ -509,7 +507,7 @@ function renderStandardTable(rows){
         return;
       }
 
-      // Build per-strength instruction and counts
+      // Per-strength instruction and counts
       const { text, am, mid, din, pm } = buildStrengthRowInstructions(mg, packs);
       const strengthLabel = `${med} ${(+mg.toFixed(2)).toString().replace(/\.00$/,'')} mg ${formLbl}`;
 
