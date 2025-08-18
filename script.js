@@ -92,6 +92,7 @@ function populateForms(){
   if(!fSel || !cls || !med) return;
   fSel.innerHTML="";
   const forms=Object.keys((CATALOG[cls]||{})[med]||[]);
+  // Tablet forms first
   forms.sort((a,b)=>{ const at=/tablet/i.test(a)?0:1, bt=/tablet/i.test(b)?0:1; return at!==bt?at-bt:a.localeCompare(b); });
   forms.forEach(f=>{ const o=document.createElement("option"); o.value=f; o.textContent=f; fSel.appendChild(o); });
 }
@@ -239,7 +240,7 @@ function removeFromPackByMg(pack, amount){
 function countPieces(pack){ return Object.values(pack).reduce((a,b)=>a+b,0); }
 function smallestPiece(med, form){ return allowedPiecesMg(med, form)[0] || 0; }
 
-/* =============== BID split & opioid step (FIXED) =============== */
+/* =============== BID split & opioid step =============== */
 // Build AM/PM exactly from whole SR tablets, PM ≥ AM, fewest pieces.
 function splitDailyToBID_exact(totalDailyMg, med, form) {
   const strengths = strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>b-a); // e.g., [30,20,15,10,5]
@@ -312,45 +313,28 @@ function reduceByPercentWithOrder(packs, percent, order){
   }
 }
 
-/* =============== instruction & strength labels =============== */
-function formatFormLabel(form){
-  // Ensure "SR" capitalised
-  return form.replace(/\bsr\b/ig,"SR").replace(/Slow Release/ig,"Slow Release");
-}
-function buildInstructionLine(pack, tail){
-  if(countPieces(pack)===0) return null;
-  const cls=currentClass();
-  const entries=Object.entries(pack).map(([mg,c])=>({mg:parseFloat(mg),c})).sort((a,b)=>b.mg-a.mg);
-  const wholeSizes=strengthsForSelected().map(parseMgFromStrength);
+/* =============== instruction helpers =============== */
+function formLabelCapsSR(form){ return form.replace(/\bsr\b/ig,"SR"); }
 
-  const parts=[];
-  entries.forEach(({mg,c})=>{
-    let name="tablet";
-    if(!(cls==="Opioid" || cls==="Proton Pump Inhibitor" || isMR($("formSelect").value))){
-      const isWhole = wholeSizes.some(w=>Math.abs(w-mg)<0.01);
-      const isHalfOnly = !isWhole && wholeSizes.some(w=>Math.abs(w/2 - mg)<0.01);
-      const isQuarterOnly = !isWhole && wholeSizes.some(w=>Math.abs(w/4 - mg)<0.01);
-      if(isQuarterOnly) name="quarter tablet";
-      else if(isHalfOnly) name="half tablet";
-    }
-    parts.push(c===1 ? `1 ${name}` : `${c} ${name}s`);
-  });
-  return `Take ${parts.join(" + ")} ${tail}`;
+function instructionForSlot(count, tail){
+  if(!count) return null;
+  return `Take ${count===1 ? "1 tablet" : `${count} tablets`} ${tail}`;
 }
 
-// Keep multiple strength rows; capitalise SR in labels
-function strengthLabelsFromPacks(packs, med, form){
-  const labels=new Set();
-  const formLabel = formatFormLabel(form.toLowerCase());
-  const addFrom = pack => Object.keys(pack).forEach(mgStr=>{
-    const mg = (+parseFloat(mgStr).toFixed(2)).toString().replace(/\.00$/,'');
-    labels.add(`${med} ${mg} mg ${formLabel}`);
-  });
-  addFrom(packs.AM); addFrom(packs.MID); addFrom(packs.DIN); addFrom(packs.PM);
-  return Array.from(labels);
+function buildStrengthRowInstructions(mg, packs){
+  // Build lines only for slots where this strength appears
+  const lines=[];
+  const amC = packs.AM[mg]||0, midC = packs.MID[mg]||0, dinC = packs.DIN[mg]||0, pmC = packs.PM[mg]||0;
+  const l1 = instructionForSlot(amC, "in the morning"); if(l1) lines.push(l1);
+  const l2 = instructionForSlot(midC, "at midday");     if(l2) lines.push(l2);
+  const l3 = instructionForSlot(dinC, "at dinner");     if(l3) lines.push(l3);
+  const l4 = instructionForSlot(pmC, "at night");       if(l4) lines.push(l4);
+  return { text: lines.join("\n"), am: amC, mid: midC, din: dinC, pm: pmC };
 }
 
 /* =============== builders: tablets vs patches =============== */
+function deepCopy(obj){ return JSON.parse(JSON.stringify(obj)); }
+
 function buildPlanTablets(){
   const cls=$("classSelect").value, med=$("medicineSelect").value, form=$("formSelect").value;
   const p1Percent=Math.max(1, parseFloat($("p1Percent")?.value||"0"));
@@ -366,20 +350,6 @@ function buildPlanTablets(){
   if(packsTotalMg(packs)===0){ const max=allowedPiecesMg(med, form).slice(-1)[0]; packs.AM[max]=1; }
 
   const rows=[]; let date=startOfWeek(startDate); let week=1;
-  const pushRow=(note=null)=>{
-    const instr=[];
-    const am=buildInstructionLine(packs.AM,"in the morning"); if(am) instr.push(am);
-    const md=buildInstructionLine(packs.MID,"at midday");     if(md) instr.push(md);
-    const dn=buildInstructionLine(packs.DIN,"at dinner");     if(dn) instr.push(dn);
-    const pm=buildInstructionLine(packs.PM,"at night");       if(pm) instr.push(pm);
-    if(note) instr.push(note);
-    rows.push({
-      date: fmtDate(date),
-      strengths: strengthLabelsFromPacks(packs, med, form),
-      instructions: instr.join("\n"),
-      am: countPieces(packs.AM), mid: countPieces(packs.MID), din: countPieces(packs.DIN), pm: countPieces(packs.PM)
-    });
-  };
 
   const doOneStep=(percent)=>{
     if(cls==="Opioid"){ packs = opioidStep(packs, percent, med, form); }
@@ -390,13 +360,13 @@ function buildPlanTablets(){
 
   // First reduction before first printed week
   doOneStep(p1Percent);
-  pushRow();
+  rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
 
   while(packsTotalMg(packs)>0.01){
     if(p1StopWeek && week>=p1StopWeek) break;
     date=addDays(date, p1Interval); week+=1;
     doOneStep(p1Percent);
-    pushRow();
+    rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
     if(reviewDate && date>=reviewDate) break;
     if((+date - +startDate) >= THREE_MONTHS_MS) break;
     if(rows.length>=MAX_WEEKS) break;
@@ -406,7 +376,7 @@ function buildPlanTablets(){
     while(packsTotalMg(packs)>0.01){
       date=addDays(date, p2Interval); week+=1;
       doOneStep(p2Percent);
-      pushRow();
+      rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
       if(reviewDate && date>=reviewDate) break;
       if((+date - +startDate) >= THREE_MONTHS_MS) break;
       if(rows.length>=MAX_WEEKS) break;
@@ -418,25 +388,29 @@ function buildPlanTablets(){
   if(min){
     if(cls==="Proton Pump Inhibitor"){
       date=addDays(date, p1Interval);
-      packs={ AM:{}, MID:{}, DIN:{[min]:1}, PM:{} }; pushRow();
+      packs={ AM:{}, MID:{}, DIN:{[min]:1}, PM:{} };
+      rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
       date=addDays(date, p1Interval);
-      rows.push({ date: fmtDate(date), strengths: [], instructions: "Stop.", am:0, mid:0, din:0, pm:0 });
+      rows.push({ date: fmtDate(date), packs: {AM:{},MID:{},DIN:{},PM:{}}, med, form, stop:true });
     } else if(cls==="Opioid"){
       date=addDays(date, p1Interval);
-      packs={ AM:{[min]:1}, MID:{}, DIN:{}, PM:{[min]:1} }; pushRow(); // BID at lowest tablet
+      packs={ AM:{[min]:1}, MID:{}, DIN:{}, PM:{[min]:1} };
+      rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
       date=addDays(date, p1Interval);
-      packs={ AM:{}, MID:{}, DIN:{}, PM:{[min]:1} };       pushRow(); // nocte lowest
+      packs={ AM:{}, MID:{}, DIN:{}, PM:{[min]:1} };
+      rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
       date=addDays(date, p1Interval);
-      rows.push({ date: fmtDate(date), strengths: [], instructions: "Stop.", am:0, mid:0, din:0, pm:0 });
+      rows.push({ date: fmtDate(date), packs: {AM:{},MID:{},DIN:{},PM:{}}, med, form, stop:true });
     } else {
       date=addDays(date, p1Interval);
-      packs={ AM:{}, MID:{}, DIN:{}, PM:{[min]:1} }; pushRow();
+      packs={ AM:{}, MID:{}, DIN:{}, PM:{[min]:1} };
+      rows.push({ date: fmtDate(date), packs: deepCopy(packs), med, form });
       date=addDays(date, p1Interval);
-      rows.push({ date: fmtDate(date), strengths: [], instructions: "Stop.", am:0, mid:0, din:0, pm:0 });
+      rows.push({ date: fmtDate(date), packs: {AM:{},MID:{},DIN:{},PM:{}}, med, form, stop:true });
     }
   } else {
     date=addDays(date, p1Interval);
-    rows.push({ date: fmtDate(date), strengths: [], instructions: "Stop.", am:0, mid:0, din:0, pm:0 });
+    rows.push({ date: fmtDate(date), packs: {AM:{},MID:{},DIN:{},PM:{}}, med, form, stop:true });
   }
 
   return rows;
@@ -466,7 +440,7 @@ function buildPlanPatch(){
 
   const rows=[]; let date=startOfWeek(startDate);
   let step=nextDose(total);
-  rows.push({ date: fmtDate(date), patches: step.used, instructions: `Apply patches every ${everyDays} days.` });
+  rows.push({ date: fmtDate(date), patches: step.used, med, form:"Patch" });
 
   const smallest=strengths[strengths.length-1];
   let curr=step.value;
@@ -474,20 +448,20 @@ function buildPlanPatch(){
   while(curr>smallest){
     date=addDays(date,p1Interval);
     const nxt=nextDose(curr); curr=nxt.value;
-    rows.push({ date: fmtDate(date), patches: nxt.used, instructions: `Apply patches every ${everyDays} days.` });
+    rows.push({ date: fmtDate(date), patches: nxt.used, med, form:"Patch" });
     if(reviewDate && date>=reviewDate) break;
     if(date>endDate) break;
     if(rows.length>=MAX_WEEKS) break;
   }
   // Hold smallest for one interval, then stop
   date=addDays(date,p1Interval);
-  rows.push({ date: fmtDate(date), patches: [smallest], instructions: `Apply patches every ${everyDays} days.` });
+  rows.push({ date: fmtDate(date), patches: [smallest], med, form:"Patch" });
   date=addDays(date,p1Interval);
-  rows.push({ date: fmtDate(date), patches: [], instructions: "Stop." });
+  rows.push({ date: fmtDate(date), patches: [], med, form:"Patch", stop:true });
   return rows;
 }
 
-/* =============== rendering =============== */
+/* =============== rendering (per-strength rows) =============== */
 function td(text, cls){ const el=document.createElement("td"); if(cls) el.className=cls; el.textContent=String(text||""); return el; }
 
 function renderStandardTable(rows){
@@ -502,17 +476,49 @@ function renderStandardTable(rows){
   thead.appendChild(hr); table.appendChild(thead);
 
   const tbody=document.createElement("tbody");
+
   rows.forEach(r=>{
-    const strengths=(r.strengths && r.strengths.length)?r.strengths:[""];
-    strengths.forEach((s,idx)=>{
+    const med=r.med, form=r.form;
+    const formLbl = formLabelCapsSR(form).toLowerCase();
+    const packs=r.packs;
+
+    // Gather all strengths present this week across all slots
+    const allMg = new Set();
+    [packs.AM,packs.MID,packs.DIN,packs.PM].forEach(pack=>{
+      Object.keys(pack).forEach(mgStr=>allMg.add(+mgStr));
+    });
+    const mgList = Array.from(allMg).sort((a,b)=>a-b); // ascending for nice grouping
+    const lines = mgList.length ? mgList : [null]; // ensure at least one blank row
+
+    lines.forEach((mg, idx)=>{
       const tr=document.createElement("tr");
-      if(idx===0){ const d=td(r.date); if(strengths.length>1) d.rowSpan=strengths.length; tr.appendChild(d); }
-      tr.appendChild(td(s));
-      tr.appendChild(td(r.instructions,"instructions-pre"));
-      tr.appendChild(td(r.am,"center"));
-      tr.appendChild(td(r.mid,"center"));
-      tr.appendChild(td(r.din,"center"));
-      tr.appendChild(td(r.pm,"center"));
+      if(idx===0){
+        const d=td(r.stop ? r.date : r.date);
+        if(lines.length>1) d.rowSpan=lines.length;
+        tr.appendChild(d);
+      }
+
+      if(r.stop || mg===null){
+        tr.appendChild(td(""));
+        tr.appendChild(td(r.stop ? "Stop." : "", "instructions-pre"));
+        tr.appendChild(td("", "center"));
+        tr.appendChild(td("", "center"));
+        tr.appendChild(td("", "center"));
+        tr.appendChild(td("", "center"));
+        tbody.appendChild(tr);
+        return;
+      }
+
+      // Build per-strength instruction and counts
+      const { text, am, mid, din, pm } = buildStrengthRowInstructions(mg, packs);
+      const strengthLabel = `${med} ${(+mg.toFixed(2)).toString().replace(/\.00$/,'')} mg ${formLbl}`;
+
+      tr.appendChild(td(strengthLabel));
+      tr.appendChild(td(text, "instructions-pre"));
+      tr.appendChild(td(am || "", "center"));
+      tr.appendChild(td(mid || "", "center"));
+      tr.appendChild(td(din || "", "center"));
+      tr.appendChild(td(pm || "", "center"));
       tbody.appendChild(tr);
     });
   });
@@ -538,7 +544,7 @@ function renderPatchTable(rows){
     tr.appendChild(td(r.date));
     tr.appendChild(td(fmtDate(addDays(new Date(r.date), everyDays))));
     tr.appendChild(td((r.patches||[]).map(v=>`${v} mcg/hr`).join(" + ")));
-    tr.appendChild(td(r.instructions));
+    tr.appendChild(td(r.stop ? "Stop." : `Apply patches every ${everyDays} days.`));
     tbody.appendChild(tr);
   });
   table.appendChild(tbody);
