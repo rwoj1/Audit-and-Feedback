@@ -320,7 +320,6 @@ function buildPlanPatch(){
    Rendering
 ======================= */
 function render(results){
-  const med = $("medicineSelect").value;
   const form = $("formSelect").value;
 
   $("outputCard").style.display = "block";
@@ -476,14 +475,8 @@ function printOutputOnly(){
    Init & bindings
 ======================= */
 function populateSelectors(){
-  const classSel = $("classSelect");
   const medSel   = $("medicineSelect");
-  const formSel  = $("formSelect");
-  const strSel   = $("strengthSelect");
-
-  // Class/medicine options
-  const meds = Object.keys(MEDS);
-  medSel.innerHTML = meds.map(m=>`<option value="${m}">${m}</option>`).join("");
+  medSel.innerHTML = Object.keys(MEDS).map(m=>`<option value="${m}">${m}</option>`).join("");
   updateFormStrengths();
 }
 function updateFormStrengths(){
@@ -495,9 +488,9 @@ function updateFormStrengths(){
   const strengths = MEDS[med]?.strengths || [];
   strSel.innerHTML = strengths.map(s=>`<option value="${s}">${s}</option>`).join("");
 
-  // defaults for control blocks
+  // show patch controls only when patch is available/selected
   if(forms.includes("Patch")){
-    $("patchControls").style.display = "block";
+    $("patchControls").style.display = (formSel.value==="Patch") ? "block" : "none";
   }else{
     $("patchControls").style.display = "none";
   }
@@ -528,7 +521,7 @@ function init(){
   $("medicineSelect").addEventListener("change", updateFormStrengths);
   $("formSelect").addEventListener("change", updateFormStrengths);
 
-  // date pickers (optional: if flatpickr is present)
+  // date pickers
   if(window.flatpickr){
     flatpickr("#startDate",{dateFormat:"Y-m-d"});
     flatpickr("#reviewDate",{dateFormat:"Y-m-d"});
