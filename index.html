@@ -38,7 +38,7 @@
         <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
       </div>
       <div id="doseLinesContainer" class="dose-lines"></div>
-      <p class="hint">Additional lines must use the same medicine &amp; form. Only <strong>Strength</strong> and <strong>Frequency</strong> can be changed.</p>
+      <p class="hint">Additional lines must use the same medicine &amp; form. Only <strong>Strength</strong>, <strong>Number of tablets</strong> and <strong>Frequency</strong> can be changed.</p>
     </section>
 
     <section class="card">
@@ -69,6 +69,7 @@
       </div>
     </section>
 
+    <!-- ONLY this card prints/exports -->
     <section id="outputCard" class="card output">
       <div class="output-head">
         <h2 id="hdrMedicine">Medicine:</h2>
@@ -81,10 +82,8 @@
       <!-- Patch chart -->
       <div id="patchBlock" style="display:none"></div>
 
-      <!-- Bottom-only branding/info (as requested) -->
-      <div class="footer-brand">
-        <div class="logo-slot" id="logoSlot">Your logo here</div>
-      </div>
+      <!-- Bottom-only branding/info -->
+      <div class="footer-brand"><div class="logo-slot" id="logoSlot">Your logo here</div></div>
       <div class="footer-notes">
         <div><strong>Expected Benefits:</strong> <span id="expBenefits"></span></div>
         <div><strong>Withdrawal:</strong> <span id="withdrawalInfo"></span></div>
@@ -97,4 +96,3 @@
   <script src="script.js"></script>
 </body>
 </html>
-
