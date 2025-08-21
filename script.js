@@ -389,52 +389,99 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   return recomposeSlots(cur, cls, med, form);
 }
 
-/* ===== PPI — dinner preserved last (current: PM → MID → AM → DIN) ===== */
+/* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN (DIN preserved last) ===== */
 function stepPPI(packs, percent, cls, med, form){
-  const strengths=strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>a-b);
-  const step=strengths[0]||1;
-  const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
-  let target=roundTo(tot*(1-percent/100), step);
-  if(target===tot && tot>0){ target=Math.max(0, tot-step); target=roundTo(target,step); }
+  const strengths = strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>a-b);
+  const step = strengths[0] || 1;
 
-  let cur = { AM: slotTotalMg(packs,"AM"), MID: slotTotalMg(packs,"MID"), DIN: slotTotalMg(packs,"DIN"), PM: slotTotalMg(packs,"PM") };
-  let reduce= +(tot - target).toFixed(3);
+  const tot = packsTotalMg(packs);
+  if (tot <= EPS) return packs;
+
+  let target = roundTo(tot * (1 - percent/100), step);
+  if (target === tot && tot > 0) {
+    target = Math.max(0, tot - step);
+    target = roundTo(target, step);
+  }
+
+  let cur = {
+    AM:  slotTotalMg(packs, "AM"),
+    MID: slotTotalMg(packs, "MID"),
+    DIN: slotTotalMg(packs, "DIN"),
+    PM:  slotTotalMg(packs, "PM")
+  };
+
+  let reduce = +(tot - target).toFixed(3);
   const shave = (slot)=>{
-    if(reduce<=EPS || cur[slot]<=EPS) return;
+    if (reduce <= EPS || cur[slot] <= EPS) return;
     const can = cur[slot];
     const dec = Math.min(can, roundTo(reduce, step));
     cur[slot] = +(cur[slot] - dec).toFixed(3);
     reduce = +(reduce - dec).toFixed(3);
   };
-  shave("PM"); shave("MID"); shave("AM"); // DIN preserved last
-  if(reduce>EPS) cur.DIN = Math.max(0, +(cur.DIN - roundTo(reduce,step)).toFixed(3));
+
+  // New priority: MID → PM → AM → DIN
+  shave("MID");
+  shave("PM");
+  shave("AM");
+  shave("DIN"); // dinner last to be reduced
+
   return recomposeSlots(cur, cls, med, form);
 }
-
 /* ===== Antipsychotics ===== */
 function stepAP(packs, percent, med, form){
-  const isIR = !isMR(form);
-  if(!isIR) return stepOpioid_Shave(packs, percent, "Antipsychotic", med, form); // SR like opioids
+  const isIRForm = !isMR(form);
 
-  const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
-  const step=AP_ROUND[med] || 0.5;
-  let target=roundTo(tot*(1-percent/100), step);
-  if(target===tot && tot>0){ target=Math.max(0, tot-step); target=roundTo(target,step); }
+  // SR/CR follow opioid pattern (DIN → MID → then BID with AM ≤ PM)
+  if (!isIRForm) return stepOpioid_Shave(packs, percent, "Antipsychotic", med, form);
 
-  let cur = { AM: slotTotalMg(packs,"AM"), MID: slotTotalMg(packs,"MID"), DIN: slotTotalMg(packs,"DIN"), PM: slotTotalMg(packs,"PM") };
-  let reduce= +(tot - target).toFixed(3);
+  // IR: halves-only rounding; conditional shave order
+  const tot = packsTotalMg(packs);
+  if (tot <= EPS) return packs;
+
+  const step = AP_ROUND[med] || 0.5;
+  let target = roundTo(tot * (1 - percent/100), step);
+  if (target === tot && tot > 0) {
+    target = Math.max(0, tot - step);
+    target = roundTo(target, step);
+  }
+
+  let cur = {
+    AM:  slotTotalMg(packs, "AM"),
+    MID: slotTotalMg(packs, "MID"),
+    DIN: slotTotalMg(packs, "DIN"),
+    PM:  slotTotalMg(packs, "PM")
+  };
+
+  let reduce = +(tot - target).toFixed(3);
   const shave = (slot)=>{
-    if(reduce<=EPS || cur[slot]<=EPS) return;
+    if (reduce <= EPS || cur[slot] <= EPS) return;
     const can = cur[slot];
     const dec = Math.min(can, roundTo(reduce, step));
     cur[slot] = +(cur[slot] - dec).toFixed(3);
     reduce = +(reduce - dec).toFixed(3);
   };
-  // Current default: MID → AM → DIN → PM (PM preserved last)
-  shave("MID"); shave("AM"); shave("DIN"); shave("PM");
+
+  const hasDIN = cur.DIN > EPS;
+  const hasPM  = cur.PM  > EPS;
+
+  // Conditional priority:
+  // - If both DIN & PM present: MID → DIN → AM → PM
+  // - If only one of DIN/PM present: MID → AM → (that evening slot)
+  // - If neither present: MID → AM
+  let order;
+  if (hasDIN && hasPM) {
+    order = ["MID", "DIN", "AM", "PM"];
+  } else if (hasDIN || hasPM) {
+    const evening = hasDIN ? "DIN" : "PM";
+    order = ["MID", "AM", evening];
+  } else {
+    order = ["MID", "AM"];
+  }
+
+  order.forEach(shave);
+
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
-
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
   const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
