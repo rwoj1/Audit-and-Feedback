@@ -557,37 +557,36 @@ function buildPlanTablets(){
 /* =================== Patches builder — date-based Phase-2; start at step 2 =================== */
 
 function patchAvailList(med){ return (med==="Fentanyl") ? [12,25,50,75,100] : [5,10,15,20,25,30,40]; }
-function combosUpTo(avail, maxPatches=2){
-  const sums = new Map();
-  function addCombo(arr){
+function combosUpTo(avail, maxPatches = 2){
+  const sums = new Map(); // total -> best combo (fewest patches, higher strengths on tie)
+  function consider(arr){
     const total = arr.reduce((a,b)=>a+b,0);
     const sorted = arr.slice().sort((a,b)=>b-a);
-    if(!sums.has(total)) sums.set(total, sorted);
-    else {
-      const ex = sums.get(total);
-      if(sorted.length < ex.length) sums.set(total, sorted);
-      else if(sorted.length===ex.length){
-        // prefer higher individual strengths lexicographically
-        for(let i=0;i<sorted.length;i++){
-          if(sorted[i]===ex[i]) continue;
-          if(sorted[i]>ex[i]) { sums.set(total, sorted); break; }
-          if(sorted[i]<ex[i]) break;
-        }
+    if(!sums.has(total)) { sums.set(total, sorted); return; }
+    const ex = sums.get(total);
+    if (sorted.length < ex.length) { sums.set(total, sorted); return; }
+    if (sorted.length === ex.length) {
+      for (let i=0; i<sorted.length; i++){
+        if (sorted[i]===ex[i]) continue;
+        if (sorted[i] > ex[i]) { sums.set(total, sorted); }
+        break;
       }
     }
   }
-  const n=avail.length;
-  for(let a=0;a<n;a++){
-    addCombo([avail[a]]);
-    for(let b=a;b<n && 2<=maxPatches;b++){
-      addCombo([avail[a],avail[b]]);
-      for(let c=b;c<n && 3<=maxPatches;c++) addCombo([avail[a],avail[b],avail[c]]);
-      for(let d=c?c:n; d<n && 4<=maxPatches; d++) addCombo([avail[a],avail[b],avail[c],avail[d]]);
+
+  // 1-patch combos
+  for (let i=0; i<avail.length; i++) consider([avail[i]]);
+
+  if (maxPatches >= 2) {
+    // 2-patch combos (allow same strength twice)
+    for (let i=0; i<avail.length; i++){
+      for (let j=i; j<avail.length; j++){
+        consider([avail[i], avail[j]]);
+      }
     }
   }
   return sums;
-}
-function fentanylDesiredGrid(x){
+}function fentanylDesiredGrid(x){
   // nearest multiple of 12.5, tie → up, then display-adjust (12.5→12 etc.)
   const lower = Math.floor(x/12.5)*12.5;
   const upper = Math.ceil(x/12.5)*12.5;
