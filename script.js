@@ -974,95 +974,91 @@ function updateRecommendedAndLines(){
   setDirty(true);
 }
 function init(){
-  const $id = (id) => (typeof $ === "function" ? $(id) : document.getElementById(id));
-
-  const clsSel   = $id("classSelect");
-  const medSel   = $id("medicineSelect");
-  const formSel  = $id("formSelect");
-
-  const p1Pct    = $id("p1Percent");
-  const p1Days   = $id("p1Interval");
-  const p2Pct    = $id("p2Percent");
-  const p2Days   = $id("p2Interval");
-  const p2Start  = $id("p2StartDate");
-
-  const startDt  = $id("startDate");
-  const reviewDt = $id("reviewDate");
-
-  const genBtn   = $id("generateBtn");
-// --- Date pickers (robust; works with/without flatpickr) ---
-(function(){
-  function setupPicker(el){
-    if (!el) return;
-    try {
-      if (window.flatpickr) {
-        window.flatpickr(el, { dateFormat: "d/m/Y", allowInput: true });
-      } else {
-        if (el.type !== "date") { try { el.type = "date"; } catch(_){} }
-      }
-    } catch(_) {}
-  }
-  ["startDate","reviewDate","p2StartDate"].forEach(id => setupPicker($(id)));
-})();
-  // Date pickers (flatpickr if present)
-  const setupPicker = (el) => {
-    if (!el) return;
-    try {
-      if (window.flatpickr) {
-        window.flatpickr(el, { dateFormat: "d/m/Y", allowInput: true });
-      } else {
-        if (!el.type || el.type !== "date") { try { el.type = "date"; } catch(_){} }
-      }
-    } catch(_) {}
-  };
-
-  // Gate the Generate button until Phase 1 has both values
-  const gateGenerate = () => {
-    const okP1 = (parseFloat(p1Pct?.value)  > 0) && (parseInt(p1Days?.value)  > 0);
-    if (genBtn) genBtn.disabled = !okP1;
-  };
-  ["input","change"].forEach(evt=>{
-    p1Pct  && p1Pct.addEventListener(evt, gateGenerate);
-    p1Days && p1Days.addEventListener(evt, gateGenerate);
+  // 1) Date pickers (safe fallback to <input type="date">)
+  document.querySelectorAll(".datepick").forEach(el=>{
+    if (window.flatpickr) { window.flatpickr(el, { dateFormat:"Y-m-d", allowInput:true }); }
+    else { el.type = "date"; }
   });
-  gateGenerate();
 
-  const refreshCopy = () => {
-    try {
-      updateRecommended();                    // Suggested practice + header line from JSON
-      setFooterText(clsSel?.value || "");     // Footer from JSON
-    } catch (e) {
-      // Keep UI working even if copy is missing
-      console.error("refreshCopy error:", e);
-    }
-  };
+  // 2) Clear Phase-1 presets; placeholders only
+  const p1PctEl = $("p1Percent"), p1IntEl = $("p1Interval");
+  if (p1PctEl)  { p1PctEl.value = "";  p1PctEl.placeholder  = "%"; }
+  if (p1IntEl)  { p1IntEl.value = "";  p1IntEl.placeholder  = "days"; }
 
-  clsSel  && clsSel.addEventListener("change", refreshCopy);
-  medSel  && medSel.addEventListener("change", refreshCopy);
-  formSel && formSel.addEventListener("change", refreshCopy);
+  // 3) Populate selects in dependency order and force a selection
+  populateClasses();
+  const clsSel = $("classSelect");
+  if (clsSel && clsSel.options.length) clsSel.selectedIndex = 0;
 
-  // Initial paint
-  refreshCopy();
+  populateMedicines();
+  const medSel = $("medicineSelect");
+  if (medSel && medSel.options.length) medSel.selectedIndex = 0;
 
-  // (Optional) keep things tidy
-  ["input","change"].forEach(evt=>{
-    p2Pct   && p2Pct.addEventListener(evt, gateGenerate);
-    p2Days  && p2Days.addEventListener(evt, gateGenerate);
-    p2Start && p2Start.addEventListener(evt, ()=>{});
-    startDt && startDt.addEventListener(evt, ()=>{});
-    reviewDt&& reviewDt.addEventListener(evt, ()=>{});
+  populateForms();
+  const formSel = $("formSelect");
+  if (formSel && formSel.options.length) formSel.selectedIndex = 0;
+
+  // 4) Paint Suggested Practice + footer from JSON
+  updateRecommended();                 // fills the “Suggested practice” card
+  setFooterText(clsSel?.value || "");  // class-specific footer text
+
+  // 5) Hook change handlers (rebuild dependent selects on change)
+  clsSel?.addEventListener("change", () => {
+    populateMedicines();
+    $("medicineSelect")?.options.length && ($("medicineSelect").selectedIndex = 0);
+    populateForms();
+    $("formSelect")?.options.length && ($("formSelect").selectedIndex = 0);
+    updateRecommended();
+    setFooterText(clsSel.value);
+    resetDoseLinesToLowest();
+    setDirty(true);
   });
+
+  medSel?.addEventListener("change", () => {
+    populateForms();
+    $("formSelect")?.options.length && ($("formSelect").selectedIndex = 0);
+    updateRecommended();
+    resetDoseLinesToLowest();
+    setFooterText(clsSel?.value);
+    setDirty(true);
+  });
+
+  formSel?.addEventListener("change", () => {
+    updateRecommended();
+    resetDoseLinesToLowest();
+    setDirty(true);
+  });
+
+  // 6) Dose line add button
+  $("addDoseLineBtn")?.addEventListener("click", ()=>{
+    const sList = strengthsForSelected();
+    doseLines.push({ id: nextLineId++, strengthStr: sList[0], qty: 1, freqMode: defaultFreq() });
+    renderDoseLines(); setDirty(true);
+  });
+
+  // 7) Main actions
+  $("generateBtn")?.addEventListener("click", buildPlan);
+  $("resetBtn")?.addEventListener("click", ()=>location.reload());
+  $("printBtn")?.addEventListener("click", printOutputOnly);
+  $("savePdfBtn")?.addEventListener("click", saveOutputAsPdf);
+
+  // 8) Dirty tracking + initial state
+  watchDirty("#classSelect, #medicineSelect, #formSelect, #startDate, #reviewDate, #p1Percent, #p1Interval, #p2Percent, #p2Interval, #p2StartDate");
+  setDirty(true);
+  setGenerateEnabled();
 }
-document.addEventListener("DOMContentLoaded", () => {
-  loadCopy().finally(() => {
+
+// Keep this at the very bottom of script.js:
+document.addEventListener("DOMContentLoaded", ()=>{
+  loadCopy().finally(()=>{
     try {
       init();
-      setDisclaimerFromCopy();
-      updateRecommended(); // paint “Suggested practice” from JSON
+      setDisclaimerFromCopy(); // puts the JSON disclaimer under the header
       console.info("copy.json version:", COPY?.version);
-    } catch (e) {
+    } catch(e){
       console.error(e);
       alert("Init error: " + (e?.message || String(e)));
     }
   });
 });
+
