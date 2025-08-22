@@ -37,18 +37,15 @@ const DEFAULT_COPY = {
 let COPY = DEFAULT_COPY;
 async function loadCopy() {
   try {
-    const res = await fetch("config/copy.json?v=2025-08-22-1", { cache: "no-store" });
-    if (!res.ok) return; // keep defaults
+    const res = await fetch(`config/copy.json?v=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return;
     const data = await res.json();
-    // shallow-merge with defaults so missing keys don't break anything
     COPY = {
       ...DEFAULT_COPY,
       ...data,
       footerByClass: { ...DEFAULT_COPY.footerByClass, ...(data.footerByClass || {}) }
     };
-  } catch (_) {
-    // network/parse issue: keep DEFAULT_COPY
-  }
+  } catch (_) { /* keep defaults */ }
 }
 /* ---- Dirty state + gating ---- */
 let _dirtySinceGenerate = true;
