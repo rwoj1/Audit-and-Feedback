@@ -14,48 +14,6 @@ const MAX_WEEKS = 60;
 const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 const EPS = 1e-6;
 
-// --- Copy defaults (used if JSON isn't found) ---
-const DEFAULT_COPY = {
-  disclaimer: "This is a guide only – follow the advice of your healthcare professional.",
-  footerByClass: {
-    "Opioid": {
-      expectedBenefits: "Improved function and reduced opioid-related harms.",
-      withdrawal: "Transient pain flare, cravings, mood changes."
-    },
-    "Benzodiazepines / Z-Drug (BZRA)": {
-      expectedBenefits: "Improved cognition, daytime alertness, and reduced falls.",
-      withdrawal: "Insomnia, anxiety, irritability."
-    },
-    "Antipsychotic": {
-      expectedBenefits: "Lower risk of metabolic/extrapyramidal adverse effects.",
-      withdrawal: "Sleep disturbance, anxiety, return of target symptoms."
-    },
-    "Proton Pump Inhibitor": {
-      expectedBenefits: "Review at 4–12 weeks; incorporate non-drug strategies (sleep, diet, positioning).",
-      withdrawal: "Rebound heartburn."
-    }
-  }
-};
-
-let COPY = DEFAULT_COPY;
-
-async function loadCopy() {
-  try {
-    const res = await fetch("config/copy.json?v=2025-08-22-1", { cache: "no-store" });
-    if (!res.ok) return; // keep defaults
-    const data = await res.json();
-    // shallow-merge with defaults so missing keys don't break anything
-    COPY = {
-      ...DEFAULT_COPY,
-      ...data,
-      footerByClass: { ...DEFAULT_COPY.footerByClass, ...(data.footerByClass || {}) }
-    };
-  } catch (_) {
-    // network/parse issue: keep DEFAULT_COPY
-  }
-}
-
-
 /* ---- Dirty state + gating ---- */
 let _dirtySinceGenerate = true;
 
@@ -80,23 +38,7 @@ function setGenerateEnabled() {
   const ready = Number.isFinite(p1Pct) && p1Pct > 0 && Number.isFinite(p1Int) && p1Int > 0;
   if (gen) gen.disabled = !ready;
 }
-function setDisclaimerFromCopy(){
-  const txt = COPY.disclaimer || DEFAULT_COPY.disclaimer;
 
-  // Try an existing placeholder if you already added one:
-  const spot = document.getElementById("disclaimerLine");
-  if (spot) { spot.textContent = txt; return; }
-
-  // If no placeholder exists, we add it under your output header safely:
-  const output = document.getElementById("outputCard") || document.body;
-  const p = document.createElement("p");
-  p.id = "disclaimerLine";
-  p.textContent = txt;
-  p.style.margin = "8px 0 16px 0";
-  p.style.fontSize = "12px";
-  p.style.opacity = "0.8";
-  output.insertBefore(p, output.firstChild); // top of output card
-}
 function setDirty(v = true) {
   _dirtySinceGenerate = !!v;
   const printBtn = $("printBtn");
@@ -349,25 +291,12 @@ function specialInstructionFor(){
   return "Swallow whole, do not halve or crush";
 }
 function updateRecommended(){
-  const cls = $("classSelect")?.value || "";
-  const med = $("medicineSelect")?.value || "";
-  const form = $("formSelect")?.value || "";
+  const med=$("medicineSelect")?.value || "", form=$("formSelect")?.value || "";
+const box = $("bestPracticeBox");
+if (box) box.innerHTML = `<h2>Suggested practice for ${med} ${form}</h2>`;
+const hm = $("hdrMedicine"); if (hm) hm.textContent = `Medicine: ${med} ${form}`;
+const hs = $("hdrSpecial");  if (hs) hs.textContent = specialInstructionFor();}
 
-  // Box title + body (between dose lines and taper controls)
-  const box = $("bestPracticeBox");
-  if (box) {
-    const pt = practiceTextFromCopy(cls, med, form);
-    box.innerHTML = `<h2>Suggested practice for ${med} ${form}</h2>${pt.html ? `<div class="suggested-text">${pt.html}</div>` : ""}`;
-  }
-
-  // Output header lines
-  const hm = $("hdrMedicine"); if (hm) hm.textContent = `Medicine: ${med} ${form}`;
-  const hs = $("hdrSpecial");
-  if (hs) {
-    const pt = practiceTextFromCopy(cls, med, form);
-    hs.textContent = pt.text || specialInstructionFor();
-  }
-}
 /* =================== Math / composition =================== */
 
 function allowedPiecesMg(cls, med, form){
@@ -982,8 +911,8 @@ function renderPatchTable(rows){
       if (r.stop)      instr="Stop.";
       else if (r.review) instr="Review with your doctor the ongoing plan.";
       else {
-const n = (r.patches || []).length;
-instr = `Apply ${n === 1 ? "patch" : "patches"} every ${everyDays} days.`;
+        const n=(r.patches||[]).length;
+        instr = `Apply ${n===1?"1 patch":`${n} patches`} every ${everyDays} days.`;
       }
       tr.appendChild(td(instr));
 
@@ -998,12 +927,22 @@ instr = `Apply ${n === 1 ? "patch" : "patches"} every ${everyDays} days.`;
 /* =================== Footer =================== *//* =================== Footer =================== */
 
 function setFooterText(cls){
-  const f = (COPY.footerByClass && COPY.footerByClass[cls]) || DEFAULT_COPY.footerByClass[cls];
-  const exp = f?.expectedBenefits || "—";
-  const wdr = f?.withdrawal || "—";
-  const e = document.getElementById("expBenefits");     if (e) e.textContent = exp;
-  const w = document.getElementById("withdrawalInfo");  if (w) w.textContent = wdr;
+  const exp = {
+    Opioid: "Expected benefits: Improved function and reduced opioid-related harms.",
+    "Benzodiazepines / Z-Drug (BZRA)": "Expected benefits: Improved cognition, daytime alertness, and reduced falls.",
+    "Proton Pump Inhibitor": "Expected benefits: Review at 4–12 weeks; incorporate non-drug strategies (sleep, diet, positioning).",
+    Antipsychotic: "Expected benefits: Lower risk of metabolic/extrapyramidal adverse effects.",
+  }[cls] || "—";
+  const wdr = {
+    Opioid: "Withdrawal: transient pain flare, cravings, mood changes.",
+    "Benzodiazepines / Z-Drug (BZRA)": "Withdrawal: insomnia, anxiety, irritability.",
+    "Proton Pump Inhibitor": "Withdrawal: rebound heartburn.",
+    Antipsychotic: "Withdrawal: sleep disturbance, anxiety, return of target symptoms.",
+  }[cls] || "—";
+const e = $("expBenefits");     if (e) e.textContent = exp;
+const w = $("withdrawalInfo");  if (w) w.textContent = wdr;
 }
+
 /* ===== Unified print/PDF styling + guards ===== */
 function _printCSS(){
   return `<style>
@@ -1075,63 +1014,8 @@ function init(){
 
   setDirty(true);
   setGenerateEnabled();
-// Pick "Suggested practice" text from JSON in order of specificity:
-// byMedicineForm -> byForm -> byClass -> default
-function practiceTextFromCopy(cls, med, form){
-  const PT = COPY.practiceText || {};
-  const key = `${med}|${form}`;
 
-  let val = (PT.byMedicineForm && PT.byMedicineForm[key]);
-  if (val == null) val = (PT.byForm && PT.byForm[form]);
-  if (val == null) val = (PT.byClass && PT.byClass[cls]);
-  if (val == null) val = PT.default;
-
-  // Support either a string or an array (render bullets)
-  if (Array.isArray(val)){
-    return {
-      html: `<ul style="margin:8px 0 0 18px;">${val.map(x => `<li>${x}</li>`).join("")}</ul>`,
-      text: val.join(" • ")
-    };
-  }
-  if (typeof val === "string"){
-    return { html: val, text: val };
-  }
-  return { html: "", text: "" };
-}
-// Pick "Suggested practice" text from JSON in order of specificity:
-// byMedicineForm -> byForm -> byClass -> default
-function practiceTextFromCopy(cls, med, form){
-  const PT = COPY.practiceText || {};
-  const key = `${med}|${form}`;
-
-  let val = PT.byMedicineForm?.[key];
-  if (val == null) val = PT.byForm?.[form];
-  if (val == null) val = PT.byClass?.[cls];
-  if (val == null) val = PT.default;
-
-  // Support either a string or an array (render bullets)
-  if (Array.isArray(val)){
-    return {
-      html: `<ul style="margin:8px 0 0 18px;">${val.map(x => `<li>${x}</li>`).join("")}</ul>`,
-      text: val.join(" • ")
-    };
-  }
-  if (typeof val === "string"){
-    return { html: val, text: val };
-  }
-  return { html: "", text: "" };
-}
   updateRecommended();
 }
 
-document.addEventListener("DOMContentLoaded", ()=>{
-  loadCopy().finally(()=>{
-    try {
-      init();
-      setDisclaimerFromCopy();
-    } catch(e){
-      console.error(e);
-      alert("Init error: " + (e?.message || String(e)));
-    }
-  });
-});
+document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
