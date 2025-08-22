@@ -1054,7 +1054,6 @@ function init(){
     reviewDt&& reviewDt.addEventListener(evt, ()=>{});
   });
 }
-  [startDt, reviewDt, p2Start].forEach(setupPicker);
 
   // --- Enable/disable Generate until Phase 1 has both fields ---
   const gateGenerate = () => {
