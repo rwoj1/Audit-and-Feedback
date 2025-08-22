@@ -1015,7 +1015,6 @@ function init(){
       }
     } catch(_) {}
   };
-  [startDt, reviewDt, p2Start].forEach(setupPicker);
 
   // Gate the Generate button until Phase 1 has both values
   const gateGenerate = () => {
@@ -1054,51 +1053,13 @@ function init(){
     reviewDt&& reviewDt.addEventListener(evt, ()=>{});
   });
 }
-
-  // --- Enable/disable Generate until Phase 1 has both fields ---
-  const gateGenerate = () => {
-    const okP1 = (parseFloat(p1Pct?.value)  > 0) && (parseInt(p1Days?.value)  > 0);
-    if (genBtn) genBtn.disabled = !okP1;
-  };
-  ["input","change"].forEach(evt=>{
-    p1Pct  && p1Pct.addEventListener(evt, gateGenerate);
-    p1Days && p1Days.addEventListener(evt, gateGenerate);
-  });
-  gateGenerate();
-
-  // --- When selectors change, refresh suggested practice & footer copy ---
-  const refreshCopy = () => {
-    try {
-      // JSON-driven "Suggested practice" box + header line
-      updateRecommended();
-      // Class-specific footer from JSON
-      setFooterText(clsSel?.value || "");
-    } catch (e) {
-      console.error("refreshCopy error:", e);
-    }
-  };
-
-  clsSel  && clsSel.addEventListener("change", refreshCopy);
-  medSel  && medSel.addEventListener("change", refreshCopy);
-  formSel && formSel.addEventListener("change", refreshCopy);
-
-  // Initial paint (after JSON is loaded by DOMContentLoaded)
-  refreshCopy();
-
-  // (Optional) re-run gate when dates or Phase 2 fields change, just to be tidy
-  ["input","change"].forEach(evt=>{
-    p2Pct   && p2Pct.addEventListener(evt, gateGenerate);
-    p2Days  && p2Days.addEventListener(evt, gateGenerate);
-    p2Start && p2Start.addEventListener(evt, ()=>{ /* Phase 2 completeness handled elsewhere */ });
-    startDt && startDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
-    reviewDt&& reviewDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
-  });
-
 document.addEventListener("DOMContentLoaded", () => {
   loadCopy().finally(() => {
     try {
       init();
       setDisclaimerFromCopy();
+      updateRecommended(); // paint “Suggested practice” from JSON
+      console.info("copy.json version:", COPY?.version);
     } catch (e) {
       console.error(e);
       alert("Init error: " + (e?.message || String(e)));
