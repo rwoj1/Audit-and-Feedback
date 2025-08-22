@@ -1,5 +1,5 @@
 {
-  "version": "2025-08-22",
+  "version": "2025-08-22-2",
   "disclaimer": "This is a guide only – follow the advice of your healthcare professional.",
   "footerByClass": {
     "Opioid": {
@@ -18,11 +18,7 @@
       "expectedBenefits": "Review at 4–12 weeks; incorporate non-drug strategies (sleep, diet, positioning).",
       "withdrawal": "Rebound heartburn."
     }
-    {
-  "version": "2025-08-22",
-  "disclaimer": "This is a guide only \u2013 follow the advice of your healthcare professional.",
-  "footerByClass": { /* ...your existing footer text... */ },
-
+  },
   "practiceText": {
     "default": "Swallow whole, do not halve or crush.",
     "byClass": {
@@ -36,8 +32,5 @@
     "byMedicineForm": {
       "Lansoprazole|Orally Dispersible Tablet": "The orally dispersible tablet can be dispersed in the mouth."
     }
-  }
-}
-
   }
 }
