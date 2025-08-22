@@ -988,6 +988,7 @@ function init(){
 
   const genBtn   = $id("generateBtn");
 // --- Date pickers (robust; works with/without flatpickr) ---
+// --- Date pickers (robust; works with/without flatpickr) ---
 (function(){
   function setupPicker(el){
     if (!el) return;
