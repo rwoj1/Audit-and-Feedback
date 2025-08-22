@@ -47,6 +47,31 @@ async function loadCopy() {
     };
   } catch (_) { /* keep defaults */ }
 }
+// Pick "Suggested practice" text from JSON in order of specificity:
+// byMedicineForm -> byForm -> byClass -> default
+function practiceTextFromCopy(cls, med, form){
+  const PT = COPY.practiceText || {};
+  const norm = s => (s || "").trim();
+  const keyMF = `${norm(med)}|${norm(form)}`;
+
+  let val =
+    (PT.byMedicineForm && PT.byMedicineForm[keyMF]) ??
+    (PT.byForm && PT.byForm[norm(form)]) ??
+    (PT.byClass && PT.byClass[norm(cls)]) ??
+    PT.default;
+
+  // Support string or array (array renders as bullets)
+  if (Array.isArray(val)){
+    return {
+      html: `<ul style="margin:8px 0 0 18px;">${val.map(x => `<li>${x}</li>`).join("")}</ul>`,
+      text: val.join(" • ")
+    };
+  }
+  if (typeof val === "string"){
+    return { html: val, text: val };
+  }
+  return { html: "", text: "" };
+}
 /* ---- Dirty state + gating ---- */
 let _dirtySinceGenerate = true;
 function showToast(msg) {
@@ -316,6 +341,8 @@ function specialInstructionFor(){
     return "The orally dispersible tablet can be dispersed in the mouth.";
   }
 
+  return "Swallow whole, do not halve or crush.";
+}
   return "Swallow whole, do not halve or crush.";
 }
 
@@ -947,37 +974,73 @@ function updateRecommendedAndLines(){
   setDirty(true);
 }
 function init(){
-  // Convenience getter (uses your existing $ helper if present)
   const $id = (id) => (typeof $ === "function" ? $(id) : document.getElementById(id));
 
-  // Core controls
   const clsSel   = $id("classSelect");
   const medSel   = $id("medicineSelect");
   const formSel  = $id("formSelect");
 
-  const p1Pct    = $id("phase1Percent");
-  const p1Days   = $id("phase1Days");
-  const p2Pct    = $id("phase2Percent");
-  const p2Days   = $id("phase2Days");
-  const p2Start  = $id("phase2StartDate");
+  const p1Pct    = $id("p1Percent");
+  const p1Days   = $id("p1Interval");
+  const p2Pct    = $id("p2Percent");
+  const p2Days   = $id("p2Interval");
+  const p2Start  = $id("p2StartDate");
 
   const startDt  = $id("startDate");
   const reviewDt = $id("reviewDate");
 
   const genBtn   = $id("generateBtn");
 
-  // --- Date pickers (flatpickr if available; otherwise native <input type="date">) ---
+  // Date pickers (flatpickr if present)
   const setupPicker = (el) => {
     if (!el) return;
     try {
       if (window.flatpickr) {
         window.flatpickr(el, { dateFormat: "d/m/Y", allowInput: true });
       } else {
-        // Fallback: ensure it's a date input; leave value as-is
         if (!el.type || el.type !== "date") { try { el.type = "date"; } catch(_){} }
       }
     } catch(_) {}
   };
+  [startDt, reviewDt, p2Start].forEach(setupPicker);
+
+  // Gate the Generate button until Phase 1 has both values
+  const gateGenerate = () => {
+    const okP1 = (parseFloat(p1Pct?.value)  > 0) && (parseInt(p1Days?.value)  > 0);
+    if (genBtn) genBtn.disabled = !okP1;
+  };
+  ["input","change"].forEach(evt=>{
+    p1Pct  && p1Pct.addEventListener(evt, gateGenerate);
+    p1Days && p1Days.addEventListener(evt, gateGenerate);
+  });
+  gateGenerate();
+
+  const refreshCopy = () => {
+    try {
+      updateRecommended();                    // Suggested practice + header line from JSON
+      setFooterText(clsSel?.value || "");     // Footer from JSON
+    } catch (e) {
+      // Keep UI working even if copy is missing
+      console.error("refreshCopy error:", e);
+    }
+  };
+
+  clsSel  && clsSel.addEventListener("change", refreshCopy);
+  medSel  && medSel.addEventListener("change", refreshCopy);
+  formSel && formSel.addEventListener("change", refreshCopy);
+
+  // Initial paint
+  refreshCopy();
+
+  // (Optional) keep things tidy
+  ["input","change"].forEach(evt=>{
+    p2Pct   && p2Pct.addEventListener(evt, gateGenerate);
+    p2Days  && p2Days.addEventListener(evt, gateGenerate);
+    p2Start && p2Start.addEventListener(evt, ()=>{});
+    startDt && startDt.addEventListener(evt, ()=>{});
+    reviewDt&& reviewDt.addEventListener(evt, ()=>{});
+  });
+}
   [startDt, reviewDt, p2Start].forEach(setupPicker);
 
   // --- Enable/disable Generate until Phase 1 has both fields ---
@@ -1024,8 +1087,8 @@ document.addEventListener("DOMContentLoaded", ()=>{
     try {
       init();
       setDisclaimerFromCopy();
-      updateRecommended();      // <— populate the Suggested practice box on first load
-      console.info("copy.json version:", COPY?.version); // shows in Console if JSON loaded
+      updateRecommended();                   // populate once on load
+      // Optional: console.info("copy.json version:", COPY?.version);
     } catch(e){
       console.error(e);
       alert("Init error: " + (e?.message || String(e)));
