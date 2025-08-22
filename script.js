@@ -142,13 +142,15 @@ function isMR(form){ return /slow\s*release|modified|controlled|sustained/i.test
 function formLabelCapsSR(form){ return String(form||"").replace(/\bsr\b/ig,"SR"); }
 function parseMgFromStrength(s){ const m = String(s||"").match(/^\s*([\d.]+)\s*(?:mg)?(?:\s*\/|$)/i); return m ? parseFloat(m[1]) : 0; }
 function parsePatchRate(s){ const m=String(s||"").match(/([\d.]+)\s*mcg\/hr/i); return m?parseFloat(m[1]):0; }
-function oxyNxPairLabel(oxyMg){
-  const list = (CATALOG["Opioid"]["Oxycodone / Naloxone"]["SR Tablet"] || []);
-  const hit = list.find(s=>{ const m = String(s).match(/^\s*([\d.]+)\s*(?:mg)?(?:\s*\/|$)/i); return m && parseFloat(m[1]) === +oxyMg; });
-  const pair = hit ? hit.replace(/\s*mg.*$/i, " mg") : `${oxyMg}/${(oxyMg/2)} mg`;
-  return `Oxycodone / Naloxone ${pair} SR Tablet`;
+function stripZeros(n) {
+  return Number.isInteger(n) ? String(n) : String(n).replace(/\.0+$/,"");
 }
 
+function oxyNxPairLabel(oxyMg){
+  const oxy = +oxyMg;
+  const nx  = +(oxy/2);
+  return `Oxycodone ${stripZeros(oxy)} mg + naloxone ${stripZeros(nx)} mg SR tablet`;
+}
 /* =================== Dropdowns & dose lines =================== */
 
 function populateClasses(){
@@ -653,8 +655,10 @@ function buildPlanPatch(){
     const qty = Math.max(0, Math.floor((ln.qty ?? 0)));
     startTotal += mg * qty;
   });
-  if (startTotal <= 0) startTotal = smallest;
-
+if (startTotal <= 0) {
+  showToast("Add at least one patch (quantity > 0) before generating.");
+   return [];
+ }
   const rows=[];
   let curApply = new Date(startDate);
   let curRemove = addDays(curApply, applyEvery);
@@ -925,7 +929,7 @@ function buildPlan(){
   $("hdrMedicine").textContent=`Medicine: ${med} ${form}`;
   $("hdrSpecial").textContent=`${specialInstructionFor()}`;
 
-  const isPatch=(form==="Patch");
+  const isPatch = /Patch/i.test(form);
   const rows=isPatch?buildPlanPatch():buildPlanTablets();
   if(isPatch) renderPatchTable(rows); else renderStandardTable(rows);
   setFooterText(cls);
