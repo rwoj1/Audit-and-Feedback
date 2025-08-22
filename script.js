@@ -66,8 +66,8 @@ function showToast(msg) {
   t._h = setTimeout(() => { t.style.display = "none"; }, 2200);
 }
 function setGenerateEnabled() {
-  const p1Pct = parseFloat($("p1Percent")?.value || "");
-  const p1Int = parseInt($("p1Interval")?.value || "", 10);
+  const p1Pct = parseFloat($("phase1Percent")?.value || "");
+  const p1Int = parseInt($("phase1Days")?.value || "", 10);
   const gen   = $("generateBtn");
   const ready = Number.isFinite(p1Pct) && p1Pct > 0 && Number.isFinite(p1Int) && p1Int > 0;
   if (gen) gen.disabled = !ready;
@@ -301,13 +301,22 @@ function renderDoseLines(){
 }
 /* =================== Suggested practice header =================== */
 function specialInstructionFor(){
-  const cls=$("classSelect")?.value || "";
-  const med=$("medicineSelect")?.value || "";
-  const form=$("formSelect")?.value || "";
-  if(cls==="Benzodiazepines / Z-Drug (BZRA)" || cls==="Antipsychotic") return "";
-  if (/Patch/i.test(form)) return "Special instruction: apply to intact skin as directed. Do not cut patches.";
-  if (cls==="Proton Pump Inhibitor" && /La
-// Pick "Suggested practice" text from JSON in order of specificity:
+  const cls  = $("classSelect")?.value || "";
+  const med  = $("medicineSelect")?.value || "";
+  const form = $("formSelect")?.value || "";
+
+  if (cls === "Benzodiazepines / Z-Drug (BZRA)" || cls === "Antipsychotic") return "";
+
+  if (/Patch/i.test(form)) return "Apply to intact skin as directed. Do not cut patches.";
+
+  if (cls === "Proton Pump Inhibitor"
+      && /Lansoprazole/i.test(med)
+      && /Orally\s*Dispersible\s*Tablet/i.test(form)) {
+    return "The orally dispersible tablet can be dispersed in the mouth.";
+  }
+
+  return "Swallow whole, do not halve or crush.";
+}// Pick "Suggested practice" text from JSON in order of specificity:
 // byMedicineForm -> byForm -> byClass -> default
 function practiceTextFromCopy(cls, med, form){
   const PT = COPY.practiceText || {};
@@ -332,7 +341,26 @@ nsoprazole/i.test(med) && /Orally\s*Dispersible\s*Tablet/i.test(form)) {
   }
   return "Swallow whole, do not halve or crush";
 }
+// Pick "Suggested practice" text from JSON in order of specificity:
+// byMedicineForm -> byForm -> byClass -> default
+function practiceTextFromCopy(cls, med, form){
+  const PT = COPY.practiceText || {};
+  const key = `${(med||"").trim()}|${(form||"").trim()}`;
 
+  let val = PT.byMedicineForm?.[key]
+         ?? PT.byForm?.[(form||"").trim()]
+         ?? PT.byClass?.[(cls||"").trim()]
+         ?? PT.default;
+
+  if (Array.isArray(val)){
+    return {
+      html: `<ul style="margin:8px 0 0 18px;">${val.map(x => `<li>${x}</li>`).join("")}</ul>`,
+      text: val.join(" • ")
+    };
+  }
+  if (typeof val === "string") return { html: val, text: val };
+  return { html: "", text: "" };
+}
 function updateRecommended(){
   const cls = $("classSelect")?.value || "";
   const med = $("medicineSelect")?.value || "";
@@ -523,13 +551,13 @@ function stepBZRA(packs, percent, med, form){
 /* =================== Plan builders (tablets) — date-based Phase-2 =================== */
 const deepCopy = (o)=>JSON.parse(JSON.stringify(o));
 function buildPlanTablets(){
-  const cls=$("classSelect")?.value, med=$("medicineSelect")?.value, form=$("formSelect")?.value;
-  const p1Pct = Math.max(0, parseFloat($("p1Percent")?.value || ""));
-  const p1Int = Math.max(0, parseInt($("p1Interval")?.value || "", 10));
-  const p2Pct = Math.max(0, parseFloat($("p2Percent")?.value || ""));
-  const p2Int = Math.max(0, parseInt($("p2Interval")?.value || "", 10));
-  const p2DateVal = $("p2StartDate")?._flatpickr?.selectedDates?.[0]
-                   || ($("p2StartDate")?.value ? new Date($("p2StartDate")?.value) : null);
+ const cls=$("classSelect")?.value, med=$("medicineSelect")?.value, form=$("formSelect")?.value;
+ const p1Pct = Math.max(0, parseFloat($("phase1Percent")?.value || ""));
+ const p1Int = Math.max(0, parseInt($("phase1Days")?.value || "", 10));
+ const p2Pct = Math.max(0, parseFloat($("phase2Percent")?.value || ""));
+ const p2Int = Math.max(0, parseInt($("phase2Days")?.value || "", 10));
+ const p2DateVal = $("phase2StartDate")?._flatpickr?.selectedDates?.[0]
+                  || ($("phase2StartDate")?.value ? new Date($("phase2StartDate")?.value) : null);
   const p2Start = (p2Pct>0 && p2Int>0 && p2DateVal && !isNaN(+p2DateVal)) ? p2DateVal : null;
   const startDate = $("startDate")?._flatpickr?.selectedDates?.[0]
                     || ($("startDate")?.value ? new Date($("startDate").value) : new Date());
@@ -645,12 +673,12 @@ function buildPlanPatch(){
   const startDate=$("startDate")?($("startDate")._flatpickr?.selectedDates?.[0]||new Date()):new Date();
   const reviewDate=$("reviewDate")?($("reviewDate")._flatpickr?.selectedDates?.[0]||null):null;
   const applyEvery=(med==="Fentanyl")?3:7;
-  const p1Pct = Math.max(0, parseFloat($("p1Percent")?.value || ""));
-  const p1Int = Math.max(0, parseInt($("p1Interval")?.value || "", 10));
-  const p2Pct = Math.max(0, parseFloat($("p2Percent")?.value || ""));
-  const p2Int = Math.max(0, parseInt($("p2Interval")?.value || "", 10));
-  const p2DateVal = $("p2StartDate")?._flatpickr?.selectedDates?.[0]
-                   || ($("p2StartDate")?.value ? new Date($("p2StartDate")?.value) : null);
+ const p1Pct = Math.max(0, parseFloat($("phase1Percent")?.value || ""));
+ const p1Int = Math.max(0, parseInt($("phase1Days")?.value || "", 10));
+ const p2Pct = Math.max(0, parseFloat($("phase2Percent")?.value || ""));
+ const p2Int = Math.max(0, parseInt($("phase2Days")?.value || "", 10));
+ const p2DateVal = $("phase2StartDate")?._flatpickr?.selectedDates?.[0]
+                  || ($("phase2StartDate")?.value ? new Date($("phase2StartDate")?.value) : null);
   const p2Start = (p2Pct>0 && p2Int>0 && p2DateVal && !isNaN(+p2DateVal)) ? p2DateVal : null;
   if (!(p1Pct>0 && p1Int>0)) { showToast("Enter a percentage and an interval to generate a plan."); return []; }
   const strengths=strengthsForSelected().map(parsePatchRate).filter(v=>v>0).sort((a,b)=>b-a);
