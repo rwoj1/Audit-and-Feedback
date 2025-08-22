@@ -991,7 +991,6 @@ function init(){
 
   const genBtn   = $id("generateBtn");
 // --- Date pickers (robust; works with/without flatpickr) ---
-// --- Date pickers (robust; works with/without flatpickr) ---
 (function(){
   function setupPicker(el){
     if (!el) return;
@@ -999,12 +998,11 @@ function init(){
       if (window.flatpickr) {
         window.flatpickr(el, { dateFormat: "d/m/Y", allowInput: true });
       } else {
-        // Fallback to native date input where possible
-        if (el.type !== "date") { try { el.type = "date"; } catch(_) {} }
+        if (el.type !== "date") { try { el.type = "date"; } catch(_){} }
       }
     } catch(_) {}
   }
-  [startDt, reviewDt, p2Start].forEach(el => setupPicker(el));
+  ["startDate","reviewDate","p2StartDate"].forEach(id => setupPicker($(id)));
 })();
   // Date pickers (flatpickr if present)
   const setupPicker = (el) => {
