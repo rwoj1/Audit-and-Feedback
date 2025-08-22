@@ -292,10 +292,10 @@ function specialInstructionFor(){
 }
 function updateRecommended(){
   const med=$("medicineSelect")?.value || "", form=$("formSelect")?.value || "";
-  $("bestPracticeBox").innerHTML = `<h2>Suggested practice for ${med} ${form}</h2>`;
-  $("hdrMedicine").textContent = `Medicine: ${med} ${form}`;
-  $("hdrSpecial").textContent = specialInstructionFor();
-}
+const box = $("bestPracticeBox");
+if (box) box.innerHTML = `<h2>Suggested practice for ${med} ${form}</h2>`;
+const hm = $("hdrMedicine"); if (hm) hm.textContent = `Medicine: ${med} ${form}`;
+const hs = $("hdrSpecial");  if (hs) hs.textContent = specialInstructionFor();}
 
 /* =================== Math / composition =================== */
 
@@ -854,7 +854,18 @@ function renderStandardTable(rows){
 }
 
 function renderPatchTable(rows){
-  const schedule=$("scheduleBlock"), patch=$("patchBlock"); schedule.style.display="none"; patch.style.display=""; patch.innerHTML="";
+const schedule=$("scheduleBlock"); let patch=$("patchBlock");
+if (!patch) {
+patch = document.createElement("div");
+patch.id = "patchBlock";
+patch.style.display = "none";
+if (schedule && schedule.parentNode) {
+schedule.parentNode.insertBefore(patch, schedule.nextSibling);
+} else {
+document.body.appendChild(patch);
+}
+}
+ schedule.style.display="none"; patch.style.display=""; patch.innerHTML="";
   const table=document.createElement("table"); table.className="table";
   const thead=document.createElement("thead"); const hr=document.createElement("tr");
   ["Apply on","Remove on","Patch strength(s)","Instructions"].forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
@@ -898,7 +909,8 @@ function setFooterText(cls){
     "Proton Pump Inhibitor": "Withdrawal: rebound heartburn.",
     Antipsychotic: "Withdrawal: sleep disturbance, anxiety, return of target symptoms.",
   }[cls] || "—";
-  $("expBenefits").textContent=exp; $("withdrawalInfo").textContent=wdr;
+const e = $("expBenefits");     if (e) e.textContent = exp;
+const w = $("withdrawalInfo");  if (w) w.textContent = wdr;
 }
 
 /* ===== Unified print/PDF styling + guards ===== */
