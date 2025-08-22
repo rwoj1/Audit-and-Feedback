@@ -323,6 +323,8 @@ function renderDoseLines(){
 }
 /* =================== Suggested practice header =================== */
 
+/* =================== Suggested practice header =================== */
+
 function specialInstructionFor(){
   const cls  = $("classSelect")?.value || "";
   const med  = $("medicineSelect")?.value || "";
@@ -343,6 +345,7 @@ function specialInstructionFor(){
 
   return "Swallow whole, do not halve or crush.";
 }
+
 // Pick "Suggested practice" text from JSON in order of specificity:
 // byMedicineForm -> byForm -> byClass -> default
 function practiceTextFromCopy(cls, med, form){
