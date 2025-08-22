@@ -88,9 +88,9 @@ function showToast(msg) {
   t._h = setTimeout(() => { t.style.display = "none"; }, 2200);
 }
 function setGenerateEnabled() {
-  const p1Pct = parseFloat($("phase1Percent")?.value || "");
-  const p1Int = parseInt($("phase1Days")?.value || "", 10);
-  const gen   = $("generateBtn");
+  const p1Pct = parseFloat($("p1Percent")?.value || "");
+  const p1Int = parseInt($("p1Interval")?.value || "", 10);
+  const gen = $("generateBtn");
   const ready = Number.isFinite(p1Pct) && p1Pct > 0 && Number.isFinite(p1Int) && p1Int > 0;
   if (gen) gen.disabled = !ready;
 }
@@ -343,9 +343,6 @@ function specialInstructionFor(){
 
   return "Swallow whole, do not halve or crush.";
 }
-  return "Swallow whole, do not halve or crush.";
-}
-
 // Pick "Suggested practice" text from JSON in order of specificity:
 // byMedicineForm -> byForm -> byClass -> default
 function practiceTextFromCopy(cls, med, form){
@@ -1082,14 +1079,12 @@ function init(){
     reviewDt&& reviewDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
   });
 }
-document.addEventListener("DOMContentLoaded", ()=>{
-  loadCopy().finally(()=>{
+document.addEventListener("DOMContentLoaded", () => {
+  loadCopy().finally(() => {
     try {
       init();
       setDisclaimerFromCopy();
-      updateRecommended();                   // populate once on load
-      // Optional: console.info("copy.json version:", COPY?.version);
-    } catch(e){
+    } catch (e) {
       console.error(e);
       alert("Init error: " + (e?.message || String(e)));
     }
