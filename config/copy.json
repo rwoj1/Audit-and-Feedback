@@ -18,5 +18,26 @@
       "expectedBenefits": "Review at 4–12 weeks; incorporate non-drug strategies (sleep, diet, positioning).",
       "withdrawal": "Rebound heartburn."
     }
+    {
+  "version": "2025-08-22",
+  "disclaimer": "This is a guide only \u2013 follow the advice of your healthcare professional.",
+  "footerByClass": { /* ...your existing footer text... */ },
+
+  "practiceText": {
+    "default": "Swallow whole, do not halve or crush.",
+    "byClass": {
+      "Benzodiazepines / Z-Drug (BZRA)": "",
+      "Antipsychotic": ""
+    },
+    "byForm": {
+      "Patch": "Apply to intact skin as directed. Do not cut patches.",
+      "Orally Dispersible Tablet": "The orally dispersible tablet can be dispersed in the mouth."
+    },
+    "byMedicineForm": {
+      "Lansoprazole|Orally Dispersible Tablet": "The orally dispersible tablet can be dispersed in the mouth."
+    }
+  }
+}
+
   }
 }
