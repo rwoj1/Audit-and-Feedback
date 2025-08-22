@@ -80,7 +80,23 @@ function setGenerateEnabled() {
   const ready = Number.isFinite(p1Pct) && p1Pct > 0 && Number.isFinite(p1Int) && p1Int > 0;
   if (gen) gen.disabled = !ready;
 }
+function setDisclaimerFromCopy(){
+  const txt = COPY.disclaimer || DEFAULT_COPY.disclaimer;
 
+  // Try an existing placeholder if you already added one:
+  const spot = document.getElementById("disclaimerLine");
+  if (spot) { spot.textContent = txt; return; }
+
+  // If no placeholder exists, we add it under your output header safely:
+  const output = document.getElementById("outputCard") || document.body;
+  const p = document.createElement("p");
+  p.id = "disclaimerLine";
+  p.textContent = txt;
+  p.style.margin = "8px 0 16px 0";
+  p.style.fontSize = "12px";
+  p.style.opacity = "0.8";
+  output.insertBefore(p, output.firstChild); // top of output card
+}
 function setDirty(v = true) {
   _dirtySinceGenerate = !!v;
   const printBtn = $("printBtn");
@@ -969,22 +985,12 @@ instr = `Apply ${n === 1 ? "patch" : "patches"} every ${everyDays} days.`;
 /* =================== Footer =================== *//* =================== Footer =================== */
 
 function setFooterText(cls){
-  const exp = {
-    Opioid: "Expected benefits: Improved function and reduced opioid-related harms.",
-    "Benzodiazepines / Z-Drug (BZRA)": "Expected benefits: Improved cognition, daytime alertness, and reduced falls.",
-    "Proton Pump Inhibitor": "Expected benefits: Review at 4–12 weeks; incorporate non-drug strategies (sleep, diet, positioning).",
-    Antipsychotic: "Expected benefits: Lower risk of metabolic/extrapyramidal adverse effects.",
-  }[cls] || "—";
-  const wdr = {
-    Opioid: "Withdrawal: transient pain flare, cravings, mood changes.",
-    "Benzodiazepines / Z-Drug (BZRA)": "Withdrawal: insomnia, anxiety, irritability.",
-    "Proton Pump Inhibitor": "Withdrawal: rebound heartburn.",
-    Antipsychotic: "Withdrawal: sleep disturbance, anxiety, return of target symptoms.",
-  }[cls] || "—";
-const e = $("expBenefits");     if (e) e.textContent = exp;
-const w = $("withdrawalInfo");  if (w) w.textContent = wdr;
+  const f = (COPY.footerByClass && COPY.footerByClass[cls]) || DEFAULT_COPY.footerByClass[cls];
+  const exp = f?.expectedBenefits || "—";
+  const wdr = f?.withdrawal || "—";
+  const e = document.getElementById("expBenefits");     if (e) e.textContent = exp;
+  const w = document.getElementById("withdrawalInfo");  if (w) w.textContent = wdr;
 }
-
 /* ===== Unified print/PDF styling + guards ===== */
 function _printCSS(){
   return `<style>
@@ -1060,15 +1066,4 @@ function init(){
   updateRecommended();
 }
 
-document.addEventListener("DOMContentLoaded", ()=>{
-  loadCopy().finally(()=>{
-    try {
-      init();
-      setDisclaimerFromCopy(); // we'll add this in Step 3A
-    } catch(e){
-      console.error(e);
-      alert("Init error: " + (e?.message || String(e)));
-    }
-  });
-});
-
+document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
