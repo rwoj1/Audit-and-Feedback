@@ -854,24 +854,6 @@ function renderStandardTable(rows){
 }
 
 function renderPatchTable(rows){
-  let schedule = $("scheduleBlock");
-  let patch = $("patchBlock");
-
-  // Self-heal if #patchBlock is missing in HTML
-  if (!patch) {
-    patch = document.createElement("div");
-    patch.id = "patchBlock";
-    patch.style.display = "none";
-    if (schedule && schedule.parentNode) {
-      schedule.parentNode.insertBefore(patch, schedule.nextSibling);
-    } else {
-      document.body.appendChild(patch);
-    }
-  }
-
-  schedule.style.display = "none";
-  patch.style.display = "";
-  patch.innerHTML = "";
   const schedule=$("scheduleBlock"), patch=$("patchBlock"); schedule.style.display="none"; patch.style.display=""; patch.innerHTML="";
   const table=document.createElement("table"); table.className="table";
   const thead=document.createElement("thead"); const hr=document.createElement("tr");
