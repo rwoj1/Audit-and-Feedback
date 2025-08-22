@@ -1066,4 +1066,14 @@ function init(){
   updateRecommended();
 }
 
-document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
+document.addEventListener("DOMContentLoaded", ()=>{
+  loadCopy().finally(()=>{
+    try {
+      init();
+      setDisclaimerFromCopy(); // puts the disclaimer under the header
+    } catch(e){
+      console.error(e);
+      alert("Init error: " + (e?.message || String(e)));
+    }
+  });
+});
