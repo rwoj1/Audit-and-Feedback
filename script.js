@@ -884,10 +884,12 @@ function renderPatchTable(rows){
   thead.appendChild(hr); table.appendChild(thead);
   const tbody = document.createElement("tbody");
 
+  // Fentanyl = every 3 days, Buprenorphine = every 7 days
   const medName = ($("medicineSelect")?.value || "");
   const everyDays = /Fentanyl/i.test(medName) ? 3 : 7;
 
   if (!rows || rows.length === 0) {
+    // Helpful fallback row if nothing generated
     const tr = document.createElement("tr");
     tr.appendChild(td("","center"));
     tr.appendChild(td("","center"));
@@ -896,54 +898,34 @@ function renderPatchTable(rows){
     tbody.appendChild(tr);
   } else {
     rows.forEach((r,rowIdx)=>{
-      const tr=document.createElement("tr"); if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
-      tr.appendChild(td(r.date || ""));
-      tr.appendChild(td((r.stop||r.review) ? "" : (r.remove || "")));
-      tr.appendChild(td((r.patches||[]).length ? r.patches.map(v=>`${v} mcg/hr`).join(" + ") : ""));
+      const tr=document.createElement("tr");
+      if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
+
+      tr.appendChild(td(r.date || ""));                                       // Apply on
+      tr.appendChild(td((r.stop||r.review) ? "" : (r.remove || "")));         // Remove on
+      tr.appendChild(td((r.patches||[]).length ?                              // Patch strengths
+        r.patches.map(v=>`${v} mcg/hr`).join(" + ") : ""
+      ));
+
+      // Instructions
       let instr="";
-      if (r.stop) instr="Stop.";
+      if (r.stop)      instr="Stop.";
       else if (r.review) instr="Review with your doctor the ongoing plan.";
       else {
         const n=(r.patches||[]).length;
         instr = `Apply ${n===1?"1 patch":`${n} patches`} every ${everyDays} days.`;
       }
       tr.appendChild(td(instr));
+
       tbody.appendChild(tr);
     });
   }
 
   table.appendChild(tbody);
   patch.appendChild(table);
-} schedule.style.display="none"; patch.style.display=""; patch.innerHTML="";
-  const table=document.createElement("table"); table.className="table";
-  const thead=document.createElement("thead"); const hr=document.createElement("tr");
-  ["Apply on","Remove on","Patch strength(s)","Instructions"].forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
-  thead.appendChild(hr); table.appendChild(thead);
-  const tbody=document.createElement("tbody");
-
-  const everyDays=($("medicineSelect").value==="Fentanyl")?3:7;
-
-  rows.forEach((r,rowIdx)=>{
-    const tr=document.createElement("tr"); if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
-    tr.appendChild(td(r.date));
-    tr.appendChild(td((r.stop||r.review) ? "" : r.remove || ""));
-    tr.appendChild(td((r.patches||[]).length ? r.patches.map(v=>`${v} mcg/hr`).join(" + ") : ""));
-    let instr="";
-    if (r.stop) instr="Stop.";
-    else if (r.review) instr="Review with your doctor the ongoing plan.";
-    else {
-      const nPatches=(r.patches||[]).length;
-      instr=`Apply ${nPatches===1?"1 patch":`${nPatches} patches`} every ${everyDays} days.`;
-    }
-    tr.appendChild(td(instr));
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(tbody);
-  patch.appendChild(table);
 }
 
-/* =================== Footer =================== */
+/* =================== Footer =================== *//* =================== Footer =================== */
 
 function setFooterText(cls){
   const exp = {
