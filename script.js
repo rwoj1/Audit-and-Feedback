@@ -14,6 +14,48 @@ const MAX_WEEKS = 60;
 const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 const EPS = 1e-6;
 
+// --- Copy defaults (used if JSON isn't found) ---
+const DEFAULT_COPY = {
+  disclaimer: "This is a guide only – follow the advice of your healthcare professional.",
+  footerByClass: {
+    "Opioid": {
+      expectedBenefits: "Improved function and reduced opioid-related harms.",
+      withdrawal: "Transient pain flare, cravings, mood changes."
+    },
+    "Benzodiazepines / Z-Drug (BZRA)": {
+      expectedBenefits: "Improved cognition, daytime alertness, and reduced falls.",
+      withdrawal: "Insomnia, anxiety, irritability."
+    },
+    "Antipsychotic": {
+      expectedBenefits: "Lower risk of metabolic/extrapyramidal adverse effects.",
+      withdrawal: "Sleep disturbance, anxiety, return of target symptoms."
+    },
+    "Proton Pump Inhibitor": {
+      expectedBenefits: "Review at 4–12 weeks; incorporate non-drug strategies (sleep, diet, positioning).",
+      withdrawal: "Rebound heartburn."
+    }
+  }
+};
+
+let COPY = DEFAULT_COPY;
+
+async function loadCopy() {
+  try {
+    const res = await fetch("config/copy.json?v=2025-08-22-1", { cache: "no-store" });
+    if (!res.ok) return; // keep defaults
+    const data = await res.json();
+    // shallow-merge with defaults so missing keys don't break anything
+    COPY = {
+      ...DEFAULT_COPY,
+      ...data,
+      footerByClass: { ...DEFAULT_COPY.footerByClass, ...(data.footerByClass || {}) }
+    };
+  } catch (_) {
+    // network/parse issue: keep DEFAULT_COPY
+  }
+}
+
+
 /* ---- Dirty state + gating ---- */
 let _dirtySinceGenerate = true;
 
