@@ -925,8 +925,10 @@ function renderPatchTable(rows){
       tr.appendChild(td(r.date || ""));                                       // Apply on
       tr.appendChild(td((r.stop||r.review) ? "" : (r.remove || "")));         // Remove on
       tr.appendChild(td((r.patches||[]).length ?                              // Patch strengths
-        r.patches.map(v=>`${v} mcg/hr`).join(" + ") : ""
-      ));
+        let list = r.patches || [];
+if (/Fentanyl/i.test(medName)) list = collapseFentanylTwelves(list);
+tr.appendChild(td(list.length ? list.map(v => `${v} mcg/hr`).join(" + ") : ""
+                 ));
 
       // Instructions
       let instr="";
