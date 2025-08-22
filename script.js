@@ -338,12 +338,15 @@ function updateRecommended(){
   const med = $("medicineSelect")?.value || "";
   const form = $("formSelect")?.value || "";
 
+  // Suggested Practice box (between dose lines and taper controls)
   const box = $("bestPracticeBox");
   if (box) {
     const pt = practiceTextFromCopy(cls, med, form);
-    box.innerHTML = `<h2>Suggested practice for ${med} ${form}</h2>${pt.html ? `<div class="suggested-text">${pt.html}</div>` : ""}`;
+    box.innerHTML = `<h2>Suggested practice for ${med} ${form}</h2>` +
+                    (pt.html ? `<div class="suggested-text">${pt.html}</div>` : "");
   }
 
+  // Output header lines
   const hm = $("hdrMedicine"); if (hm) hm.textContent = `Medicine: ${med} ${form}`;
   const hs = $("hdrSpecial");
   if (hs) {
@@ -932,34 +935,85 @@ function updateRecommendedAndLines(){
   setDirty(true);
 }
 function init(){
-  document.querySelectorAll(".datepick").forEach(el=>{
-    if(window.flatpickr){ window.flatpickr(el, {dateFormat:"Y-m-d",allowInput:true}); } else { el.type="date"; }
+  // Convenience getter (uses your existing $ helper if present)
+  const $id = (id) => (typeof $ === "function" ? $(id) : document.getElementById(id));
+
+  // Core controls
+  const clsSel   = $id("classSelect");
+  const medSel   = $id("medicineSelect");
+  const formSel  = $id("formSelect");
+
+  const p1Pct    = $id("phase1Percent");
+  const p1Days   = $id("phase1Days");
+  const p2Pct    = $id("phase2Percent");
+  const p2Days   = $id("phase2Days");
+  const p2Start  = $id("phase2StartDate");
+
+  const startDt  = $id("startDate");
+  const reviewDt = $id("reviewDate");
+
+  const genBtn   = $id("generateBtn");
+
+  // --- Date pickers (flatpickr if available; otherwise native <input type="date">) ---
+  const setupPicker = (el) => {
+    if (!el) return;
+    try {
+      if (window.flatpickr) {
+        window.flatpickr(el, { dateFormat: "d/m/Y", allowInput: true });
+      } else {
+        // Fallback: ensure it's a date input; leave value as-is
+        if (!el.type || el.type !== "date") { try { el.type = "date"; } catch(_){} }
+      }
+    } catch(_) {}
+  };
+  [startDt, reviewDt, p2Start].forEach(setupPicker);
+
+  // --- Enable/disable Generate until Phase 1 has both fields ---
+  const gateGenerate = () => {
+    const okP1 = (parseFloat(p1Pct?.value)  > 0) && (parseInt(p1Days?.value)  > 0);
+    if (genBtn) genBtn.disabled = !okP1;
+  };
+  ["input","change"].forEach(evt=>{
+    p1Pct  && p1Pct.addEventListener(evt, gateGenerate);
+    p1Days && p1Days.addEventListener(evt, gateGenerate);
   });
-  if ($("p1Percent")) { $("p1Percent").value=""; $("p1Percent").placeholder="%"; }
-  if ($("p1Interval")) { $("p1Interval").value=""; $("p1Interval").placeholder="days"; }
-  populateClasses(); updateRecommendedAndLines();
-  $("classSelect").addEventListener("change", updateRecommendedAndLines);
-  $("medicineSelect").addEventListener("change", ()=>{ populateForms(); updateRecommended(); resetDoseLinesToLowest(); setFooterText($("classSelect")?.value); setDirty(true); });
-  $("formSelect").addEventListener("change", ()=>{ updateRecommended(); resetDoseLinesToLowest(); setDirty(true); });
-  $("addDoseLineBtn").addEventListener("click", ()=>{
-    const sList=strengthsForSelected();
-    doseLines.push({ id:nextLineId++, strengthStr:sList[0], qty:1, freqMode:defaultFreq() });
-    renderDoseLines(); setDirty(true);
+  gateGenerate();
+
+  // --- When selectors change, refresh suggested practice & footer copy ---
+  const refreshCopy = () => {
+    try {
+      // JSON-driven "Suggested practice" box + header line
+      updateRecommended();
+      // Class-specific footer from JSON
+      setFooterText(clsSel?.value || "");
+    } catch (e) {
+      console.error("refreshCopy error:", e);
+    }
+  };
+
+  clsSel  && clsSel.addEventListener("change", refreshCopy);
+  medSel  && medSel.addEventListener("change", refreshCopy);
+  formSel && formSel.addEventListener("change", refreshCopy);
+
+  // Initial paint (after JSON is loaded by DOMContentLoaded)
+  refreshCopy();
+
+  // (Optional) re-run gate when dates or Phase 2 fields change, just to be tidy
+  ["input","change"].forEach(evt=>{
+    p2Pct   && p2Pct.addEventListener(evt, gateGenerate);
+    p2Days  && p2Days.addEventListener(evt, gateGenerate);
+    p2Start && p2Start.addEventListener(evt, ()=>{ /* Phase 2 completeness handled elsewhere */ });
+    startDt && startDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
+    reviewDt&& reviewDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
   });
-  $("generateBtn").addEventListener("click", buildPlan);
-  $("resetBtn").addEventListener("click", ()=>location.reload());
-  $("printBtn").addEventListener("click", printOutputOnly);
-  $("savePdfBtn").addEventListener("click", saveOutputAsPdf);
-  watchDirty("#classSelect, #medicineSelect, #formSelect, #startDate, #reviewDate, #p1Percent, #p1Interval, #p2Percent, #p2Interval, #p2StartDate");
-  setDirty(true);
-  setGenerateEnabled();
-  updateRecommended();
 }
 document.addEventListener("DOMContentLoaded", ()=>{
   loadCopy().finally(()=>{
     try {
       init();
-      setDisclaimerFromCopy(); // puts the disclaimer under the header
+      setDisclaimerFromCopy();
+      updateRecommended();      // <— populate the Suggested practice box on first load
+      console.info("copy.json version:", COPY?.version); // shows in Console if JSON loaded
     } catch(e){
       console.error(e);
       alert("Init error: " + (e?.message || String(e)));
