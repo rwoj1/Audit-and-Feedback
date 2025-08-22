@@ -300,15 +300,19 @@ function renderDoseLines(){
   });
 }
 /* =================== Suggested practice header =================== */
+
 function specialInstructionFor(){
   const cls  = $("classSelect")?.value || "";
   const med  = $("medicineSelect")?.value || "";
   const form = $("formSelect")?.value || "";
 
+  // No generic line for BZRA and Antipsychotics
   if (cls === "Benzodiazepines / Z-Drug (BZRA)" || cls === "Antipsychotic") return "";
 
+  // Generic patch note if JSON has nothing specific
   if (/Patch/i.test(form)) return "Apply to intact skin as directed. Do not cut patches.";
 
+  // Lansoprazole ODT
   if (cls === "Proton Pump Inhibitor"
       && /Lansoprazole/i.test(med)
       && /Orally\s*Dispersible\s*Tablet/i.test(form)) {
@@ -316,15 +320,22 @@ function specialInstructionFor(){
   }
 
   return "Swallow whole, do not halve or crush.";
-}// Pick "Suggested practice" text from JSON in order of specificity:
+}
+
+// Pick "Suggested practice" text from JSON in order of specificity:
 // byMedicineForm -> byForm -> byClass -> default
 function practiceTextFromCopy(cls, med, form){
   const PT = COPY.practiceText || {};
-  const key = `${med}|${form}`;
-  let val = PT.byMedicineForm && PT.byMedicineForm[key];
-  if (val == null) val = PT.byForm && PT.byForm[form];
-  if (val == null) val = PT.byClass && PT.byClass[cls];
-  if (val == null) val = PT.default;
+  const norm = s => (s || "").trim();
+  const keyMF = `${norm(med)}|${norm(form)}`;
+
+  let val =
+    (PT.byMedicineForm && PT.byMedicineForm[keyMF]) ??
+    (PT.byForm && PT.byForm[norm(form)]) ??
+    (PT.byClass && PT.byClass[norm(cls)]) ??
+    PT.default;
+
+  // Support string or array (array renders as bullets)
   if (Array.isArray(val)){
     return {
       html: `<ul style="margin:8px 0 0 18px;">${val.map(x => `<li>${x}</li>`).join("")}</ul>`,
@@ -336,37 +347,13 @@ function practiceTextFromCopy(cls, med, form){
   }
   return { html: "", text: "" };
 }
-nsoprazole/i.test(med) && /Orally\s*Dispersible\s*Tablet/i.test(form)) {
-    return "The orally dispersible tablet can be dispersed in the mouth.";
-  }
-  return "Swallow whole, do not halve or crush";
-}
-// Pick "Suggested practice" text from JSON in order of specificity:
-// byMedicineForm -> byForm -> byClass -> default
-function practiceTextFromCopy(cls, med, form){
-  const PT = COPY.practiceText || {};
-  const key = `${(med||"").trim()}|${(form||"").trim()}`;
 
-  let val = PT.byMedicineForm?.[key]
-         ?? PT.byForm?.[(form||"").trim()]
-         ?? PT.byClass?.[(cls||"").trim()]
-         ?? PT.default;
-
-  if (Array.isArray(val)){
-    return {
-      html: `<ul style="margin:8px 0 0 18px;">${val.map(x => `<li>${x}</li>`).join("")}</ul>`,
-      text: val.join(" • ")
-    };
-  }
-  if (typeof val === "string") return { html: val, text: val };
-  return { html: "", text: "" };
-}
 function updateRecommended(){
-  const cls = $("classSelect")?.value || "";
-  const med = $("medicineSelect")?.value || "";
+  const cls  = $("classSelect")?.value || "";
+  const med  = $("medicineSelect")?.value || "";
   const form = $("formSelect")?.value || "";
 
-  // Suggested Practice box (between dose lines and taper controls)
+  // Box between dose lines and taper controls
   const box = $("bestPracticeBox");
   if (box) {
     const pt = practiceTextFromCopy(cls, med, form);
