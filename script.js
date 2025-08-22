@@ -79,7 +79,29 @@ function tabletsPhraseDigits(q){ // instruction lines
   if (frac === 0.75) return whole ? `${_smallIntToWords(whole)} and three quarters of a tablet` : "three quarters of a tablet";
   return `${_smallIntToWords(whole)} and ${String(frac)} of a tablet`;
 }
+// Collapse pairs of 12/12.5 to 25 (repeat until no pairs remain)
+function collapseFentanylTwelves(patches){
+  // Accept numbers like 12, 12.5, 25, 37.5, 50, etc.
+  const isTwelve = v => Math.abs(v - 12) < 0.01 || Math.abs(v - 12.5) < 0.01;
 
+  // Count twelves
+  let twelves = 0;
+  const others = [];
+  for (const v of patches) {
+    if (isTwelve(v)) twelves++;
+    else others.push(v);
+  }
+
+  // Turn every pair of twelves into a 25
+  const pairs = Math.floor(twelves / 2);
+  for (let i = 0; i < pairs; i++) others.push(25);
+
+  // If an odd one is left, keep a single 12
+  if (twelves % 2 === 1) others.push(12);
+
+  // Nice ordering (highest first)
+  return others.sort((a, b) => b - a);
+}
 /* ===== Dose-form nouns for labels/instructions ===== */
 function doseFormNoun(form) {
   if (/Patch/i.test(form)) return "patches";
