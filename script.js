@@ -911,8 +911,8 @@ function renderPatchTable(rows){
       if (r.stop)      instr="Stop.";
       else if (r.review) instr="Review with your doctor the ongoing plan.";
       else {
-        const n=(r.patches||[]).length;
-        instr = `Apply ${n===1?"1 patch":`${n} patches`} every ${everyDays} days.`;
+const n = (r.patches || []).length;
+instr = `Apply ${n === 1 ? "patch" : "patches"} every ${everyDays} days.`;
       }
       tr.appendChild(td(instr));
 
