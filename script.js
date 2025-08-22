@@ -227,7 +227,7 @@ function renderDoseLines(){
     sSel.value=ln.strengthStr || sList[0];
 
     const fSel=row.querySelector(".dl-freq"); fSel.innerHTML="";
-    if(form==="Patch"){
+    if(/Patch/i.test(form)){
       const o=document.createElement("option"); o.value="PATCH"; o.textContent=($("medicineSelect").value==="Fentanyl")?"Every 3 days":"Every 7 days";
       fSel.appendChild(o); fSel.disabled=true;
     } else if(cls==="Benzodiazepines / Z-Drug (BZRA)"){
@@ -854,18 +854,67 @@ function renderStandardTable(rows){
 }
 
 function renderPatchTable(rows){
-const schedule=$("scheduleBlock"); let patch=$("patchBlock");
-if (!patch) {
-patch = document.createElement("div");
-patch.id = "patchBlock";
-patch.style.display = "none";
-if (schedule && schedule.parentNode) {
-schedule.parentNode.insertBefore(patch, schedule.nextSibling);
-} else {
-document.body.appendChild(patch);
-}
-}
- schedule.style.display="none"; patch.style.display=""; patch.innerHTML="";
+  // Find containers (self-heal if #patchBlock is missing)
+  const schedule = $("scheduleBlock");
+  let patch = $("patchBlock");
+  if (!patch) {
+    patch = document.createElement("div");
+    patch.id = "patchBlock";
+    patch.style.display = "none";
+    if (schedule && schedule.parentNode) {
+      schedule.parentNode.insertBefore(patch, schedule.nextSibling);
+    } else {
+      document.body.appendChild(patch);
+    }
+  }
+
+  // Toggle visibility
+  if (schedule) schedule.style.display = "none";
+  patch.style.display = "";
+  patch.innerHTML = "";
+
+  // Build table shell
+  const table = document.createElement("table");
+  table.className = "table";
+  const thead = document.createElement("thead");
+  const hr = document.createElement("tr");
+  ["Apply on","Remove on","Patch strength(s)","Instructions"].forEach(h=>{
+    const th=document.createElement("th"); th.textContent=h; hr.appendChild(th);
+  });
+  thead.appendChild(hr); table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+
+  const medName = ($("medicineSelect")?.value || "");
+  const everyDays = /Fentanyl/i.test(medName) ? 3 : 7;
+
+  if (!rows || rows.length === 0) {
+    const tr = document.createElement("tr");
+    tr.appendChild(td("","center"));
+    tr.appendChild(td("","center"));
+    tr.appendChild(td("","center"));
+    tr.appendChild(td("No patch rows generated — check Phase 1 % and that Number of patches ≥ 1.",""));
+    tbody.appendChild(tr);
+  } else {
+    rows.forEach((r,rowIdx)=>{
+      const tr=document.createElement("tr"); if((rowIdx%2)===1) tr.style.background="rgba(0,0,0,0.06)";
+      tr.appendChild(td(r.date || ""));
+      tr.appendChild(td((r.stop||r.review) ? "" : (r.remove || "")));
+      tr.appendChild(td((r.patches||[]).length ? r.patches.map(v=>`${v} mcg/hr`).join(" + ") : ""));
+      let instr="";
+      if (r.stop) instr="Stop.";
+      else if (r.review) instr="Review with your doctor the ongoing plan.";
+      else {
+        const n=(r.patches||[]).length;
+        instr = `Apply ${n===1?"1 patch":`${n} patches`} every ${everyDays} days.`;
+      }
+      tr.appendChild(td(instr));
+      tbody.appendChild(tr);
+    });
+  }
+
+  table.appendChild(tbody);
+  patch.appendChild(table);
+} schedule.style.display="none"; patch.style.display=""; patch.innerHTML="";
   const table=document.createElement("table"); table.className="table";
   const thead=document.createElement("thead"); const hr=document.createElement("tr");
   ["Apply on","Remove on","Patch strength(s)","Instructions"].forEach(h=>{ const th=document.createElement("th"); th.textContent=h; hr.appendChild(th); });
@@ -941,8 +990,8 @@ function buildPlan(){
   $("hdrMedicine").textContent=`Medicine: ${med} ${form}`;
   $("hdrSpecial").textContent=`${specialInstructionFor()}`;
 
-  const isPatch = /Patch/i.test(form);
-  const rows=isPatch?buildPlanPatch():buildPlanTablets();
+const medName = ($("medicineSelect")?.value || "");
+const isPatch = /Patch/i.test(form) || /(Fentanyl|Buprenorphine)/i.test(medName);  const rows=isPatch?buildPlanPatch():buildPlanTablets();
   if(isPatch) renderPatchTable(rows); else renderStandardTable(rows);
   setFooterText(cls);
 
