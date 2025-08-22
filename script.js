@@ -1078,7 +1078,7 @@ function init(){
     startDt && startDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
     reviewDt&& reviewDt.addEventListener(evt, ()=>{ /* no-op; kept for future guards */ });
   });
-}
+
 document.addEventListener("DOMContentLoaded", () => {
   loadCopy().finally(() => {
     try {
