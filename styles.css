@@ -1,3 +1,4 @@
+
 :root{
   --bg:#0f172a; --card:#111827; --muted:#9ca3af; --text:#e5e7eb; --accent:#60a5fa; --border:#1f2937;
 }
@@ -34,7 +35,8 @@ button.ghost{background:transparent;border:1px solid var(--border);color:var(--t
 .center{text-align:center}
 .instructions-pre{white-space:pre-line}
 .output-head{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:8px}
-.footer-notes{margin-top:12px;color:#cbd5e1}
+.footer-notes { margin-top: 12px; padding-top: 8px; border-top: 1px solid #e5e5e5; }
+.class-footer  { white-space: pre-wrap; line-height: 1.35; font-size: 0.95rem; }
 
 @media (max-width:800px){
   .grid{grid-template-columns:1fr}
@@ -42,10 +44,222 @@ button.ghost{background:transparent;border:1px solid var(--border);color:var(--t
   .actions{flex-direction:column;align-items:flex-start}
 }
 
-/* Print styling (only output card is sent to print via JS) */
-@media print{
-  body{background:#fff;color:#000}
-  .card, .container{box-shadow:none;border:none}
-  .actions, .hint, .pill{display:none}
-  .table tbody td{background:#fff;border-color:#ddd}
+/* ==============================
+   PRINT / PDF rules
+   ============================== */
+
+@page { size: A4 portrait; margin: 16mm 12mm; }
+
+/* used when the script injects a print header; harmless if unused */
+.print-only { display: none; }
+
+@media print {
+  /* keep shading/colors exactly in print */
+  html, body, #outputCard, #outputCard * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* print just the chart card */
+  body.printing .container > * { display: none !important; }
+  body.printing #outputCard     { display: block !important; margin: 0 !important; }
+
+  /* white page; remove app chrome/bands/shadows */
+  html, body, main, .container, .card, #outputCard {
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+  .container::before, .container::after,
+  .card::before, .card::after,
+  #outputCard::before, #outputCard::after { content: none !important; display: none !important; }
+
+  /* hide on-screen header; show injected print header if present */
+  .output-head { display: none !important; }
+  .print-only  { display: block !important; }
+
+  /* optional injected header styling (safe to keep) */
+  .print-header      { margin: 0 0 10pt 0; padding-bottom: 6pt; border-bottom: 1px solid #000; }
+  .print-medline     { font-size: 14pt; font-weight: 600; margin: 0 0 2pt 0; }
+  .print-instruction { font-size: 10pt; margin: 0 0 2pt 0; }
+  .print-disclaimer  { font-size: 9pt; font-style: italic; margin: 0 0 8pt 0; }
+
+  /* table shell: use separate borders so border-radius prints cleanly */
+  .table, .plan-table {
+    width: 100% !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    table-layout: auto !important;
+    background: #fff !important;
+  }
+  .table thead { display: table-header-group; }
+  .table tfoot { display: table-footer-group; }
+
+  /* base cells (we'll override inside step for bubble look) */
+  .table th, .table td,
+  .plan-table th, .plan-table td {
+    border: 1px solid #000 !important;
+    padding: 6pt 8pt !important;
+    background: #fff !important;
+    color: #000 !important;
+    white-space: pre-line;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  /* HEADER ROW: only a bottom border */
+  .plan-table thead th {
+    border-width: 0 0 1px 0 !important;
+    border-style: solid !important;
+    border-color: #000 !important;
+    background: #fff !important;
+    text-align: left;
+  }
+
+  /* center the time-of-day columns (header + body) */
+  .plan-standard thead th:nth-child(4),
+  .plan-standard thead th:nth-child(5),
+  .plan-standard thead th:nth-child(6),
+  .plan-standard thead th:nth-child(7),
+  .plan-standard td.col-am,
+  .plan-standard td.col-mid,
+  .plan-standard td.col-din,
+  .plan-standard td.col-pm {
+    text-align: center !important;
+    vertical-align: middle !important;
+  }
+
+  /* === STEP BUBBLE (tablets/caps) === */
+  /* clear inner gridlines; we'll draw only the lines we want */
+  .plan-standard tbody.step-group td { border-color: transparent !important; background-clip: padding-box; }
+
+  /* outer rectangle of the step (left/right on all rows; top/bottom on first/last) */
+  .plan-standard tbody.step-group tr td:first-child { border-left: 1px solid #000 !important; }
+  .plan-standard tbody.step-group tr td:last-child  { border-right: 1px solid #000 !important; }
+  .plan-standard tbody.step-group tr:first-child td { border-top: 1px solid #000 !important; }
+  .plan-standard tbody.step-group tr:last-child  td { border-bottom: 1px solid #000 !important; }
+
+  /* one horizontal separator between strength rows */
+  .plan-standard tbody.step-group tr + tr td { border-top: 1px solid #000 !important; }
+
+  /* vertical lines INSIDE the step:
+     - no line after Date→Strength (no right on date; no left on strength)
+     - no line after Strength→Instructions (no left on instructions)
+     - YES lines before Morning/Midday/Dinner/Night */
+  .plan-standard tbody.step-group td.col-date,
+  .plan-standard tbody.step-group td.date-spacer { border-right: 0 !important; }
+  .plan-standard tbody.step-group td.col-strength,
+  .plan-standard tbody.step-group td.col-instr   { border-left: 0 !important; }
+  .plan-standard tbody.step-group td.col-am,
+  .plan-standard tbody.step-group td.col-mid,
+  .plan-standard tbody.step-group td.col-din,
+  .plan-standard tbody.step-group td.col-pm      { border-left: 1px solid #000 !important; }
+
+  /* make date look merged: remove inter-row top line in the Date cell */
+  .plan-standard tbody.step-group tr + tr td.col-date { border-top: 0 !important; }
+
+  /* rounded corners on the bubble */
+  .plan-standard tbody.step-group tr:first-child td:first-child { border-top-left-radius: 6pt !important; }
+  .plan-standard tbody.step-group tr:first-child td:last-child  { border-top-right-radius: 6pt !important; }
+  .plan-standard tbody.step-group tr:last-child  td:first-child { border-bottom-left-radius: 6pt !important; }
+  .plan-standard tbody.step-group tr:last-child  td:last-child  { border-bottom-right-radius: 6pt !important; }
+
+  /* zebra by whole step (first white, second grey) + fallback if TBODY splits */
+  .plan-standard tbody.step-group.step-odd  td { background: #fff !important; }
+  .plan-standard tbody.step-group.step-even td { background: #f2f2f2 !important; }
+  #outputCard tr[data-step].zebra-even td       { background: #f2f2f2 !important; }
+
+  /* === PATCH TABLE (leave layout as-is; still get bubble + zebra + separators) === */
+  .plan-patch tbody.step-group td { border-color: transparent !important; background-clip: padding-box; }
+  .plan-patch tbody.step-group tr td:first-child { border-left: 1px solid #000 !important; }
+  .plan-patch tbody.step-group tr td:last-child  { border-right: 1px solid #000 !important; }
+  .plan-patch tbody.step-group tr:first-child td { border-top: 1px solid #000 !important; }
+  .plan-patch tbody.step-group tr:last-child  td { border-bottom: 1px solid #000 !important; }
+  .plan-patch tbody.step-group tr + tr td       { border-top: 1px solid #000 !important; }
+  .plan-patch tbody.step-group.tr:first-child td:first-child { border-top-left-radius: 6pt !important; }
+  .plan-patch tbody.step-group.tr:first-child td:last-child  { border-top-right-radius: 6pt !important; }
+  .plan-patch tbody.step-group.tr:last-child  td:first-child { border-bottom-left-radius: 6pt !important; }
+  .plan-patch tbody.step-group.tr:last-child  td:last-child  { border-bottom-right-radius: 6pt !important; }
+  .plan-patch tbody.step-group.step-odd  td { background: #fff !important; }
+  .plan-patch tbody.step-group.step-even td { background: #f2f2f2 !important; }
+
+  /* footer clean & black */
+  .footer-notes, .footer-notes * { color:#000 !important; background:#fff !important; border:0 !important; }
+    /* A) Square corners: remove rounded edges on step bubbles */
+  .plan-standard tbody.step-group tr:first-child td:first-child,
+  .plan-standard tbody.step-group tr:first-child td:last-child,
+  .plan-standard tbody.step-group tr:last-child  td:first-child,
+  .plan-standard tbody.step-group tr:last-child  td:last-child,
+  .plan-patch    tbody.step-group tr:first-child td:first-child,
+  .plan-patch    tbody.step-group tr:first-child td:last-child,
+  .plan-patch    tbody.step-group tr:last-child  td:first-child,
+  .plan-patch    tbody.step-group tr:last-child  td:last-child {
+    border-radius: 0 !important;   /* was 6pt */
+  }
+
+  /* B) Remove any outer page/card border & shadows */
+  #outputCard, .card, .container, main {
+    border: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+  }
+    /* Nuke ALL rounded corners that might be coming from base .table styles */
+  .plan-standard td, .plan-standard th,
+  .plan-patch td,    .plan-patch th,
+  .plan-table td,    .plan-table th,
+  .table td,         .table th,
+  .table tr {
+    border-radius: 0 !important;
+    -webkit-border-radius: 0 !important;
+  }
+
+  /* Also ensure no row-level shadows are making rows look like bubbles */
+  .table tr,
+  .plan-standard tbody.step-group tr,
+  .plan-patch    tbody.step-group tr {
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+
+  /* Belt-and-braces: make absolutely sure NO row gets corner rounding */
+  .plan-standard tbody.step-group tr td:first-child,
+  .plan-standard tbody.step-group tr td:last-child,
+  .plan-patch    tbody.step-group tr td:first-child,
+  .plan-patch    tbody.step-group tr td:last-child {
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+  }
+    /* Remove ALL borders from the table header row (top row) */
+  .plan-table thead th,
+  .plan-standard thead th {
+    border: 0 !important;          /* no top/left/right/bottom */
+    background: #fff !important;    /* keep white header background */
+  }
+  /* Safety: some themes add a border on the <tr> itself */
+  .plan-table thead tr,
+  .plan-standard thead tr {
+    border: 0 !important;
+  }
+  /* Prevent a step from being split across pages (tablets & patches) */
+.plan-standard tbody.step-group,
+.plan-patch    tbody.step-group {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+/* Extra belt-and-braces on the rows themselves */
+.plan-standard tbody.step-group tr,
+.plan-patch    tbody.step-group tr {
+  break-inside: avoid !important;
+  page-break-inside: avoid !important;
+}
+
+    .footer-notes { margin-top: 8pt; padding-top: 6pt; border-top: 1pt solid #000; }
+  .class-footer { color: #000; }
+  
+/* Keep the header row repeating at the top of each printed page */
+.table thead { display: table-header-group !important; }
+
 }
