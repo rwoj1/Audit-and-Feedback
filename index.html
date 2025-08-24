@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Deprescribing Taper Planner</title>
 
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=print10">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
 </head>
 <body>
@@ -93,24 +93,25 @@
       </div>
     </section>
 
-    <section id="outputCard" class="card output">
-      <div class="output-head">
-        <h2 id="hdrMedicine">Medicine:</h2>
-        <div id="hdrSpecial" class="pill"></div>
-      </div>
+ <section id="outputCard" class="card output">
+  <div class="output-head">
+    <h2 id="hdrMedicine">Medicine:</h2>
+    <div id="hdrSpecial" class="pill"></div>
+  </div>
 
-      <div id="scheduleBlock"></div>
-      <div id="patchBlock" style="display:none"></div>
+  <div id="scheduleBlock"></div>
+  <div id="patchBlock" style="display:none"></div>
 
-      <div class="footer-notes">
-        <div><strong>Expected Benefits:</strong> <span id="expBenefits"></span></div>
-        <div><strong>Withdrawal:</strong> <span id="withdrawalInfo"></span></div>
-      </div>
-    </section>
+  <!-- INSERT THIS FOOTER RIGHT HERE -->
+  <div class="footer-notes">
+    <div id="classFooter" class="class-footer"></div>
+  </div>
+</section>
+
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
-  <script src="script.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="script.js?v=print10"></script>
 </body>
 </html>
