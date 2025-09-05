@@ -1102,14 +1102,8 @@ const CATALOG = {
     Pantoprazole: { Tablet: ["20 mg","40 mg"] },
     Rabeprazole: { Tablet: ["10 mg","20 mg"] },
   },
-  "Gabapentinoids": {
-    "Pregabalin": { forms: {"Capsule": [25, 75, 150, 300]   // mg},
-      split: { half:false, quarter:false }  // no splitting
-    },
-    "Gabapentin": {forms: {"Capsule": [100, 300, 400],"Tablet":  [600, 800]},
-      split: { half:false, quarter:false }  // no splitting
-    }
-  }
+  "Gabapentinoids": {"Pregabalin": { forms: {"Capsule": [25, 75, 150, 300]   // mg},},
+    "Gabapentin": {forms: {"Capsule": [100, 300, 400],"Tablet":  [600, 800]},} }
 };
 
 /* ===== Rounding minima (BZRA halves-only confirmed) ===== */
