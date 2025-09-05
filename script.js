@@ -519,6 +519,9 @@ const SUGGESTED_PRACTICE = {
 • Slower taper may be appropriate depending on symptoms.
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
 
+  gabapentinoids: `• Reduce X% every Y weeks with close monitoring
+[INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
+  
   ppi: `• Step-down to lowest effective dose, alternate-day dosing, or stop and use on-demand.
 • Review at 4–12 weeks.
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE]   [INSERT GUIDE TO RULESET]`,
@@ -584,6 +587,7 @@ function updateBestPracticeBox() {
     bzra: "Benzodiazepines / Z-Drugs (BZRA)",
     antipsychotic: "Antipsychotics",
     ppi: "Proton Pump Inhibitors",
+    Gapapentinoids: "Gabapentinoids"
   };
 
   const text = SUGGESTED_PRACTICE[key] || "";
@@ -1104,9 +1108,12 @@ const CATALOG = {
   },
   "Gabapentinoids": {
     Pregabalin: {"Capsule": [25, 75, 150, 300] },
-    Gabapentin: {"Capsule": [100, 300, 400],"Tablet":[600, 800]},
+    Gabapentin: {"Tablet/Capsule": [100, 300, 400, 600, 800]},
   }
   };
+
+// Gabapentin: map strength -> dose form when using the combined "Tablet/Capsule"
+const GABA_FORM_BY_STRENGTH = { 100: "Capsule", 300: "Capsule", 400: "Capsule", 600: "Tablet", 800: "Tablet" };
 
 /* ===== Rounding minima (BZRA halves-only confirmed) ===== */
 const BZRA_MIN_STEP = {
@@ -1202,17 +1209,17 @@ function canSplitTablets(cls, form, med){
 
 /* default frequency */
 function defaultFreq(){
-  const cls  = $("classSelect")?.value;
-  const med  = $("medicineSelect")?.value;
+  const cls = $("classSelect")?.value;
   const form = $("formSelect")?.value;
-  
+  const med = $("medicineSelect")?.value;
+
   if (form === "Patch") return "PATCH";
   if (cls === "Benzodiazepines / Z-Drug (BZRA)") return "PM";
-  if (cls === "Proton Pump Inhibitor")            return "DIN";
+  if (cls === "Proton Pump Inhibitor") return "DIN";
   if (cls === "Gabapentinoids") {
-    if (med === "Gabapentin")  return "TDS"; // AM + MID + PM
-    if (med === "Pregabalin")  return "BID"; 
-    return "BID";                         
+    if (med === "Gabapentin")  return "TDS";
+    if (med === "Pregabalin")  return "BID";
+    return "BID";
   }
   if (cls === "Opioid" || cls === "Antipsychotic") return "BID";
   return "AM";
@@ -1543,11 +1550,7 @@ function stepGabapentinoid(packs, percent, med, form){
   }
 
   // 5) return packs-like structure {AM:{mg:count}, MID:{}, DIN:{}, PM:{}}
-  return {
-    AM:  dist.AM  || {},
-    MID: dist.MID || {},
-    DIN: dist.DIN || {},
-    PM:  dist.PM  || {}
+ return { AM: {...}, MID: {...}, DIN: {...}, PM: {...} };
   };
 }
 
@@ -1920,16 +1923,16 @@ function perStrengthRowsFractional(r){
     if(q.PM)  lines.push(`Take ${tabletsPhraseDigits(q.PM)} at night`);
 
     // Build the Strength label
-    let strengthText = '';
-    const isOxyNal = /\boxycodone\b/i.test(medName) && /\bnaloxone\b/i.test(medName);
-    if (isOxyNal) {
-      // Follow oxycodone component for steps; naloxone is 1/2 of oxy
-      const oxy = b;
-      const nal = b / 2;
-      strengthText = `Oxycodone ${trimMg(oxy)} mg + naloxone ${trimMg(nal)} mg ${suffix}`;
-    } else {
-      strengthText = `${medName} ${trimMg(b)} mg ${suffix}`;
-    }
+// Build the strength label correctly (SR preserved; Oxy/Nx paired)
+let strengthLabel;
+if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
+  strengthLabel = oxyNxPairLabel(b); // e.g., "Oxycodone 20 mg + naloxone 10 mg SR tablet"
+} else if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
+  const df = GABA_FORM_BY_STRENGTH[b] || "Capsule";
+  strengthLabel = `${r.med} ${stripZeros(b)} mg ${df}`;
+} else {
+  strengthLabel = `${r.med} ${stripZeros(b)} mg ${formSuffixWithSR(r.form)}`;
+}
 
     rows.push({
       strengthLabel: strengthText,
