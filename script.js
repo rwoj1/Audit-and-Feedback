@@ -892,7 +892,7 @@ function renderStandardTable(stepRows){
   // Keep any footer label normalization you use elsewhere
   if (typeof normalizeFooterSpans === "function") normalizeFooterSpans();
 }
-*/ ======================Global Tiebreaker Rules================
+/* ======================Global Tiebreaker Rules================
 // --- tie-breaker for non-patch combos ---
 // A and B: { total:number, units:number, strengths:number[] }
 // strengths = flattened list of unit strengths, e.g. [150,75,25,25]
