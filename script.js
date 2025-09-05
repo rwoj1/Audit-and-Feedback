@@ -321,6 +321,153 @@ function patchSignature(list) {
   return arr.join("+"); // "" if no patches
 }
 
+// --- helpers to summarize an array of mg strengths into { mg: count } ---
+function summarizeUnitsArray(arr){
+  const m = {};
+  for (const mg of arr) m[mg] = (m[mg]||0) + 1;
+  return m;
+}
+function slotUnitsTotal(slotMap){
+  return Object.entries(slotMap || {}).reduce((s,[mg,q]) => s + (+mg)*q, 0);
+}
+function slotCount(slotMap){
+  return Object.values(slotMap || {}).reduce((s,q) => s + q, 0);
+}
+
+// Keep per-slot count ≤ cap by greedily moving smallest items to the other slot(s)
+function enforceSlotCapBID(AM, PM, cap){
+  // If both are within cap we're done
+  if (slotCount(AM) <= cap && slotCount(PM) <= cap) return;
+
+  // Move smallest from the overflowing slot to the other until both fit or no move possible
+  const moveOne = (from, to) => {
+    // find smallest mg present in 'from'
+    const keys = Object.keys(from).map(Number).sort((a,b)=>a-b);
+    for (const mg of keys) {
+      if (from[mg] > 0 && slotCount(to) < cap) {
+        from[mg]--; if (from[mg]===0) delete from[mg];
+        to[mg] = (to[mg]||0) + 1;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  let guard = 64;
+  while (guard-- && (slotCount(AM) > cap || slotCount(PM) > cap)) {
+    if (slotCount(AM) > cap && !moveOne(AM, PM)) break;
+    if (slotCount(PM) > cap && !moveOne(PM, AM)) break;
+  }
+}
+
+function enforceSlotCapTDS(AM, MID, PM, cap){
+  // Simple loop: push smallest out of any overflowing slot into the currently lightest slot
+  const smallestKey = (obj) => {
+    const keys = Object.keys(obj).map(Number).filter(k => obj[k] > 0).sort((a,b)=>a-b);
+    return keys[0] ?? null;
+  };
+  const moveOne = (from, to) => {
+    const mg = smallestKey(from);
+    if (mg == null) return false;
+    if (slotCount(to) >= cap) return false;
+    from[mg]--; if (from[mg]===0) delete from[mg];
+    to[mg] = (to[mg]||0) + 1;
+    return true;
+  };
+
+  let guard = 96;
+  while (guard--) {
+    const a = slotCount(AM), m = slotCount(MID), p = slotCount(PM);
+    if (a <= cap && m <= cap && p <= cap) break;
+
+    // pick the worst offender
+    const entries = [{n:"AM",c:a},{n:"MID",c:m},{n:"PM",c:p}].sort((x,y)=>y.c-x.c);
+    const worst = entries[0].n;
+    const best  = entries.at(-1).n;
+
+    const src = (worst==="AM"?AM:worst==="MID"?MID:PM);
+    const dst = (best==="AM"?AM:best==="MID"?MID:PM);
+    if (!moveOne(src, dst)) break;
+  }
+}
+
+// --- DISTRIBUTE: Pregabalin BID (AM <= PM, as even as possible) ---
+function distributePregabalinBID(unitsArr, perSlotCap=4){
+  // unitsArr = [{mg, q}, ...]
+  const flat = [];
+  unitsArr.forEach(({mg, q}) => { for (let i=0;i<q;i++) flat.push(mg); });
+  flat.sort((a,b)=>b-a);
+
+  const AMList = [], PMList = [];
+  let sumAM = 0, sumPM = 0;
+
+  // Greedy balance by total mg; keep AM <= PM naturally
+  for (const mg of flat) {
+    if (sumAM <= sumPM) { AMList.push(mg); sumAM += mg; }
+    else                { PMList.push(mg); sumPM += mg; }
+  }
+
+  const AM = summarizeUnitsArray(AMList);
+  const PM = summarizeUnitsArray(PMList);
+
+  // Enforce ≤ perSlotCap by moving smallest if needed
+  enforceSlotCapBID(AM, PM, perSlotCap);
+
+  // Final guard to keep AM <= PM (by mg total). If not, swap one smallest.
+  if (slotUnitsTotal(AM) > slotUnitsTotal(PM)) {
+    // try swap smallest from AM to PM
+    const amKeys = Object.keys(AM).map(Number).sort((a,b)=>a-b);
+    if (amKeys.length) {
+      const mg = amKeys[0];
+      AM[mg]--; if (AM[mg]===0) delete AM[mg];
+      PM[mg] = (PM[mg]||0) + 1;
+    }
+  }
+
+  return { AM, MID:{}, DIN:{}, PM };
+}
+
+// --- DISTRIBUTE: Gabapentin TDS (AM = MID <= PM as even as possible) ---
+function distributeGabapentinTDS(unitsArr, perSlotCap=4){
+  const flat = [];
+  unitsArr.forEach(({mg, q}) => { for (let i=0;i<q;i++) flat.push(mg); });
+  flat.sort((a,b)=>b-a);
+
+  const AMList = [], MIDList = [], PMList = [];
+  let sumAM=0, sumMID=0, sumPM=0;
+
+  for (const mg of flat) {
+    // Keep PM heaviest; balance AM and MID
+    if (sumPM <= sumAM || sumPM <= sumMID) { PMList.push(mg); sumPM += mg; continue; }
+    if (sumAM <= sumMID) { AMList.push(mg); sumAM += mg; }
+    else                 { MIDList.push(mg); sumMID += mg; }
+  }
+
+  const AM  = summarizeUnitsArray(AMList);
+  const MID = summarizeUnitsArray(MIDList);
+  const PM  = summarizeUnitsArray(PMList);
+
+  // Enforce caps if a slot exceeds limit
+  enforceSlotCapTDS(AM, MID, PM, perSlotCap);
+
+  // Nudge to AM≈MID (they can differ by one unit)
+  const tA = slotUnitsTotal(AM), tM = slotUnitsTotal(MID);
+  if (Math.abs(tA - tM) > 0) {
+    // Try moving one smallest from the heavier of AM/MID to the lighter
+    const from = (tA > tM) ? AM : MID;
+    const to   = (tA > tM) ? MID : AM;
+    const keys = Object.keys(from).map(Number).sort((a,b)=>a-b);
+    if (keys.length && slotCount(to) < 4) {
+      const mg = keys[0];
+      from[mg]--; if (from[mg]===0) delete from[mg];
+      to[mg] = (to[mg]||0) + 1;
+    }
+  }
+
+  return { AM, MID, DIN:{}, PM };
+}
+
+
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
 
 // PRINT: use your existing print CSS and guard against stale charts
@@ -383,6 +530,7 @@ const CLASS_FOOTER_COPY = {
   bzra:          "Insert specific footer + disclaimer for Benzodiazepines / Z Drugs (BZRA)",
   antipsychotic: "Insert specific footer + disclaimer for Antipsychotics",
   ppi:           "Insert specific footer + disclaimer for Proton Pump Inhibitors",
+  Gabapentinoids: "Insert specific footer + disclaimer for Gabapentinoids",
   _default:      ""
 };
 
@@ -744,9 +892,64 @@ function renderStandardTable(stepRows){
   // Keep any footer label normalization you use elsewhere
   if (typeof normalizeFooterSpans === "function") normalizeFooterSpans();
 }
+======================Global Tiebreaker Rules================
+// --- tie-breaker for non-patch combos ---
+// A and B: { total:number, units:number, strengths:number[] }
+// strengths = flattened list of unit strengths, e.g. [150,75,25,25]
 
+  function cmpByDosePref(target, A, B) {
+  const dA = Math.abs(A.total - target);
+  const dB = Math.abs(B.total - target);
+  if (dA !== dB) return dA - dB;           // 1) closest total
+  if (A.units !== B.units) return A.units - B.units; // 2) fewest units
+  const upA = A.total >= target, upB = B.total >= target;
+  if (upA !== upB) return upA ? -1 : 1;    // 3) prefer rounding up
+  const maxA = A.strengths.length ? Math.max(...A.strengths) : 0;
+  const maxB = B.strengths.length ? Math.max(...B.strengths) : 0;
+  if (maxA !== maxB) return maxB - maxA;   // 4) higher single strengths
+  return 0;
+}
 
+function slotsForFreq(freq){
+  switch (freq) {
+    case "AM": case "MID": case "DIN": case "PM": return 1;
+    case "BID": return 2;
+    case "TDS": return 3;
+    case "QID": return 4;
+    default:    return 2;
+  }
+}
 
+// Enumerate achievable daily totals under per-slot caps; choose best per cmpByDosePref
+function selectBestOralTotal(target, strengths, freq, unitCapPerSlot=4) {
+  const maxSlots = slotsForFreq(freq);
+  const maxUnitsPerDay = Math.max(1, maxSlots * unitCapPerSlot);
+  const S = strengths.slice().sort((a,b)=>b-a);
+  let best = null;
+
+  function dfs(i, unitsUsed, totalMg, counts) {
+    if (unitsUsed > maxUnitsPerDay) return;
+    if (i === S.length) {
+      if (unitsUsed === 0) return;
+      const flat = [];
+      S.forEach((mg, idx) => { for (let k=0;k<(counts[idx]||0);k++) flat.push(mg); });
+      const cand = { total: totalMg, units: unitsUsed, strengths: flat,
+                     byStrength: new Map(S.map((mg, idx)=>[mg, counts[idx]||0])) };
+      if (!best || cmpByDosePref(target, cand, best) < 0) best = cand;
+      return;
+    }
+    const mg = S[i];
+    const maxThis = Math.min(maxUnitsPerDay - unitsUsed, maxUnitsPerDay);
+    for (let c = maxThis; c >= 0; c--) {
+      counts[i] = c;
+      dfs(i+1, unitsUsed + c, totalMg + c*mg, counts);
+    }
+    counts[i] = 0;
+  }
+
+  dfs(0, 0, 0, []);
+  return best;
+}
 
 /* =====================================================
    RENDER PATCH TABLE (fentanyl / buprenorphine)
@@ -862,7 +1065,7 @@ function renderPatchTable(stepRows) {
 
 /* =================== Catalogue (commercial only) =================== */
 
-const CLASS_ORDER = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor"];
+const CLASS_ORDER = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor","Gabapentinoids"];
 
 const CATALOG = {
   Opioid: {
@@ -899,6 +1102,14 @@ const CATALOG = {
     Pantoprazole: { Tablet: ["20 mg","40 mg"] },
     Rabeprazole: { Tablet: ["10 mg","20 mg"] },
   },
+  "Gabapentinoids": {
+    "Pregabalin": { forms: {"Capsule": [25, 75, 150, 300]   // mg},
+      split: { half:false, quarter:false }  // no splitting
+    },
+    "Gabapentin": {forms: {"Capsule": [100, 300, 400],"Tablet":  [600, 800]},
+      split: { half:false, quarter:false }  // no splitting
+    }
+  }
 };
 
 /* ===== Rounding minima (BZRA halves-only confirmed) ===== */
@@ -989,16 +1200,25 @@ function canSplitTablets(cls, form, med){
   if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return {half:false, quarter:false};
   if(cls==="Benzodiazepines / Z-Drug (BZRA)") return {half:true, quarter:false};
   if(cls==="Antipsychotic") return {half:true, quarter:false};
+  if (cls === "Gabapentinoids") return { half:false, quarter:false };
   return {half:true, quarter:true};
 }
 
 /* default frequency */
 function defaultFreq(){
-  const cls=$("classSelect")?.value, form=$("formSelect")?.value;
-  if(form==="Patch") return "PATCH";
-  if(cls==="Benzodiazepines / Z-Drug (BZRA)") return "PM";
-  if(cls==="Proton Pump Inhibitor") return "DIN";
-  if(cls==="Opioid" || cls==="Antipsychotic") return "BID";
+  const cls  = $("classSelect")?.value;
+  const med  = $("medicineSelect")?.value;
+  const form = $("formSelect")?.value;
+  
+  if (form === "Patch") return "PATCH";
+  if (cls === "Benzodiazepines / Z-Drug (BZRA)") return "PM";
+  if (cls === "Proton Pump Inhibitor")            return "DIN";
+  if (cls === "Gabapentinoids") {
+    if (med === "Gabapentin")  return "TDS"; // AM + MID + PM
+    if (med === "Pregabalin")  return "BID"; 
+    return "BID";                         
+  }
+  if (cls === "Opioid" || cls === "Antipsychotic") return "BID";
   return "AM";
 }
 
@@ -1284,6 +1504,57 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
+// ===== Gabapentinoids step =====
+// - Pregabalin: BID -> AM <= PM, as even as possible
+// - Gabapentin: TDS -> AM = MID <= PM, as even as possible
+// No splitting; ≤ 4 units per slot; choose daily total by global tie-break (closest → fewest units → up → higher strengths)
+function stepGabapentinoid(packs, percent, med, form){
+  const tot = packsTotalMg(packs); if (tot <= EPS) return packs;
+
+  // 1) compute new target (your usual rounding to the smallest marketed strength step)
+  const strengths = strengthsForSelected()
+                      .map(parseMgFromStrength)
+                      .filter(v => v > 0)
+                      .sort((a,b)=>a-b);
+  const step = strengths[0] || 1;
+
+  let target = roundTo(tot * (1 - percent/100), step);
+  if (target === tot && tot > 0) { // force progress if a step rounds to same
+    target = Math.max(0, tot - step);
+    target = roundTo(target, step);
+  }
+
+  // 2) frequency: Gabapentin TDS, Pregabalin BID (default rules you confirmed)
+  const freq = (med === "Gabapentin") ? "TDS" : "BID";
+
+  // 3) pick best achievable total & counts with your global tie-break
+  const perSlotCap = (typeof maxUnitsPerSlot === "function")
+    ? (maxUnitsPerSlot("Gabapentinoids", form, med) || 4)
+    : 4;
+
+  const best = selectBestOralTotal(target, strengths, freq, perSlotCap);
+  if (!best) return packs; // no change if nothing feasible (should be rare)
+
+  // 4) distribute to slots per class rule
+  const unitsArr = [];
+  best.byStrength.forEach((q, mg) => { if (q>0) unitsArr.push({ mg, q }); });
+
+  let dist;
+  if (freq === "BID") {
+    dist = distributePregabalinBID(unitsArr, perSlotCap);
+  } else { // TDS
+    dist = distributeGabapentinTDS(unitsArr, perSlotCap);
+  }
+
+  // 5) return packs-like structure {AM:{mg:count}, MID:{}, DIN:{}, PM:{}}
+  return {
+    AM:  dist.AM  || {},
+    MID: dist.MID || {},
+    DIN: dist.DIN || {},
+    PM:  dist.PM  || {}
+  };
+}
+
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
   const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
@@ -1324,12 +1595,13 @@ function buildPlanTablets(){
 
   const rows=[]; let date=new Date(startDate); const capDate=new Date(+startDate + THREE_MONTHS_MS);
 
-  const doStep = (phasePct) => {
-    if (cls === "Opioid") packs = stepOpioid_Shave(packs, phasePct, cls, med, form);
-    else if (cls === "Proton Pump Inhibitor") packs = stepPPI(packs, phasePct, cls, med, form);
-    else if (cls === "Benzodiazepines / Z-Drug (BZRA)") packs = stepBZRA(packs, phasePct, med, form);
-    else packs = stepAP(packs, phasePct, med, form);
-  };
+const doStep = (phasePct) => {
+  if (cls === "Opioid") packs = stepOpioid_Shave(packs, phasePct, cls, med, form);
+  else if (cls === "Proton Pump Inhibitor") packs = stepPPI(packs, phasePct, cls, med, form);
+  else if (cls === "Benzodiazepines / Z-Drug (BZRA)") packs = stepBZRA(packs, phasePct, med, form);
+  else if (cls === "Gabapentinoids") packs = stepGabapentinoid(packs, phasePct, med, form);
+  else packs = stepAP(packs, phasePct, med, form);
+};
 
   // Step 1 on start date using whichever phase applies at start
   const useP2Now = p2Start && (+startDate >= +p2Start);
@@ -1421,12 +1693,18 @@ function choosePatchTotal(prevTotal, target, med){
   const cand = [...sums.keys()].filter(t => t <= prevTotal + 1e-9);
   if (cand.length === 0) return { total: prevTotal, combo: [prevTotal] };
 
-  // Sort by closeness to desired; tie → higher total (you prefer the closer, then higher)
-  cand.sort((a,b) => {
-    const da = Math.abs(a - desired), db = Math.abs(b - desired);
-    if (Math.abs(da - db) > 1e-9) return da - db;
-    return b - a;
-  });
+cand.sort((a, b) => {
+  const da = Math.abs(a - desired), db = Math.abs(b - desired);
+  if (Math.abs(da - db) > 1e-9) return da - db; // 1) closest total wins
+
+  // 2) on equal distance, prefer FEWEST PATCHES for that total
+  const lenA = (sums.get(a) || [a]).length;
+  const lenB = (sums.get(b) || [b]).length;
+  if (lenA !== lenB) return lenA - lenB;
+
+  // 3) still tied → prefer "up" (higher total)
+  return b - a;
+});
 
   let pick  = cand[0];
   let combo = (sums.get(pick) || [pick]).slice();
