@@ -1105,7 +1105,7 @@ const CATALOG = {
   "Gabapentinoids": {
     Pregabalin: {"Capsule": [25, 75, 150, 300] },
     Gabapentin: {"Capsule": [100, 300, 400],"Tablet":[600, 800]},
-}
+};
 
 /* ===== Rounding minima (BZRA halves-only confirmed) ===== */
 const BZRA_MIN_STEP = {
