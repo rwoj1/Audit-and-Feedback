@@ -1550,7 +1550,7 @@ function stepGabapentinoid(packs, percent, med, form){
   }
 
   // 5) return packs-like structure {AM:{mg:count}, MID:{}, DIN:{}, PM:{}}
- return { AM: {...}, MID: {...}, DIN: {...}, PM: {...} };
+  return recomposeSlots(cur, cls, med, form);
 }
 
 /* ===== BZRA ===== */
