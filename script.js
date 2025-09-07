@@ -1971,12 +1971,11 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 } else {
   strengthLabel = `${r.med} ${stripZeros(b)} mg ${formSuffixWithSR(r.form)}`;
 }
-
-    rows.push({
-      strengthLabel: strengthText,
-      instructions: lines.join("\n"),
-      am: mkCell(q.AM), mid: mkCell(q.MID), din: mkCell(q.DIN), pm: mkCell(q.PM)
-    });
+   rows.push({
+  strengthLabel: strengthLabel,
+  instructions: lines.join("\n"),
+  am: mkCell(q.AM), mid: mkCell(q.MID), din: mkCell(q.DIN), pm: mkCell(q.PM)
+});
   });
 
   return rows;
