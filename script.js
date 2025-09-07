@@ -1,8 +1,29 @@
+/* ============================================================================
+  Deprescribing Taper Planner — script.js (Organized Edition)
+  Non-destructive organization: header + foldable regions only.
+============================================================================ */
+"use strict";
+
+/* ===================== TABLE OF CONTENTS =====================
+  1.  Constants & Tiny Utilities
+  2.  Patch Interval Rules (safety)
+  3.  Print / PDF Helpers & Decorations
+  4.  Dose Distribution Helpers (BID/TDS etc.)
+  5.  Renderers: Standard (tablets/caps) & Patch
+  6.  Catalogue & Form Labels
+  7.  Suggested Practice / Footers (copy)
+  8.  UI State, Dirty Flags, Toasts
+  9.  Validation & Gating (enable/disable)
+  10. Event Wiring
+  11. Boot / Init
+============================================================== */
+
 "use strict";
 
 /* ====================== Helpers ====================== */
 
 const $ = (id) => document.getElementById(id);
+//#region 1. Constants & Tiny Utilities
 const fmtDate = (d) =>
   new Date(d).toLocaleDateString("en-AU", { year: "numeric", month: "short", day: "numeric" });
 const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
@@ -15,7 +36,11 @@ const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 const EPS = 1e-6;
 
 /* ===== Patch interval safety (Fentanyl: ×3 days, Buprenorphine: ×7 days) ===== */
+//#endregion
+//#region 2. Patch Interval Rules (safety)
 function patchIntervalRule(){
+//#endregion
+//#region 10. Event Wiring
   const form = document.getElementById("formSelect")?.value || "";
   if (!/Patch/i.test(form)) return null;
   const med = document.getElementById("medicineSelect")?.value || "";
@@ -85,6 +110,8 @@ if (!inp._patchSnapAttached){
     const r = patchIntervalRule();
     if (r) snapIntervalToRule(inp, r);       // snap UP on blur/enter
     validatePatchIntervals(false);           // keep red/ok state in sync
+//#endregion
+//#region 9. Validation & Gating
     setGenerateEnabled();
   });
   inp._patchSnapAttached = true;
@@ -112,6 +139,8 @@ function ensureIntervalHints(){
 }
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
+//#endregion
+//#region 3. Print & PDF Helpers
 function getPrintTableAndType() {
   const std = document.querySelector("#scheduleBlock table");
   if (std) return { table: std, type: "standard" };
@@ -322,6 +351,8 @@ function patchSignature(list) {
 }
 
 // --- helpers to summarize an array of mg strengths into { mg: count } ---
+//#endregion
+//#region 4. Dose Distribution Helpers (BID/TDS caps)
 function summarizeUnitsArray(arr){
   const m = {};
   for (const mg of arr) m[mg] = (m[mg]||0) + 1;
@@ -499,11 +530,15 @@ function printOutputOnly() {
 }
 // Save PDF uses the browser's Print dialog; choose "Save as PDF"
 function saveOutputAsPdf() {
+//#endregion
+//#region 8. UI State, Dirty Flags, Toasts
   showToast('In the dialog, choose "Save as PDF".');
   printOutputOnly();
 }
 
 // --- Suggested practice copy (exact wording from your doc) ---
+//#endregion
+//#region 7. Suggested Practice & Footers
 const SUGGESTED_PRACTICE = {
   opioids: `Tailor the deprescribing plan based on the person’s clinical characteristics, goals and preferences. Consider:
 • < 3 months use: reduce the dose by 10% to 25% every week
@@ -744,6 +779,8 @@ function renderPrintHeader(container){
    - Stop/Review merged cell after date
    ========================================== */
 
+//#endregion
+//#region 5. Renderers (Standard & Patch)
 function renderStandardTable(stepRows){
   const scheduleHost = document.getElementById("scheduleBlock");
   const patchHost    = document.getElementById("patchBlock");
@@ -1069,6 +1106,8 @@ function renderPatchTable(stepRows) {
 
 /* =================== Catalogue (commercial only) =================== */
 
+//#endregion
+//#region 6. Catalogue (commercial strengths) & Label Helpers
 const CLASS_ORDER = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor","Gabapentinoids"];
 
 const CATALOG = {
@@ -1983,6 +2022,8 @@ function updateRecommendedAndLines(){
   setDirty(true);
 }
 
+//#endregion
+//#region 11. Boot / Init
 function init(){
   // 1) Date pickers (flatpickr if present; otherwise fallback to <input type="date">)
   document.querySelectorAll(".datepick").forEach(el=>{
@@ -2095,3 +2136,4 @@ updateClassFooter();
 }
 
 document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
+//#endregion
