@@ -1268,7 +1268,7 @@ function defaultFreq(){
   if (cls === "Benzodiazepines / Z-Drug (BZRA)") return "PM";
   if (cls === "Proton Pump Inhibitor") return "DIN";
   if (cls === "Gabapentinoids") {
-    if (med === "Gabapentin")  return "TDS";
+    if (med === "Gabapentin")  return "TID";
     if (med === "Pregabalin")  return "BID";
     return "BID";
   }
@@ -1600,7 +1600,7 @@ function stepGabapentinoid(packs, percent, med, form){
   }
 
   // 2) Frequency defaults per your requirement
-  const freq = (med === "Gabapentin") ? "TDS" : "BID";
+  const freq = (med === "Gabapentin") ? "TID" : "BID";
 
   // 3) choose best achievable total for the day
   const perSlotCap = (typeof maxUnitsPerSlot === "function")
@@ -1617,7 +1617,7 @@ function stepGabapentinoid(packs, percent, med, form){
   let dist;
   if (freq === "BID") {
     dist = distributePregabalinBID(unitsArr, perSlotCap);
-  } else { // TDS
+  } else { // TID
     dist = distributeGabapentinTDS(unitsArr, perSlotCap);
   }
 
