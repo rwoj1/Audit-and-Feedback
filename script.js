@@ -498,6 +498,16 @@ function distributeGabapentinTDS(unitsArr, perSlotCap=4){
   return { AM, MID, DIN:{}, PM };
 }
 
+function nounForGabapentinByStrength(form, med, strengthStr){
+  if (med === "Gabapentin" && form === "Tablet/Capsule") {
+    const mg = parseMgFromStrength(strengthStr);
+    const df = GABA_FORM_BY_STRENGTH[mg] || "Capsule";
+    // Return the plural heading word for the input label
+    return (df === "Tablet") ? "Tablets" : "Capsules";
+  }
+  // Fall back to your existing noun logic for everything else
+  return doseFormNoun(form);
+}
 
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
 
@@ -938,16 +948,18 @@ function renderStandardTable(stepRows){
 // A and B: { total:number, units:number, strengths:number[] }
 // strengths = flattened list of unit strengths, e.g. [150,75,25,25]
 
-  function cmpByDosePref(target, A, B) {
+/* ====================== Global Tiebreak + selector (used for oral classes) ====================== */
+
+function cmpByDosePref(target, A, B) {
   const dA = Math.abs(A.total - target);
   const dB = Math.abs(B.total - target);
-  if (dA !== dB) return dA - dB;           // 1) closest total
-  if (A.units !== B.units) return A.units - B.units; // 2) fewest units
+  if (dA !== dB) return dA - dB;                  // 1) closest total to target
+  if (A.units !== B.units) return A.units - B.units; // 2) fewer units per day
   const upA = A.total >= target, upB = B.total >= target;
-  if (upA !== upB) return upA ? -1 : 1;    // 3) prefer rounding up
+  if (upA !== upB) return upA ? -1 : 1;           // 3) prefer rounding up
   const maxA = A.strengths.length ? Math.max(...A.strengths) : 0;
   const maxB = B.strengths.length ? Math.max(...B.strengths) : 0;
-  if (maxA !== maxB) return maxB - maxA;   // 4) higher single strengths
+  if (maxA !== maxB) return maxB - maxA;          // 4) prefer higher single strengths
   return 0;
 }
 
@@ -962,7 +974,7 @@ function slotsForFreq(freq){
 }
 
 // Enumerate achievable daily totals under per-slot caps; choose best per cmpByDosePref
-function selectBestOralTotal(target, strengths, freq, unitCapPerSlot=4) {
+function selectBestOralTotal(target, strengths, freq, unitCapPerSlot = 4) {
   const maxSlots = slotsForFreq(freq);
   const maxUnitsPerDay = Math.max(1, maxSlots * unitCapPerSlot);
   const S = strengths.slice().sort((a,b)=>b-a);
@@ -1284,10 +1296,15 @@ function renderDoseLines(){
 
   doseLines.forEach((ln, idx)=>{
     const row=document.createElement("div"); row.style.cssText="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0";
-    const noun = doseFormNoun(form);
-    row.innerHTML=`<span class="badge">Line ${idx+1}</span>
+
+    // Decide noun from med/form/strength
+    const initialStrength = ln.strengthStr || "";
+    const noun = nounForGabapentinByStrength(form, med, initialStrength);
+
+    row.innerHTML = `
+      <span class="badge">Line ${idx+1}</span>
       <span>Strength:</span><select class="dl-strength" data-id="${ln.id}"></select>
-      <span>Number of ${noun}:</span><input class="dl-qty" data-id="${ln.id}" type="number" />
+      <span class="dl-noun">Number of ${noun}:</span><input class="dl-qty" data-id="${ln.id}" type="number" />
       <span>Frequency:</span><select class="dl-freq" data-id="${ln.id}"></select>
       <button type="button" class="secondary dl-remove" data-id="${ln.id}">Remove</button>`;
     box.appendChild(row);
@@ -1297,6 +1314,19 @@ function renderDoseLines(){
     sSel.innerHTML=""; sList.forEach(s=>{ const o=document.createElement("option"); o.value=s; o.textContent=s; sSel.appendChild(o); });
     sSel.value=ln.strengthStr || sList[0];
 
+const nounSpan = row.querySelector(".dl-noun");
+
+sSel.onchange = (e) => {
+  const id = +e.target.dataset.id;
+  const l = doseLines.find(x=>x.id===id);
+  if (l) l.strengthStr = e.target.value;
+
+  // live-update the noun text per selected strength
+  const newNoun = nounForGabapentinByStrength(form, med, e.target.value);
+  if (nounSpan) nounSpan.textContent = `Number of ${newNoun}:`;
+
+  setDirty(true);
+};    
     const fSel=row.querySelector(".dl-freq"); fSel.innerHTML="";
     if(/Patch/i.test(form)){
       const o=document.createElement("option"); o.value="PATCH"; o.textContent=($("medicineSelect").value==="Fentanyl")?"Every 3 days":"Every 7 days";
@@ -1304,7 +1334,7 @@ function renderDoseLines(){
     } else if(cls==="Benzodiazepines / Z-Drug (BZRA)"){
       const o=document.createElement("option"); o.value="PM"; o.textContent="Daily at night";
       fSel.appendChild(o); fSel.disabled=true;
-    } else if(cls==="Opioid" || cls==="Antipsychotic" || cls==="Proton Pump Inhibitor"){
+    } else if(cls==="Opioid" || cls==="Antipsychotic" || cls==="Proton Pump Inhibitor" || cls==="Gabapentinoids"){
       [
         ["AM","In the morning"],["MID","At midday"],["DIN","At dinner"],["PM","At night"],
         ["BID","Twice a day (morning & night)"],["TID","Three times a day"],["QID","Four times a day"]
@@ -1550,34 +1580,37 @@ function stepAP(packs, percent, med, form){
 // - Pregabalin: BID -> AM <= PM, as even as possible
 // - Gabapentin: TDS -> AM = MID <= PM, as even as possible
 // No splitting; ≤ 4 units per slot; choose daily total by global tie-break (closest → fewest units → up → higher strengths)
+// ===== Gabapentinoids step =====
+// - Pregabalin: BID -> AM <= PM, as even as possible
+// - Gabapentin: TDS -> AM = MID <= PM, as even as possible
+// No splitting; ≤ 4 units per slot; pick daily total by global tie-break
 function stepGabapentinoid(packs, percent, med, form){
   const tot = packsTotalMg(packs); if (tot <= EPS) return packs;
 
-  // 1) compute new target (your usual rounding to the smallest marketed strength step)
+  // 1) new target, snapped to smallest marketed step
   const strengths = strengthsForSelected()
                       .map(parseMgFromStrength)
                       .filter(v => v > 0)
                       .sort((a,b)=>a-b);
   const step = strengths[0] || 1;
-
   let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) { // force progress if a step rounds to same
+  if (target === tot && tot > 0) {
     target = Math.max(0, tot - step);
     target = roundTo(target, step);
   }
 
-  // 2) frequency: Gabapentin TDS, Pregabalin BID (default rules you confirmed)
+  // 2) Frequency defaults per your requirement
   const freq = (med === "Gabapentin") ? "TDS" : "BID";
 
-  // 3) pick best achievable total & counts with your global tie-break
+  // 3) choose best achievable total for the day
   const perSlotCap = (typeof maxUnitsPerSlot === "function")
     ? (maxUnitsPerSlot("Gabapentinoids", form, med) || 4)
     : 4;
 
   const best = selectBestOralTotal(target, strengths, freq, perSlotCap);
-  if (!best) return packs; // no change if nothing feasible (should be rare)
+  if (!best) return packs;
 
-  // 4) distribute to slots per class rule
+  // 4) distribute best daily counts to the slots
   const unitsArr = [];
   best.byStrength.forEach((q, mg) => { if (q>0) unitsArr.push({ mg, q }); });
 
@@ -1588,8 +1621,8 @@ function stepGabapentinoid(packs, percent, med, form){
     dist = distributeGabapentinTDS(unitsArr, perSlotCap);
   }
 
-  // 5) return packs-like structure {AM:{mg:count}, MID:{}, DIN:{}, PM:{}}
-  return recomposeSlots(cur, cls, med, form);
+  // 5) Return the packs-like object produced by the distributor
+  return dist;
 }
 
 /* ===== BZRA ===== */
