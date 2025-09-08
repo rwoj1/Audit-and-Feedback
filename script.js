@@ -1794,6 +1794,7 @@ const doStep = (phasePct) => {
   // Step 1 on start date using whichever phase applies at start
   const useP2Now = p2Start && (+startDate >= +p2Start);
   doStep(useP2Now ? p2Pct : p1Pct);
+  console.log("[DEBUG] Step1 packs:", JSON.stringify(packs));
   if (packsTotalMg(packs) > EPS) rows.push({ week: 1, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
 
   let week=1;
