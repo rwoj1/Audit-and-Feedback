@@ -1698,36 +1698,31 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
-// ===== Gabapentinoids step (canonical) =====
-// - Pregabalin: default BID -> AM <= PM, as even as possible
-// - Gabapentin: default TDS -> AM = MID <= PM, as even as possible
-// Respects the user's initial schedule if midday/dinner was used in Dose Lines.
+// ===== Gabapentinoids step =====
+// - Pregabalin: BID -> AM <= PM, as even as possible
+// - Gabapentin: TID -> AM = MID <= PM, PM takes the remainder
+// No splitting; ≤ 4 units per slot; choose daily total by global tie-break.
 function stepGabapentinoid(packs, percent, med, form){
-  const tot = packsTotalMg(packs);
+  const tot = packsTotalMg(packs); 
   if (tot <= EPS) return packs;
 
-  // 1) Round new daily target to smallest marketed step
+  // 1) Round new target to smallest marketed step (no underdose tie)
   const strengths = strengthsForSelected()
-                      .map(parseMgFromStrength)
-                      .filter(v => v > 0)
-                      .sort((a,b)=>a-b);
+    .map(parseMgFromStrength)
+    .filter(v => v > 0)
+    .sort((a,b)=>a-b);
   const step = strengths[0] || 1;
 
   let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) { // force progress if rounding lands back on same total
+  if (target === tot && tot > 0) {
     target = Math.max(0, tot - step);
     target = roundTo(target, step);
   }
 
-  // 2) Frequency: prefer what the user actually used; else default per medicine
-  const inferFreqFromPacks = (p) => {
-    const hasMid = slotUnitsTotal(p.MID) > 0 || slotUnitsTotal(p.DIN) > 0;
-    return hasMid ? "TDS" : "BID"; // only BID/TDS are used for gabapentinoids here
-  };
-  const userFreq = inferFreqFromPacks(packs);
-  const freq = userFreq || ((med === "Gabapentin") ? "TDS" : "BID");
+  // 2) Frequency defaults per rules
+  const freq = (med === "Gabapentin") ? "TID" : "BID";
 
-  // 3) Choose best achievable daily total counts with your global tie-break
+  // 3) Choose best achievable daily total counts with tie-breakers
   const perSlotCap = (typeof maxUnitsPerSlot === "function")
     ? (maxUnitsPerSlot("Gabapentinoids", form, med) || 4)
     : 4;
@@ -1739,17 +1734,11 @@ function stepGabapentinoid(packs, percent, med, form){
   const unitsArr = [];
   best.byStrength.forEach((q, mg) => { if (q > 0) unitsArr.push({ mg, q }); });
 
-  let dist;
-  if (freq === "BID") {
-    dist = distributePregabalinBID(unitsArr, perSlotCap);
-  } else { // TDS
-    dist = distributeGabapentinTDS(unitsArr, perSlotCap);
-  }
-
   // 5) Return the packs-like object { AM:{}, MID:{}, DIN:{}, PM:{} }
-  return dist;
+  return (freq === "BID")
+    ? distributePregabalinBID(unitsArr, perSlotCap)
+    : distributeGabapentinTDS(unitsArr, perSlotCap);
 }
-
 
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
