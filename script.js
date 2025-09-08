@@ -1089,7 +1089,8 @@ function slotsForFreq(freq){
   switch (freq) {
     case "AM": case "MID": case "DIN": case "PM": return 1;
     case "BID": return 2;
-    case "TDS": return 3;
+    case "TID": // clinical display
+    case "TDS": return 3; // legacy synonym
     case "QID": return 4;
     default:    return 2;
   }
@@ -1567,10 +1568,11 @@ function buildPacksFromDoseLines(){
   doseLines.forEach(ln=>{
     const baseMg = parseMgFromStrength(ln.strengthStr);
     const qty = parseFloat(ln.qty||1);
-    const slots = (ln.freqMode==="PATCH") ? [] :
-      (ln.freqMode==="BID" ? ["AM","PM"] :
-       ln.freqMode==="TID" ? ["AM","MID","PM"] :
-       ln.freqMode==="QID" ? ["AM","MID","DIN","PM"] : [ln.freqMode]);
+const mode = (ln.freqMode==="TDS") ? "TID" : ln.freqMode;  // normalize
+const slots = (mode==="PATCH") ? [] :
+  (mode==="BID" ? ["AM","PM"] :
+   mode==="TID" ? ["AM","MID","PM"] :
+   mode==="QID" ? ["AM","MID","DIN","PM"] : [mode]);
 
     slots.forEach(sl=>{
       const split=canSplitTablets(cls,form,med);
