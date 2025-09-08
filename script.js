@@ -137,16 +137,7 @@ function ensureIntervalHints(){
   };
   return [mk("p1IntHint","p1Interval"), mk("p2IntHint","p2Interval")];
 }
-// Only define if it's not already present in your script
-if (typeof GABA_FORM_BY_STRENGTH === "undefined") {
-  var GABA_FORM_BY_STRENGTH = {
-    100: "Capsule",
-    300: "Capsule",
-    400: "Capsule",
-    600: "Tablet",
-    800: "Tablet"
-  };
-}
+
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
 // - 100, 300, 400 mg → Capsules
