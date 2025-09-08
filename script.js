@@ -137,6 +137,48 @@ function ensureIntervalHints(){
   };
   return [mk("p1IntHint","p1Interval"), mk("p2IntHint","p2Interval")];
 }
+// Only define if it's not already present in your script
+if (typeof GABA_FORM_BY_STRENGTH === "undefined") {
+  var GABA_FORM_BY_STRENGTH = {
+    100: "Capsule",
+    300: "Capsule",
+    400: "Capsule",
+    600: "Tablet",
+    800: "Tablet"
+  };
+}
+// Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
+// - 600 & 800 mg → Tablets
+// - 100, 300, 400 mg → Capsules
+// Falls back to your existing doseFormNoun(form) for everything else.
+function nounForGabapentinByStrength(form, med, strengthStr){
+  try {
+    if (med === "Gabapentin" && (form === "Tablet/Capsule" || form === "Tablet" || form === "Capsule")) {
+      // Use your existing strength parser if present
+      const mg = (typeof parseMgFromStrength === "function")
+        ? parseMgFromStrength(strengthStr)
+        : (parseFloat(String(strengthStr).replace(/[^\d.]/g,"")) || 0);
+
+      // Prefer a provided mapping if it exists in your script
+      let kind = (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
+        ? GABA_FORM_BY_STRENGTH[mg]
+        : null;
+
+      // Fallback mapping from your requirement
+      if (!kind) {
+        if (mg === 600 || mg === 800) kind = "Tablet";
+        else if (mg === 100 || mg === 300 || mg === 400) kind = "Capsule";
+      }
+
+      if (kind) return (kind === "Tablet") ? "Tablets" : "Capsules";
+    }
+  } catch (_) {}
+
+  // Default for non-gabapentin or if something unexpected happens
+  return (typeof doseFormNoun === "function") ? doseFormNoun(form) : "Units";
+}
+
+
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
 //#endregion
