@@ -832,7 +832,7 @@ const CLASS_FOOTER_COPY = {
   bzra:          "Insert specific footer + disclaimer for Benzodiazepines / Z Drugs (BZRA)",
   antipsychotic: "Insert specific footer + disclaimer for Antipsychotics",
   ppi:           "Insert specific footer + disclaimer for Proton Pump Inhibitors",
-  Gabapentinoids: "Insert specific footer + disclaimer for Gabapentinoids",
+  gabapentinoids: "Insert specific footer + disclaimer for Gabapentinoids",
   _default:      ""
 };
 
@@ -844,6 +844,7 @@ function mapClassToKey(label){
   if (s.includes("antipsych")) return "antipsychotic";
   if (s.includes("proton") || s.includes("ppi")) return "ppi";
   if (s.includes("opioid") || s.includes("fentanyl") || s.includes("buprenorphine")) return "opioids";
+  if (s.includes("gaba") || s.includes("gabapentin") || s.includes("pregabalin")) return "gabapentinoids";
   return null;
 }
 
@@ -881,14 +882,14 @@ function updateBestPracticeBox() {
   if (key === _lastPracticeKey) return;
   _lastPracticeKey = key;
 
-  const titleMap = {
-    opioids: "Opioids",
-    bzra: "Benzodiazepines / Z-Drugs (BZRA)",
-    antipsychotic: "Antipsychotics",
-    ppi: "Proton Pump Inhibitors",
-    Gapapentinoids: "Gabapentinoids"
-  };
-
+ const titleMap = {
+  opioids: "Opioids",
+  bzra: "Benzodiazepines / Z-Drugs (BZRA)",
+  antipsychotic: "Antipsychotics",
+  ppi: "Proton Pump Inhibitors",
+  gabapentinoids: "Gabapentinoids"
+};
+  
   const text = SUGGESTED_PRACTICE[key] || "";
   box.innerHTML = `
     <h2>Suggested practice for ${titleMap[key]}</h2>
