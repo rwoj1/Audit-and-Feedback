@@ -422,40 +422,62 @@ function enforceSlotCapTDS(AM, MID, PM, cap){
   }
 }
 
-// --- DISTRIBUTE: Pregabalin BID (AM <= PM, as even as possible) ---
-function distributePregabalinBID(unitsArr, perSlotCap=4){
-  // unitsArr = [{mg, q}, ...]
+// Pregabalin BID: split as evenly as possible with PM ≥ AM.
+// - Place one unit at a time, highest mg first.
+// - On ties, prefer PM so PM can be ≥ AM.
+// - Respect per-slot unit caps (default 4).
+function distributePregabalinBID(unitsArr, perSlotCap) {
+  const out = { AM: {}, MID: {}, DIN: {}, PM: {} };
+  let mgAM = 0, mgPM = 0;
+  let nAM = 0, nPM = 0;
+
+  // Expand to a flat multiset of unit mg, high→low
   const flat = [];
-  unitsArr.forEach(({mg, q}) => { for (let i=0;i<q;i++) flat.push(mg); });
-  flat.sort((a,b)=>b-a);
+  unitsArr.slice().sort((a,b)=>b.mg - a.mg).forEach(({mg,q}) => {
+    for (let i=0;i<q;i++) flat.push(mg);
+  });
 
-  const AMList = [], PMList = [];
-  let sumAM = 0, sumPM = 0;
+  const put = (slot, mg) => {
+    out[slot][mg] = (out[slot][mg] || 0) + 1;
+    if (slot === "AM") { mgAM += mg; nAM++; } else { mgPM += mg; nPM++; }
+  };
 
-  // Greedy balance by total mg; keep AM <= PM naturally
   for (const mg of flat) {
-    if (sumAM <= sumPM) { AMList.push(mg); sumAM += mg; }
-    else                { PMList.push(mg); sumPM += mg; }
+    // Choose the slot with lower mg total; on ties choose PM.
+    let target = (mgAM < mgPM) ? "AM" : (mgAM > mgPM ? "PM" : "PM");
+
+    // Enforce per-slot cap by count of units
+    if (target === "AM" && nAM >= perSlotCap) target = "PM";
+    if (target === "PM" && nPM >= perSlotCap) target = "AM";
+
+    // If both full (unlikely with cap=4), keep PM bias
+    if (target === "AM" && nAM >= perSlotCap && nPM >= perSlotCap) target = "PM";
+    if (target === "PM" && nPM >= perSlotCap && nAM >= perSlotCap) target = "AM";
+
+    put(target, mg);
   }
 
-  const AM = summarizeUnitsArray(AMList);
-  const PM = summarizeUnitsArray(PMList);
+  // Final gentle balance: only move if it improves |AM-PM| and capacity allows.
+  const smallestKey = (dict) => {
+    const ks = Object.keys(dict); if (!ks.length) return NaN;
+    return Math.min(...ks.map(Number));
+  };
+  while (mgAM > mgPM && nPM < perSlotCap) {
+    const mg = smallestKey(out.AM);
+    if (!isFinite(mg)) break;
+    // If moving this unit doesn't reduce the difference, stop.
+    const curDiff = Math.abs(mgAM - mgPM);
+    const newDiff = Math.abs((mgAM - mg) - (mgPM + mg));
+    if (newDiff >= curDiff) break;
 
-  // Enforce ≤ perSlotCap by moving smallest if needed
-  enforceSlotCapBID(AM, PM, perSlotCap);
-
-  // Final guard to keep AM <= PM (by mg total). If not, swap one smallest.
-  if (slotUnitsTotal(AM) > slotUnitsTotal(PM)) {
-    // try swap smallest from AM to PM
-    const amKeys = Object.keys(AM).map(Number).sort((a,b)=>a-b);
-    if (amKeys.length) {
-      const mg = amKeys[0];
-      AM[mg]--; if (AM[mg]===0) delete AM[mg];
-      PM[mg] = (PM[mg]||0) + 1;
-    }
+    // Move one smallest AM unit to PM
+    out.AM[mg]--; if (out.AM[mg] === 0) delete out.AM[mg];
+    mgAM -= mg; nAM--;
+    out.PM[mg] = (out.PM[mg] || 0) + 1;
+    mgPM += mg; nPM++;
   }
 
-  return { AM, MID:{}, DIN:{}, PM };
+  return out;
 }
 /* ===== Gabapentinoid helpers (non-destructive additions) ===== */
 
@@ -580,55 +602,107 @@ function distributeEvenQID(unitsArr, perSlotCap) {
   return slots;
 }
 
-// --- DISTRIBUTE: Gabapentin TDS (AM = MID <= PM as even as possible) ---
-function distributeGabapentinTDS(unitsArr, perSlotCap=4){
+// Gabapentin TID: centre-light pattern.
+// - Keep AM and PM as equal as possible.
+// - MID should be ≤ min(AM, PM). If there's a remainder, PM can be ≥ AM.
+// - Avoid "wiping" AM or MID via over-aggressive nudges.
+// - Respect per-slot unit caps (default 4).
+function distributeGabapentinTDS(unitsArr, perSlotCap) {
+  const out = { AM: {}, MID: {}, DIN: {}, PM: {} };
+  let tAM = 0, tMID = 0, tPM = 0;
+  let nAM = 0, nMID = 0, nPM = 0;
+
+  // Flatten units high→low mg
   const flat = [];
-  unitsArr.forEach(({mg, q}) => { for (let i=0;i<q;i++) flat.push(mg); });
-  flat.sort((a,b)=>b-a);
+  unitsArr.slice().sort((a,b)=>b.mg - a.mg).forEach(({mg,q}) => {
+    for (let i=0;i<q;i++) flat.push(mg);
+  });
 
-  const AMList = [], MIDList = [], PMList = [];
-  let sumAM=0, sumMID=0, sumPM=0;
+  const canPut = (slot) =>
+    (slot === "AM"  && nAM  < perSlotCap) ||
+    (slot === "MID" && nMID < perSlotCap) ||
+    (slot === "PM"  && nPM  < perSlotCap);
 
+  const put = (slot, mg) => {
+    out[slot][mg] = (out[slot][mg] || 0) + 1;
+    if (slot === "AM")  { tAM  += mg; nAM++; }
+    if (slot === "MID") { tMID += mg; nMID++; }
+    if (slot === "PM")  { tPM  += mg; nPM++; }
+  };
+
+  // Greedy placement:
+  // 1) Prefer AM/PM to keep them balanced (tie → PM).
+  // 2) Only add to MID when it keeps MID ≤ min(AM, PM), or both AM/PM are at cap.
   for (const mg of flat) {
-    // Keep PM heaviest; balance AM and MID
-    if (sumPM <= sumAM || sumPM <= sumMID) { PMList.push(mg); sumPM += mg; continue; }
-    if (sumAM <= sumMID) { AMList.push(mg); sumAM += mg; }
-    else                 { MIDList.push(mg); sumMID += mg; }
-  }
+    // Decide ideal target between AM and PM first
+    let targetAP = (tAM < tPM) ? "AM" : (tAM > tPM ? "PM" : "PM");
 
-  const AM  = summarizeUnitsArray(AMList);
-  const MID = summarizeUnitsArray(MIDList);
-  const PM  = summarizeUnitsArray(PMList);
+    // If chosen AP slot is at cap, try the other AP; else consider MID.
+    const tryAP = (slot) => canPut(slot) ? slot : null;
 
-  // Enforce caps if a slot exceeds limit
-  enforceSlotCapTDS(AM, MID, PM, perSlotCap);
+    let chosen = tryAP(targetAP);
+    if (!chosen) chosen = tryAP(targetAP === "AM" ? "PM" : "AM");
 
-  // Nudge to AM≈MID (they can differ by one unit)
-  const tA = slotUnitsTotal(AM), tM = slotUnitsTotal(MID);
-  if (Math.abs(tA - tM) > 0) {
-    // Try moving one smallest from the heavier of AM/MID to the lighter
-    const from = (tA > tM) ? AM : MID;
-    const to   = (tA > tM) ? MID : AM;
-    const keys = Object.keys(from).map(Number).sort((a,b)=>a-b);
-    if (keys.length && slotCount(to) < 4) {
-      const mg = keys[0];
-      from[mg]--; if (from[mg]===0) delete from[mg];
-      to[mg] = (to[mg]||0) + 1;
+    // Consider MID only if AP both blocked OR MID won't exceed min(AM,PM) after placing
+    if (!chosen) {
+      if (canPut("MID")) {
+        const afterMID = tMID + mg;
+        const bound = Math.min(tAM, tPM);
+        if (afterMID <= bound || (!canPut("AM") && !canPut("PM"))) {
+          chosen = "MID";
+        }
+      }
     }
+
+    // Still no slot? try any with capacity, preferring PM, then AM, then MID
+    if (!chosen) chosen = canPut("PM") ? "PM" : canPut("AM") ? "AM" : canPut("MID") ? "MID" : "PM";
+
+    put(chosen, mg);
   }
 
-  return { AM, MID, DIN:{}, PM };
-}
+  // Gentle balancing nudges:
+  // A) Align AM and PM if a single move reduces |AM-PM| and capacity allows.
+  const smallestKey = (dict) => {
+    const ks = Object.keys(dict); if (!ks.length) return NaN;
+    return Math.min(...ks.map(Number));
+  };
+  const moveOne = (from, to) => {
+    const k = smallestKey(out[from]); if (!isFinite(k)) return false;
+    // Capacity check for destination
+    if ((to === "AM"  && nAM  >= perSlotCap) ||
+        (to === "MID" && nMID >= perSlotCap) ||
+        (to === "PM"  && nPM  >= perSlotCap)) return false;
+    // Current totals
+    const curDiff = Math.abs((from==="AM"?tAM:from==="MID"?tMID:tPM) - (to==="AM"?tAM:to==="MID"?tMID:tPM));
+    // Hypothetical totals
+    const fromAfter = (from==="AM"?tAM:from==="MID"?tMID:tPM) - k;
+    const toAfter   = (to  ==="AM"?tAM:to  ==="MID"?tMID:tPM) + k;
+    const newDiff   = Math.abs(fromAfter - toAfter);
+    if (newDiff >= curDiff) return false; // only move if strictly better
 
-function nounForGabapentinByStrength(form, med, strengthStr){
-  if (med === "Gabapentin" && form === "Tablet/Capsule") {
-    const mg = parseMgFromStrength(strengthStr);
-    const df = GABA_FORM_BY_STRENGTH[mg] || "Capsule";
-    // Return the plural heading word for the input label
-    return (df === "Tablet") ? "Tablets" : "Capsules";
+    // Apply move
+    out[from][k]--; if (out[from][k] === 0) delete out[from][k];
+    if (from === "AM")  { tAM  -= k; nAM--; }
+    if (from === "MID") { tMID -= k; nMID--; }
+    if (from === "PM")  { tPM  -= k; nPM--; }
+
+    out[to][k] = (out[to][k] || 0) + 1;
+    if (to === "AM")  { tAM  += k; nAM++; }
+    if (to === "MID") { tMID += k; nMID++; }
+    if (to === "PM")  { tPM  += k; nPM++; }
+    return true;
+  };
+
+  // Nudge 1: if AM > PM, try moving the smallest AM unit to PM (only if it improves balance)
+  while (tAM > tPM && moveOne("AM", "PM")) {/* keep improving */}
+
+  // Nudge 2: keep MID ≤ min(AM,PM) — if MID creeps above, move a smallest MID unit to the lighter of AM/PM
+  while (tMID > Math.min(tAM, tPM)) {
+    const to = (tAM <= tPM) ? "AM" : "PM";
+    if (!moveOne("MID", to)) break;
   }
-  // Fall back to your existing noun logic for everything else
-  return doseFormNoun(form);
+
+  return out;
 }
 
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
