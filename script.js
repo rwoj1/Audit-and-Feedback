@@ -457,6 +457,128 @@ function distributePregabalinBID(unitsArr, perSlotCap=4){
 
   return { AM, MID:{}, DIN:{}, PM };
 }
+/* ===== Gabapentinoid helpers (non-destructive additions) ===== */
+
+// Round daily target per medicine class, keeping nudged-down behavior if unchanged.
+function roundDailyTargetGabapentinoid(currentTotalMg, percent, med) {
+  const step = (med === "Gabapentin") ? 100 : 25; // GABA 100 mg, PREG 25 mg
+  const raw = currentTotalMg * (1 - percent/100);
+  let target = Math.round(raw / step) * step;
+  if (target === currentTotalMg && currentTotalMg > 0) {
+    target = Math.max(0, currentTotalMg - step);
+  }
+  return target;
+}
+
+// Infer the user's chosen frequency from the current packs object.
+function inferFreqFromPacks(packs) {
+  const has = (slot) => {
+    const s = packs && packs[slot];
+    if (!s) return false;
+    // counts by strength (e.g., { "300": 1, "100": 2 })
+    return Object.values(s).some(v => (v || 0) > 0);
+  };
+  const am  = has("AM"), mid = has("MID"), din = has("DIN"), pm  = has("PM");
+
+  if (am && pm && !mid && !din) return "BID";
+  if (am && mid && pm && !din)  return "TID";
+  if (am && mid && din && pm)   return "QID";
+  if (am)  return "AM";
+  if (mid) return "MID";
+  if (din) return "DIN";
+  if (pm)  return "PM";
+  return null; // let caller fall back to defaults
+}
+
+// Slots count for a given frequency value.
+function slotsForFreq(freq) {
+  switch (freq) {
+    case "AM":
+    case "MID":
+    case "DIN":
+    case "PM":  return 1;
+    case "BID": return 2;
+    case "TID": return 3;
+    case "QID": return 4;
+    default:    return 2; // sensible fallback
+  }
+}
+
+// Tie-breaker used when picking the best daily total from strength combinations.
+function cmpByDosePref(target, A, B) {
+  const dA = Math.abs(A.total - target);
+  const dB = Math.abs(B.total - target);
+  if (dA !== dB) return dA - dB;                // 1) closest to target
+  if (A.units !== B.units) return A.units - B.units; // 2) fewer units per day
+  const upA = A.total >= target, upB = B.total >= target;
+  if (upA !== upB) return upA ? -1 : 1;         // 3) prefer rounding up (avoid underdose)
+  const maxA = A.strengths.length ? Math.max(...A.strengths) : 0;
+  const maxB = B.strengths.length ? Math.max(...B.strengths) : 0;
+  if (maxA !== maxB) return maxB - maxA;        // 4) prefer higher single strengths
+  return 0;
+}
+
+// Choose the best achievable daily total by enumerating combinations under a per-slot cap.
+function selectBestOralTotal(target, strengths, freq, unitCapPerSlot = 4) {
+  const maxSlots = slotsForFreq(freq);
+  const maxUnitsPerDay = Math.max(1, maxSlots * unitCapPerSlot);
+  const S = strengths.slice().sort((a,b)=>b-a); // try higher strengths first
+  let best = null;
+
+  function dfs(i, unitsUsed, totalMg, counts) {
+    if (unitsUsed > maxUnitsPerDay) return;
+    if (i === S.length) {
+      if (unitsUsed === 0) return;
+      const flat = [];
+      S.forEach((mg, idx) => { for (let k=0;k<(counts[idx]||0);k++) flat.push(mg); });
+      const cand = {
+        total: totalMg,
+        units: unitsUsed,
+        strengths: flat,
+        byStrength: new Map(S.map((mg, idx)=>[mg, counts[idx]||0]))
+      };
+      if (!best || cmpByDosePref(target, cand, best) < 0) best = cand;
+      return;
+    }
+    const mg = S[i];
+    const remain = maxUnitsPerDay - unitsUsed;
+    for (let c = remain; c >= 0; c--) {
+      counts[i] = c;
+      dfs(i+1, unitsUsed + c, totalMg + c*mg, counts);
+    }
+    counts[i] = 0;
+  }
+
+  dfs(0, 0, 0, []);
+  return best;
+}
+
+// QID: simple equal-ish distribution with remainder order AM -> MID -> DIN -> PM.
+// (We can refine to "reduce DIN first" when we have previous-step context if you want.)
+function distributeEvenQID(unitsArr, perSlotCap) {
+  const slots = { AM:{}, MID:{}, DIN:{}, PM:{} };
+  const put = (slot, mg) => {
+    const cur = slots[slot][mg] || 0;
+    if (Object.values(slots[slot]).reduce((a,b)=>a+b,0) >= perSlotCap) return false;
+    slots[slot][mg] = cur + 1;
+    return true;
+  };
+  // Expand units into a flat array like [300,300,75,25,...] (higher first)
+  const flat = [];
+  unitsArr.sort((a,b)=>b.mg - a.mg).forEach(({mg,q})=>{ for(let i=0;i<q;i++) flat.push(mg); });
+
+  // Round-robin distribute with priority order AM -> MID -> DIN -> PM
+  const order = ["AM","MID","DIN","PM"];
+  let idx = 0;
+  for (const mg of flat) {
+    // Try to place; if slot full, try next slot in order
+    for (let t=0; t<order.length; t++) {
+      const slot = order[(idx + t) % order.length];
+      if (put(slot, mg)) { idx = (idx + 1) % order.length; break; }
+    }
+  }
+  return slots;
+}
 
 // --- DISTRIBUTE: Gabapentin TDS (AM = MID <= PM as even as possible) ---
 function distributeGabapentinTDS(unitsArr, perSlotCap=4){
@@ -1576,53 +1698,76 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
-// ===== Gabapentinoids step =====
-// - Pregabalin: BID -> AM <= PM, as even as possible
-// - Gabapentin: TDS -> AM = MID <= PM, as even as possible
-// No splitting; ≤ 4 units per slot; choose daily total by global tie-break (closest → fewest units → up → higher strengths)
-// ===== Gabapentinoids step =====
-// - Pregabalin: BID -> AM <= PM, as even as possible
-// - Gabapentin: TDS -> AM = MID <= PM, as even as possible
-// No splitting; ≤ 4 units per slot; pick daily total by global tie-break
+// ===== Step for Gabapentinoids (Gabapentin / Pregabalin) =====
+// Respects user-chosen frequency (BID/TID/QID/single-slot).
+// Rounding: Gabapentin→100 mg; Pregabalin→25 mg; if unchanged after rounding, nudge down one step.
+// Distribution:
+//  - TID (Gabapentin): AM = PM as much as possible; PM takes the remainder.
+//  - BID (Pregabalin): as even as possible with PM ≥ AM.
+//  - QID: equal-ish over AM/MID/DIN/PM (simple round-robin; can add "DIN-first shave" later if needed).
 function stepGabapentinoid(packs, percent, med, form){
-  const tot = packsTotalMg(packs); if (tot <= EPS) return packs;
+  const current = packsTotalMg(packs);
+  if (current <= EPS) return packs;
 
-  // 1) new target, snapped to smallest marketed step
+  // 1) Round daily target per your class rules
+  let target = roundDailyTargetGabapentinoid(current, percent, med);
+  if (target <= 0) return { AM:{}, MID:{}, DIN:{}, PM:{} };
+
+  // 2) Strengths available for the currently selected medicine/form
   const strengths = strengthsForSelected()
-                      .map(parseMgFromStrength)
-                      .filter(v => v > 0)
-                      .sort((a,b)=>a-b);
-  const step = strengths[0] || 1;
-  let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) {
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
+    .map(parseMgFromStrength)
+    .filter(v => v > 0)
+    .sort((a,b)=>a-b);
+
+  // 3) Frequency: infer from current packs; fall back to medicine default
+  let freq = inferFreqFromPacks(packs);
+  if (!freq) {
+    freq = (med === "Gabapentin") ? "TID" : "BID";
   }
 
-  // 2) Frequency defaults per your requirement
-  const freq = (med === "Gabapentin") ? "TID" : "BID";
-
-  // 3) choose best achievable total for the day
+  // 4) Per-slot cap (keep your existing helper if present)
   const perSlotCap = (typeof maxUnitsPerSlot === "function")
     ? (maxUnitsPerSlot("Gabapentinoids", form, med) || 4)
     : 4;
 
+  // 5) Choose daily combination nearest to target with tie-breakers
   const best = selectBestOralTotal(target, strengths, freq, perSlotCap);
   if (!best) return packs;
 
-  // 4) distribute best daily counts to the slots
+  // Convert to the unitsArr format expected by the distributors
   const unitsArr = [];
-  best.byStrength.forEach((q, mg) => { if (q>0) unitsArr.push({ mg, q }); });
+  best.byStrength.forEach((q, mg) => { if (q > 0) unitsArr.push({ mg, q }); });
 
-  let dist;
+  // 6) Distribute to slots per frequency & class rules
   if (freq === "BID") {
-    dist = distributePregabalinBID(unitsArr, perSlotCap);
-  } else { // TID
-    dist = distributeGabapentinTDS(unitsArr, perSlotCap);
+    // Pregabalin (or user-picked BID): PM ≥ AM
+    return distributePregabalinBID(unitsArr, perSlotCap);
+  }
+  if (freq === "TID") {
+    // Gabapentin (or user-picked TID): AM = PM; PM takes remainder
+    return distributeGabapentinTDS(unitsArr, perSlotCap);
+  }
+  if (freq === "QID") {
+    // Equal-ish QID. (If you'd like "reduce DIN first then follow TID", we can add a DIN-first shave here.)
+    return distributeEvenQID(unitsArr, perSlotCap);
   }
 
-  // 5) Return the packs-like object produced by the distributor
-  return dist;
+  // Single-slot modes: put everything into the chosen slot, respecting per-slot cap.
+  const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+  const put = (slot, mg, q) => {
+    const cur = out[slot][mg] || 0;
+    const used = Object.values(out[slot]).reduce((a,b)=>a+b,0);
+    const can = Math.min(q, Math.max(0, perSlotCap - used));
+    if (can > 0) out[slot][mg] = cur + can;
+  };
+
+  if (["AM","MID","DIN","PM"].includes(freq)) {
+    for (const {mg,q} of unitsArr) put(freq, mg, q);
+    return out;
+  }
+
+  // Fallback to BID if unknown freq sneaks through
+  return distributePregabalinBID(unitsArr, perSlotCap);
 }
 
 /* ===== BZRA ===== */
