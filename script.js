@@ -855,6 +855,7 @@ function footerKeyFromLabel(label) {
   if (s.includes("benzodiazep") || s.includes("z-drug") || s.includes("z drug")) return "bzra";
   if (s.includes("antipsych")) return "antipsychotic";
   if (s.includes("proton") || s.includes("ppi")) return "ppi";
+  if (s.includes("gaba") || s.includes("gabapentin") || s.includes("pregabalin")) return "gabapentinoids";
   return null;
 }
 
