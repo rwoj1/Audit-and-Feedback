@@ -640,98 +640,117 @@ function distributeEvenQID(unitsArr, perSlotCap) {
 // - MID should be ≤ min(AM, PM). If there's a remainder, PM can be ≥ AM.
 // - Avoid "wiping" AM or MID via over-aggressive nudges.
 // - Respect per-slot unit caps (default 4).
+// Gabapentin TID: centre-light split with PM allowed to hold the remainder.
+// Targets per day: AM ≈ PM, MID <= min(AM, PM), PM can be heavier if needed.
+// Greedy placement toward slot targets, then tiny balancing nudges.
+// Respects per-slot cap (default 4 units).
 function distributeGabapentinTDS(unitsArr, perSlotCap) {
   const out = { AM: {}, MID: {}, DIN: {}, PM: {} };
-  let tAM = 0, tMID = 0, tPM = 0;
-  let nAM = 0, nMID = 0, nPM = 0;
+  let mgAM = 0, mgMID = 0, mgPM = 0;
+  let nAM  = 0, nMID  = 0, nPM  = 0;
 
-  // Flatten units high→low mg
+  // Flatten unit list high→low mg (e.g., [800, 600, 400, 400, ...])
   const flat = [];
-  unitsArr.slice().sort((a,b)=>b.mg - a.mg).forEach(({mg,q}) => {
-    for (let i=0;i<q;i++) flat.push(mg);
-  });
+  unitsArr.slice().sort((a,b)=>b.mg - a.mg).forEach(({mg,q}) => { for (let i=0;i<q;i++) flat.push(mg); });
 
-  const canPut = (slot) =>
-    (slot === "AM"  && nAM  < perSlotCap) ||
-    (slot === "MID" && nMID < perSlotCap) ||
-    (slot === "PM"  && nPM  < perSlotCap);
+  // Compute daily target and ideal slot targets (PM gets the remainder)
+  const totalMg = flat.reduce((s,m)=>s+m,0);
+  const base = Math.floor(totalMg / 3);
+  const remainder = totalMg - base*3; // 0,1,2
+  const tAM  = base;
+  const tMID = base;
+  const tPM  = base + remainder; // PM may carry the +1 or +2 remainder
+
+  const capOK = (slot) =>
+    (slot==="AM"  && nAM  < perSlotCap) ||
+    (slot==="MID" && nMID < perSlotCap) ||
+    (slot==="PM"  && nPM  < perSlotCap);
 
   const put = (slot, mg) => {
     out[slot][mg] = (out[slot][mg] || 0) + 1;
-    if (slot === "AM")  { tAM  += mg; nAM++; }
-    if (slot === "MID") { tMID += mg; nMID++; }
-    if (slot === "PM")  { tPM  += mg; nPM++; }
+    if (slot==="AM")  { mgAM  += mg; nAM++;  }
+    if (slot==="MID") { mgMID += mg; nMID++; }
+    if (slot==="PM")  { mgPM  += mg; nPM++;  }
   };
 
-  // Greedy placement:
-  // 1) Prefer AM/PM to keep them balanced (tie → PM).
-  // 2) Only add to MID when it keeps MID ≤ min(AM, PM), or both AM/PM are at cap.
+  // Helper: deficit (how far below target we'd be *after* placing this mg)
+  function deficitAfter(slot, mg) {
+    if (slot === "AM")  return (tAM  - (mgAM  + mg));
+    if (slot === "MID") return (tMID - (mgMID + mg));
+    return (tPM - (mgPM + mg)); // PM
+  }
+
   for (const mg of flat) {
-    // Decide ideal target between AM and PM first
-    let targetAP = (tAM < tPM) ? "AM" : (tAM > tPM ? "PM" : "PM");
+    // Candidate slots in priority order: PM > AM > MID
+    // (prefer to keep MID light; remainder allowed in PM)
+    const candidates = ["PM", "AM", "MID"].filter(capOK);
 
-    // If chosen AP slot is at cap, try the other AP; else consider MID.
-    const tryAP = (slot) => canPut(slot) ? slot : null;
+    // Filter out any candidate where placing into MID would break centre-light rule
+    const feasible = candidates.filter(slot => {
+      if (slot !== "MID") return true;
+      // Placing into MID must not make MID exceed min(AM, PM)
+      return (mgMID + mg) <= Math.min(mgAM, mgPM);
+    });
 
-    let chosen = tryAP(targetAP);
-    if (!chosen) chosen = tryAP(targetAP === "AM" ? "PM" : "AM");
-
-    // Consider MID only if AP both blocked OR MID won't exceed min(AM,PM) after placing
-    if (!chosen) {
-      if (canPut("MID")) {
-        const afterMID = tMID + mg;
-        const bound = Math.min(tAM, tPM);
-        if (afterMID <= bound || (!canPut("AM") && !canPut("PM"))) {
-          chosen = "MID";
-        }
+    // Pick slot that reduces the biggest shortfall to its target (largest positive deficit)
+    let best = null, bestDef = -Infinity;
+    for (const slot of (feasible.length ? feasible : candidates)) {
+      let def = deficitAfter(slot, mg);
+      // Prefer positive (still below target). If all negative, pick the least overshoot.
+      if (def > bestDef || (def === bestDef && (slot==="PM" || (best!=="PM" && slot==="AM")))) {
+        bestDef = def; best = slot;
       }
     }
 
-    // Still no slot? try any with capacity, preferring PM, then AM, then MID
-    if (!chosen) chosen = canPut("PM") ? "PM" : canPut("AM") ? "AM" : canPut("MID") ? "MID" : "PM";
-
-    put(chosen, mg);
+    // Fallback if somehow none chosen (shouldn't happen)
+    if (!best) best = candidates[0] || "PM";
+    put(best, mg);
   }
 
-  // Gentle balancing nudges:
-  // A) Align AM and PM if a single move reduces |AM-PM| and capacity allows.
+  // ---- Gentle balancing nudges ----
   const smallestKey = (dict) => {
-    const ks = Object.keys(dict); if (!ks.length) return NaN;
-    return Math.min(...ks.map(Number));
+    const ks = Object.keys(dict);
+    return ks.length ? Math.min(...ks.map(Number)) : NaN;
   };
-  const moveOne = (from, to) => {
+  function moveOne(from, to) {
     const k = smallestKey(out[from]); if (!isFinite(k)) return false;
-    // Capacity check for destination
-    if ((to === "AM"  && nAM  >= perSlotCap) ||
-        (to === "MID" && nMID >= perSlotCap) ||
-        (to === "PM"  && nPM  >= perSlotCap)) return false;
-    // Current totals
-    const curDiff = Math.abs((from==="AM"?tAM:from==="MID"?tMID:tPM) - (to==="AM"?tAM:to==="MID"?tMID:tPM));
-    // Hypothetical totals
-    const fromAfter = (from==="AM"?tAM:from==="MID"?tMID:tPM) - k;
-    const toAfter   = (to  ==="AM"?tAM:to  ==="MID"?tMID:tPM) + k;
-    const newDiff   = Math.abs(fromAfter - toAfter);
-    if (newDiff >= curDiff) return false; // only move if strictly better
+    if (to==="AM"  && nAM  >= perSlotCap) return false;
+    if (to==="MID" && nMID >= perSlotCap) return false;
+    if (to==="PM"  && nPM  >= perSlotCap) return false;
+
+    // Check centre-light rule if moving into MID
+    if (to === "MID" && (mgMID + k) > Math.min(mgAM, mgPM)) return false;
+
+    // Only move if |AM-PM| improves (or keeps centre-light intact)
+    const curAP = Math.abs(mgAM - mgPM);
+    const fromAfter = (from==="AM"? mgAM : from==="MID"? mgMID : mgPM) - k;
+    const toAfter   = (to  ==="AM"? mgAM : to  ==="MID"? mgMID : mgPM) + k;
+    // Predict new AM/PM totals
+    const pAM  = from==="AM"  ? fromAfter : (to==="AM"  ? toAfter : mgAM);
+    const pPM  = from==="PM"  ? fromAfter : (to==="PM"  ? toAfter : mgPM);
+    const newAP = Math.abs(pAM - pPM);
+    if (newAP > curAP) return false;
 
     // Apply move
     out[from][k]--; if (out[from][k] === 0) delete out[from][k];
-    if (from === "AM")  { tAM  -= k; nAM--; }
-    if (from === "MID") { tMID -= k; nMID--; }
-    if (from === "PM")  { tPM  -= k; nPM--; }
+    if (from==="AM")  { mgAM  -= k; nAM--;  }
+    if (from==="MID") { mgMID -= k; nMID--; }
+    if (from==="PM")  { mgPM  -= k; nPM--;  }
 
     out[to][k] = (out[to][k] || 0) + 1;
-    if (to === "AM")  { tAM  += k; nAM++; }
-    if (to === "MID") { tMID += k; nMID++; }
-    if (to === "PM")  { tPM  += k; nPM++; }
+    if (to==="AM")  { mgAM  += k; nAM++;  }
+    if (to==="MID") { mgMID += k; nMID++; }
+    if (to==="PM")  { mgPM  += k; nPM++;  }
     return true;
-  };
+  }
 
-  // Nudge 1: if AM > PM, try moving the smallest AM unit to PM (only if it improves balance)
-  while (tAM > tPM && moveOne("AM", "PM")) {/* keep improving */}
+  // Nudge AM/PM toward equality if a single smallest-unit move helps
+  while (mgAM > mgPM && moveOne("AM", "PM")) {/* improve */}
+  while (mgPM > mgAM && moveOne("PM", "AM")) {/* improve */}
 
-  // Nudge 2: keep MID ≤ min(AM,PM) — if MID creeps above, move a smallest MID unit to the lighter of AM/PM
-  while (tMID > Math.min(tAM, tPM)) {
-    const to = (tAM <= tPM) ? "AM" : "PM";
+  // Ensure MID ≤ min(AM, PM) — if MID creeps above, move one smallest to the lighter of AM/PM
+  while (mgMID > Math.min(mgAM, mgPM)) {
+    const to = (mgAM <= mgPM) ? "AM" : "PM";
     if (!moveOne("MID", to)) break;
   }
 
