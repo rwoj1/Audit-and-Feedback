@@ -1829,31 +1829,28 @@ function stepAP(packs, percent, med, form){
 /* ===== Gabapentinoids ===== */
 function stepGabapentinoid(packs, percent, med, form){
   const cls = "Gabapentinoids";
-
-  // --- Current total mg ---
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // --- Available strengths & step size (min strength) ---
+  // --- helpers / inputs ---
   const parse = (typeof parseMgFromStrength === "function")
     ? parseMgFromStrength
     : (s) => parseFloat(String(s).replace(/[^\d.]/g, "")) || 0;
 
   const strengths = (typeof strengthsForSelected === "function" ? strengthsForSelected() : [])
-    .map(parse)
-    .filter(v => v > 0)
-    .sort((a,b)=>a-b);
+    .map(parse).filter(v => v > 0).sort((a,b)=>a-b);
 
+  // step size by medicine (fallbacks if strength list is empty)
   const step = strengths[0] || (/^Gabapentin$/i.test(med) ? 100 : 25);
   const roundStep = (x) => (typeof roundTo === "function") ? roundTo(x, step) : Math.round(x/step)*step;
 
-  // --- New rounded target (with nudge to ensure progress) ---
+  // --- new rounded target (with nudge to ensure progress) ---
   const raw = tot * (1 - percent/100);
   let target = roundStep(raw);
   if (target === tot && tot > 0) target = Math.max(0, tot - step);
   if (target <= 0) return { AM:{}, MID:{}, DIN:{}, PM:{} };
 
-  // --- Helper: mg per slot (from current packs) ---
+  // --- current per-slot totals (mg) ---
   const slotMg = (obj) => {
     if (!obj) return 0;
     return Object.entries(obj).reduce((s, [mg, q]) => s + (Number(mg)||0) * (q||0), 0);
@@ -1863,44 +1860,43 @@ function stepGabapentinoid(packs, percent, med, form){
   const mgDIN0 = slotMg(packs.DIN);
   const mgPM0  = slotMg(packs.PM);
 
-  const reduction = Math.max(0, tot - target);
+  // how much we must shave off the current day to hit the new target
+  let shaveLeft = Math.max(0, tot - target);
 
   if (/^Gabapentin$/i.test(med)) {
-    // ===================== GABAPENTIN (DIN-first → TID) =====================
-    // 1) Conceptual "DIN-first" shave (like SR opioids) – informational only
-    //    (Final split still uses TID targets; this preserves the clinical intent.)
-    let shaveLeft = reduction;
-    const dinAfter = Math.max(0, mgDIN0 - shaveLeft);
-    shaveLeft = Math.max(0, shaveLeft - mgDIN0);
-    // (If shaveLeft > 0, the remainder is absorbed when we recompute TID targets below.)
+    // ====================== Gabapentin ======================
+    // Opioid-style shave order: DIN first (only meaningful if baseline was QID)
+    if (shaveLeft > 0 && mgDIN0 > 0) {
+      const d = Math.min(shaveLeft, mgDIN0);
+      shaveLeft -= d; // conceptual shave; remaining shave (if any) will be absorbed by TID split
+    }
 
-    // 2) Compute TID targets: base = floor(target/3) to step; remainder to PM then AM.
+    // TID split (centre-light): AM = MID = base; remainder → PM then AM
     const base = Math.floor((target / 3) / step) * step;
-    let am  = base;
-    let mid = base;
-    let pm  = base;
+    let am  = base, mid = base, pm = base;
 
     let rem = target - (am + mid + pm);
     while (rem >= step) { pm += step; rem -= step; if (rem >= step) { am += step; rem -= step; } }
 
-    // Special tiny total (e.g., 100 mg) → night dosing only
+    // Special tiny totals → night dosing only (e.g., 100 mg)
     if (am === 0 && mid === 0 && pm > 0) {
       return recomposeSlots({ AM:0, MID:0, DIN:0, PM:pm }, cls, med, form);
     }
-
     return recomposeSlots({ AM:am, MID:mid, DIN:0, PM:pm }, cls, med, form);
 
   } else {
-    // ===================== PREGABALIN (DIN → MID → BID) =====================
-    // 1) Conceptual “DIN then MID” shave
-    let shaveLeft = reduction;
-    const dinAfter = Math.max(0, mgDIN0 - shaveLeft);
-    shaveLeft = Math.max(0, shaveLeft - mgDIN0);
-    const midAfter = Math.max(0, mgMID0 - shaveLeft);
-    shaveLeft = Math.max(0, shaveLeft - mgMID0);
-    // (Any remaining shaveLeft is absorbed by the final BID split.)
+    // ====================== Pregabalin ======================
+    // Opioid-style shave order: DIN then MID
+    if (shaveLeft > 0 && mgDIN0 > 0) {
+      const d = Math.min(shaveLeft, mgDIN0);
+      shaveLeft -= d;
+    }
+    if (shaveLeft > 0 && mgMID0 > 0) {
+      const d = Math.min(shaveLeft, mgMID0);
+      shaveLeft -= d;
+    }
 
-    // 2) BID targets (as even as possible; PM ≥ AM)
+    // BID split (as even as possible; PM ≥ AM)
     let am = roundStep(target / 2);
     let pm = target - am;
     if (am > pm) { const t = am; am = pm; pm = t; }
@@ -1908,6 +1904,7 @@ function stepGabapentinoid(packs, percent, med, form){
     return recomposeSlots({ AM:am, MID:0, DIN:0, PM:pm }, cls, med, form);
   }
 }
+
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
   const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
