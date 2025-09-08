@@ -546,16 +546,22 @@ function inferFreqFromPacks(packs) {
 }
 
 // Slots count for a given frequency value.
-function slotsForFreq(freq) {
+function slotsForFreq(freq){
   switch (freq) {
     case "AM":
     case "MID":
     case "DIN":
-    case "PM":  return 1;
-    case "BID": return 2;
-    case "TID": return 3;
-    case "QID": return 4;
-    default:    return 2; // sensible fallback
+    case "PM":
+      return 1;
+    case "BID":
+      return 2;
+    case "TID": // preferred
+    case "TDS": // legacy spelling
+      return 3;
+    case "QID":
+      return 4;
+    default:
+      return 2; // safe fallback
   }
 }
 
@@ -1694,11 +1700,14 @@ function buildPacksFromDoseLines(){
   doseLines.forEach(ln=>{
     const baseMg = parseMgFromStrength(ln.strengthStr);
     const qty = parseFloat(ln.qty||1);
-const mode = (ln.freqMode==="TDS") ? "TID" : ln.freqMode;  // normalize
-const slots = (mode==="PATCH") ? [] :
-  (mode==="BID" ? ["AM","PM"] :
-   mode==="TID" ? ["AM","MID","PM"] :
-   mode==="QID" ? ["AM","MID","DIN","PM"] : [mode]);
+// Normalize old spelling, then map to explicit slots
+const mode = (ln.freqMode === "TDS") ? "TID" : ln.freqMode;
+const slots =
+  mode === "PATCH" ? [] :
+  mode === "BID"   ? ["AM", "PM"] :
+  mode === "TID"   ? ["AM", "MID", "PM"] :
+  mode === "QID"   ? ["AM", "MID", "DIN", "PM"] :
+                     [mode]; // single-slot: "AM" | "MID" | "DIN" | "PM"
 
     slots.forEach(sl=>{
       const split=canSplitTablets(cls,form,med);
