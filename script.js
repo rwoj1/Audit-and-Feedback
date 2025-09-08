@@ -1698,15 +1698,12 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
-// ===== Gabapentinoids step =====
-// - Pregabalin: BID -> AM <= PM, as even as possible
-// - Gabapentin: TID -> AM = MID <= PM, PM takes the remainder
-// No splitting; ≤ 4 units per slot; choose daily total by global tie-break.
+/* ===== Gabapentinoids ===== */
 function stepGabapentinoid(packs, percent, med, form){
-  const tot = packsTotalMg(packs); 
+  const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // 1) Round new target to smallest marketed step (no underdose tie)
+  // Snap target to the smallest marketed step for the selected medicine
   const strengths = strengthsForSelected()
     .map(parseMgFromStrength)
     .filter(v => v > 0)
@@ -1715,26 +1712,30 @@ function stepGabapentinoid(packs, percent, med, form){
 
   let target = roundTo(tot * (1 - percent/100), step);
   if (target === tot && tot > 0) {
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
+    target = roundTo(Math.max(0, tot - step), step); // nudge to ensure progress
   }
 
-  // 2) Frequency defaults per rules
-  const freq = (med === "Gabapentin") ? "TID" : "BID";
+  // Respect user input: if MID or DIN is used, treat as TID; otherwise default GABA=TID, PREG=BID
+  const usedMidOrDin =
+    Object.values(packs?.MID || {}).some(v => (v||0) > 0) ||
+    Object.values(packs?.DIN || {}).some(v => (v||0) > 0);
 
-  // 3) Choose best achievable daily total counts with tie-breakers
+  const freq = usedMidOrDin ? "TID" : ((med === "Gabapentin") ? "TID" : "BID");
+
+  // Per-slot cap: use your existing helper if present, else 4
   const perSlotCap = (typeof maxUnitsPerSlot === "function")
     ? (maxUnitsPerSlot("Gabapentinoids", form, med) || 4)
     : 4;
 
+  // Pick best achievable daily total with your tie-breaker rules
   const best = selectBestOralTotal(target, strengths, freq, perSlotCap);
-  if (!best) return packs; // rare: if nothing feasible, keep previous packs
+  if (!best) return packs; // rare fallback
 
-  // 4) Distribute the units to slots per class rule
+  // Convert to the distributor’s input format
   const unitsArr = [];
-  best.byStrength.forEach((q, mg) => { if (q > 0) unitsArr.push({ mg, q }); });
+  best.byStrength.forEach((q, mg) => { if (q > 0) unitsArr.push({ mg: Number(mg), q }); });
 
-  // 5) Return the packs-like object { AM:{}, MID:{}, DIN:{}, PM:{} }
+  // Distribute to slots per class rule and RETURN THE DISTRIBUTION DIRECTLY
   return (freq === "BID")
     ? distributePregabalinBID(unitsArr, perSlotCap)
     : distributeGabapentinTDS(unitsArr, perSlotCap);
