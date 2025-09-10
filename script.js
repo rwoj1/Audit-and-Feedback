@@ -2561,6 +2561,20 @@ function renderProductPicker(){
   if (form && !form._ppReset) { form._ppReset = true; form.addEventListener("change", reset); }
 })();
 
+function wireModeToggle(){
+  const modeDefault = document.getElementById("modeDefault");
+  const modeCustom  = document.getElementById("modeCustom");
+  const customPanel = document.getElementById("customPanel");
+  if (!modeDefault || !modeCustom || !customPanel) return; // elements not in DOM yet
+
+  const sync = () => { customPanel.style.display = modeCustom.checked ? "block" : "none"; };
+
+  modeDefault.addEventListener("change", sync);
+  modeCustom .addEventListener("change", sync);
+  // Initial state:
+  sync();
+}
+
 
 /* =================== Patches builder — date-based Phase-2; start at step 2 =================== */
 
@@ -3009,6 +3023,7 @@ document.getElementById("classSelect")?.addEventListener("change", () => {
 updateBestPracticeBox();
 updateClassFooter();
   renderProductPicker();
+  wireModeToggle();
 
   
   // 7) Live gating + interval hints for patches
