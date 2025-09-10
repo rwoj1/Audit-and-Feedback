@@ -274,40 +274,69 @@ function escapeHtml(s){
 }
 
 // Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
+// Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
+// Safe: we escape the original string, then replace exact escaped substrings once.
 function formatOxyOnlyHTML(label){
   if (!label) return "";
 
-  // Simple HTML escape
-  const esc = s => String(s)
-    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const escapeHtml = s => String(s)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;");
 
-  let txt = esc(label);
+  // Work from the raw then map replacements onto the escaped string
+  const raw = String(label);
+  let html = escapeHtml(raw);
 
-  // Bold the word "Oxycodone"
-  txt = txt.replace(/\b(Oxycodone)\b/i, '<strong class="oxy-strong">$1</strong>');
+  // Helper: replace exactly one occurrence of 'needle' (escaped) with HTML
+  const replaceOnce = (escapedNeedle, htmlFrag) => {
+    const idx = html.indexOf(escapedNeedle);
+    if (idx >= 0) {
+      html = html.slice(0, idx) + htmlFrag + html.slice(idx + escapedNeedle.length);
+    }
+  };
 
-  // Case A: explicit "Oxycodone 10 mg + Naloxone 5 mg ..."
-  txt = txt.replace(
-    /(Oxycodone[^0-9]*)(\d+(?:\.\d+)?)\s*mg/ig,
-    (_, pre, mg) => `<strong class="oxy-strong">${esc(pre)}${mg} mg</strong>`
-  );
+  // Case 1: "Oxycodone 30 mg + Naloxone 15 mg ..."
+  const mPlus = /Oxycodone[^0-9]*\b(\d+(?:\.\d+)?)\s*mg\b/i.exec(raw);
+  if (mPlus) {
+    // Bold the *entire* "Oxycodone ... mg" phrase once
+    const oxyPhrase = raw.match(/Oxycodone[^0-9]*\d+(?:\.\d+)?\s*mg/i)[0];
+    const oxyEsc = escapeHtml(oxyPhrase);
+    replaceOnce(oxyEsc, `<strong class="oxy-strong">${oxyEsc}</strong>`);
+  }
 
-  // Case B: combined strength like "10 mg / 5 mg" or "10/5 mg"
-  // Bold only the *first* mg block (conventionally oxycodone in oxy/nal combos)
-  txt = txt.replace(
-    /(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
-    (m, a, b) => `<strong class="oxy-strong">${a} mg</strong>/${b} mg`
-  );
-  txt = txt.replace(
-    /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
-    (m, a, b) => `<strong class="oxy-strong">${a}</strong>/${b} mg`
-  );
+  // Case 2: "Oxycodone/Naloxone 10/5 mg ..." → bold the first (oxycodone) value
+  if (/Oxycodone/i.test(raw)) {
+    const slash1 = /(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
+    if (slash1) {
+      const firstEsc = escapeHtml(`${slash1[1]} mg`);
+      replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
+    } else {
+      const slash2 = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
+      if (slash2) {
+        const firstEsc = escapeHtml(`${slash2[1]}`);
+        replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
+      }
+    }
+  }
 
-  // (Optional) keep form suffix slightly toned down if you already did that
-  txt = txt.replace(/\b(SR\s*(?:tablet|capsule))\b/i, '<span class="form-dim">$1</span>');
+  // Always ensure the word "Oxycodone" itself (first occurrence) is bold,
+  // but only if it isn't already inside a <strong>.
+  if (/Oxycodone/i.test(raw)) {
+    // Do a light check on the escaped HTML to avoid inserting inside existing <strong>
+    const oxyWordEsc = escapeHtml("Oxycodone");
+    if (!/<strong[^>]*>\s*Oxycodone\s*<\/strong>/i.test(html)) {
+      replaceOnce(oxyWordEsc, `<strong class="oxy-strong">${oxyWordEsc}</strong>`);
+    }
+  }
 
-  return txt;
+  // Soften the form suffix "SR tablet|SR capsule"
+  html = html.replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
+
+  return html;
 }
+
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -1388,18 +1417,10 @@ function renderStandardTable(stepRows){
       tr.appendChild(tdDate);
 
 // [2] Strength — emphasise oxycodone over naloxone on ALL rows
-// [Strength cell] — emphasise oxycodone (screen only)
 const tdStrength = document.createElement("td");
 tdStrength.className = "col-strength";
-
-const rawLabel = line.strength || "";
-if (/oxy(?:codone)?/i.test(rawLabel)) {
-  tdStrength.innerHTML = formatOxyOnlyHTML(rawLabel);
-} else {
-  tdStrength.textContent = rawLabel;
-}
+tdStrength.innerHTML = formatOxyOnlyHTML(line.strength || "");
 tr.appendChild(tdStrength);
-
 
       // [3] Instructions — keep \n, print via textContent
       const tdInstr = document.createElement("td");
