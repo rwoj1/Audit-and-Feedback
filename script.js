@@ -268,6 +268,43 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
 
   return { target, step };
 }
+// --- Emphasise Oxycodone vs Naloxone in strength labels (safe HTML) ---
+function escapeHtml(s){
+  return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+}
+
+function formatOxyNalHTML(label){
+  if (!label) return "";
+  // Work on an escaped copy to avoid injecting markup from data
+  let s = escapeHtml(label);
+
+  if (!/oxy(?:codone)?/i.test(s) || !/nalo(?:xone)?/i.test(s)) {
+    // Non-combo: return plain text
+    return s;
+  }
+
+  // 1) Name emphasis
+  s = s.replace(/Oxycodone/ig, '<strong class="oxy-strong">$&</strong>');
+  s = s.replace(/Naloxone/ig,  '<span class="nalo-dim">$&</span>');
+
+  // 2) Common mg formats → bold first (oxycodone), dim second (naloxone)
+  // e.g., "10 mg/5 mg" or "10/5 mg"
+  s = s.replace(/(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/ig,
+                '<strong class="oxy-strong">$1 mg</strong>/<span class="nalo-dim">$2 mg</span>');
+  s = s.replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/ig,
+                '<strong class="oxy-strong">$1 mg</strong>/<span class="nalo-dim">$2 mg</span>');
+
+  // 3) Name-then-mg formats: "...Oxycodone 10 mg..." and "...Naloxone 5 mg..."
+  s = s.replace(/(Oxycodone[^<]*?)(\d+(?:\.\d+)?)\s*mg/ig,
+                (_, a, n) => a + '<strong class="oxy-strong">' + n + ' mg</strong>');
+  s = s.replace(/(Naloxone[^<]*?)(\d+(?:\.\d+)?)\s*mg/ig,
+                (_, a, n) => a + '<span class="nalo-dim">' + n + ' mg</span>');
+
+  // 4) Dim the form suffix
+  s = s.replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
+
+  return s;
+}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -1417,22 +1454,10 @@ function renderStandardTable(stepRows){
       }
       tr.appendChild(tdDate);
 
-      // [2] Strength
-   // [2] Strength — emphasise oxycodone over naloxone (screen only)
+// [2] Strength — emphasise oxycodone over naloxone on ALL rows
 const tdStrength = document.createElement("td");
 tdStrength.className = "col-strength";
-
-const rawLabel = line.strength || "";
-if (/oxy(?:codone)?/i.test(rawLabel) && /nalo(?:xone)?/i.test(rawLabel)) {
-  // Common patterns: "Oxycodone 10 mg + Naloxone 5 mg SR tablet" or "… 10 mg/5 mg …"
-  let html = rawLabel
-    .replace(/(Oxycodone[^0-9]*\d+\s*mg)/i, '<strong class="oxy-strong">$1</strong>')
-    .replace(/(Naloxone[^0-9]*\d+\s*mg)/i, '<span class="nalo-dim">$1</span>')
-    .replace(/(SR\s*tablet|SR\s*capsule)/i, '<span class="form-dim">$1</span>');
-  tdStrength.innerHTML = html;
-} else {
-  tdStrength.textContent = rawLabel;
-}
+tdStrength.innerHTML = formatOxyNalHTML(line.strength || "");
 tr.appendChild(tdStrength);
 
       // [3] Instructions — keep \n, print via textContent
@@ -2380,7 +2405,7 @@ function renderProductPicker(){
     const title = (typeof strengthToProductLabel === "function")
       ? strengthToProductLabel(cls, med, form, s)   // e.g., "600 mg tablet"
       : `${mg} mg`;
-    span.textContent = title;
+    span.innerHTML = formatOxyNalHTML(title);
 
     label.appendChild(cb);
     label.appendChild(span);
