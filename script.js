@@ -1292,6 +1292,152 @@ function renderPrintHeader(container){
   // insert header at the very top of container
   container.prepend(hdr);
 }
+/* ------------------------------------------------------------------
+   Safety rules: spread check + friendly confirm
+   - Computes per-step slot totals (AM/MID/DIN/PM) in mg
+   - Warns if spread > medicine-specific limit
+   - One-time grace when a slot first retires to 0
+------------------------------------------------------------------ */
+
+// 1) Medicine-specific spread limits (mg)
+const SPREAD_LIMITS = {
+  morphine: 30,
+  oxycodone: 20,
+  "oxycodone-naloxone": 20,
+  tapentadol: 100,
+  tramadol: 100,
+  gabapentin: 300,
+  pregabalin: 75,    // per your update
+};
+
+// 2) Recognise medicine from the strength label text
+function spreadKeyFromLabel(label) {
+  const s = String(label || "").toLowerCase();
+  if (s.includes("oxycodone") && s.includes("naloxone")) return "oxycodone-naloxone";
+  if (s.includes("oxycodone")) return "oxycodone";
+  if (s.includes("morphine")) return "morphine";
+  if (s.includes("tapentadol")) return "tapentadol";
+  if (s.includes("tramadol")) return "tramadol";
+  if (s.includes("gabapentin")) return "gabapentin";
+  if (s.includes("pregabalin")) return "pregabalin";
+  return null;
+}
+
+// 3) Extract the primary mg value for a line's strength label
+//    - For oxy/nal combos, returns the OXYCODONE mg (first number)
+function extractPrimaryMg(label) {
+  const raw = String(label || "");
+  // "Oxycodone ... 10 mg + Naloxone 5 mg ..."
+  let m = /Oxycodone[^0-9]*([\d.]+)\s*mg/i.exec(raw);
+  if (m) return parseFloat(m[1]);
+
+  // "Oxycodone/Naloxone 10/5 mg ..."
+  m = /Oxycodone\/Naloxone\s+([\d.]+)\s*\/\s*([\d.]+)\s*mg/i.exec(raw);
+  if (m) return parseFloat(m[1]);
+
+  // Generic "123 mg" (first number before mg)
+  m = /([\d.]+)\s*mg/i.exec(raw);
+  return m ? parseFloat(m[1]) : 0;
+}
+
+// 4) Compute per-slot totals (mg) for a single step
+function slotTotalsMg(step) {
+  const totals = { AM: 0, MID: 0, DIN: 0, PM: 0 };
+  const lines = step?.lines || step?.rows || []; // be tolerant to naming
+  for (const line of lines) {
+    const mg = extractPrimaryMg(line.strength || line.strengthLabel || "");
+    const am  = (line.morning ?? line.am  ?? 0) * mg;
+    const mid = (line.midday  ?? line.mid ?? 0) * mg;
+    const din = (line.dinner  ?? line.din ?? 0) * mg;
+    const pm  = (line.night   ?? line.pm  ?? line.nocte ?? 0) * mg;
+    totals.AM  += am; totals.MID += mid; totals.DIN += din; totals.PM  += pm;
+  }
+  return totals;
+}
+
+// 5) First non-null medicine key seen in a step (from its lines)
+function discoverSpreadKey(step) {
+  const lines = step?.lines || step?.rows || [];
+  for (const line of lines) {
+    const key = spreadKeyFromLabel(line.strength || line.strengthLabel || "");
+    if (key) return key;
+  }
+  return null;
+}
+
+// 6) Spread (max - min) among ACTIVE slots (dose > 0)
+function computeSpread(totals) {
+  const vals = [totals.AM, totals.MID, totals.DIN, totals.PM].filter(v => v > 0.0001);
+  if (vals.length <= 1) return 0; // one or zero active slots → spread is 0
+  const maxv = Math.max(...vals), minv = Math.min(...vals);
+  return maxv - minv;
+}
+
+// 7) Friendly summary for the confirm message
+function formatSlotSummary(t) {
+  const fmt = v => (Math.round(v*10)/10).toLocaleString();
+  return `AM ${fmt(t.AM)} mg • MID ${fmt(t.MID)} mg • DIN ${fmt(t.DIN)} mg • PM ${fmt(t.PM)} mg`;
+}
+
+// 8) The interactive pre-scan (returns pruned plan or null to abort)
+function applySpreadSafetyInteractive(stepRows) {
+  if (!Array.isArray(stepRows) || !stepRows.length) return stepRows;
+
+  let prevActiveCount = null;
+  let usedGraceOnRetire = false;  // allow grace once (when a slot first retires)
+  // Work out medicine key & limit from the first step that has a label
+  let spreadKey = null, limit = null;
+
+  for (let i = 0; i < stepRows.length; i++) {
+    const step = stepRows[i];
+    // Skip non-dose steps (STOP/REVIEW rows)
+    if (step?.kind && step.kind !== "DOSE") continue;
+
+    if (!spreadKey) {
+      spreadKey = discoverSpreadKey(step);
+      limit = spreadKey ? SPREAD_LIMITS[spreadKey] : null;
+    }
+    if (!limit) continue; // unknown class → no spread check
+
+    const totals = slotTotalsMg(step);
+    const activeCount = ["AM","MID","DIN","PM"].reduce((n,k)=> n + (totals[k] > 0.0001 ? 1 : 0), 0);
+
+    // Retirement grace: if a slot has just dropped to 0 for the first time, allow this step once
+    const justRetired = (prevActiveCount !== null && activeCount < prevActiveCount && !usedGraceOnRetire);
+    if (justRetired) {
+      usedGraceOnRetire = true;
+      prevActiveCount = activeCount;
+      continue; // allow without warning
+    }
+
+    const spread = computeSpread(totals);
+    if (spread > limit) {
+      const msg = [
+        `Heads-up: this step would produce an uneven split for ${spreadKey.replace("-"," / ")}.`,
+        `Allowed difference: ≤ ${limit} mg.`,
+        `This step: ${formatSlotSummary(totals)} (spread ${Math.round(spread)} mg).`,
+        ``,
+        `For safety and due to calculator limits, do you want to continue?`,
+      ].join("\n");
+
+      if (!window.confirm(msg)) {
+        // User chose "Stop for review": trim plan to previous steps and add a REVIEW row
+        const dateStr = step.dateStr || step.date || step.when || step.applyOn || "";
+        const reviewRow = { kind: "REVIEW", dateStr, message: "Review with your doctor the ongoing plan" };
+        // Keep steps BEFORE this one, then insert review
+        const pruned = stepRows.slice(0, i);
+        pruned.push(reviewRow);
+        return pruned;
+      }
+      // else: user chose Continue → permit this step and keep scanning
+    }
+
+    prevActiveCount = activeCount;
+  }
+
+  return stepRows;
+}
+
 /* ==========================================
    RENDER STANDARD (tablets/caps/ODT) TABLE
    - Merges date per step (rowspan)
@@ -1302,6 +1448,8 @@ function renderPrintHeader(container){
 //#endregion
 //#region 5. Renderers (Standard & Patch)
 function renderStandardTable(stepRows){
+  stepRows = applySpreadSafetyInteractive(stepRows);
+  if (!stepRows) return;
   const scheduleHost = document.getElementById("scheduleBlock");
   const patchHost    = document.getElementById("patchBlock");
   if (!scheduleHost) return;
