@@ -232,7 +232,7 @@ button.ghost{
 /* Strength cell emphasis for Oxycodone/Naloxone */
 .plan-standard td.col-strength .oxy-strong { font-weight: 700; }
 .plan-standard td.col-strength .nalo-dim  { opacity: .7; }
-.plan-standard td.col-strength .form-dim  { opacity: .6; }
+.plan-standard td.col-strength .form-dim  { opacity: .8; }
 
 /* Do not alter the printed output */
 @media print {
