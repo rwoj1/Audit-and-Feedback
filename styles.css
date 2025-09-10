@@ -298,6 +298,46 @@ button.ghost{
     font-weight:400; opacity:1;
   }
 }
+/* ===== Accordion ===== */
+details.accordion{
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:var(--card);
+  padding:0;
+  margin-top:12px;
+}
+details.accordion > summary{
+  cursor:pointer;
+  list-style:none;
+  padding:10px 12px;
+  font-weight:600;
+  outline:none;
+}
+details.accordion[open] > summary{
+  border-bottom:1px solid var(--border);
+}
+details.accordion .accordion-body{
+  padding:12px;
+  display:grid;
+  gap:12px;
+}
+details.accordion .subhead{
+  margin:10px 0 4px;
+  font-weight:600;
+  font-size:0.95rem;
+}
+
+/* Radio pills for Mode */
+label.radio{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--card);
+}
+label.radio input{ accent-color:var(--accent); }
 
 
 /* ==============================
