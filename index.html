@@ -120,28 +120,47 @@
           </label>
         </div>
 
-  <div id="customPanel" style="display:none">
+<div id="customPanel" style="display:none">
   <!-- STEP 1 -->
-  <h4 class="subhead">Step 1 — Default reduction order</h4>
-  <p class="hint" id="step1HiddenMsg" style="display:none">Not applicable for this class.</p>
-  <p class="hint" id="step1Notice">Click a pill to move it to the end (left → right = highest → lowest priority).</p>
-  <div id="priorityList" class="chip-list" aria-label="Dose reduction priority"></div>
-  <div class="taper-row" style="margin-top:6px;">
-    <button id="resetPriority" type="button" class="secondary">Reset to class default</button>
+  <h4 class="subhead">Step 1 — Reduction order (optional)</h4>
+  <p class="hint">Define up to four reductions. Each line reads “Reduce [time of day] until [X] mg/day”, then flows to the next line.</p>
+
+  <div id="step1List" class="reduction-list"></div>
+
+  <div class="taper-row" style="gap:8px; margin-top:8px;">
+    <button id="addReduction" type="button" class="secondary">Add reduction</button>
+    <button id="clearReductions" type="button" class="ghost">Clear all</button>
+    <span class="hint">0–4 lines supported.</span>
   </div>
 
   <!-- STEP 2 -->
-  <h4 class="subhead">Step 2 — Class split rules</h4>
-  <div id="classRuleText" class="rule-box"></div>
+  <h4 class="subhead">Step 2 — Equalise after Step 1</h4>
+  <p class="hint">After Step 1 is complete, reduce each dose time equally.</p>
+  <div class="taper-row" role="radiogroup" aria-label="Equalise after Step 1">
+    <label class="radio">
+      <input type="radio" name="equaliseAfter" id="equaliseYes" checked>
+      <span>Yes</span>
+    </label>
+    <label class="radio">
+      <input type="radio" name="equaliseAfter" id="equaliseNo">
+      <span>No</span>
+    </label>
+  </div>
 
-  <!-- STEP 3 (unchanged, still layout only) -->
+  <!-- STEP 3 -->
   <h4 class="subhead">Step 3 — Review trigger (optional)</h4>
-  <label class="inline-label">
+  <div class="inline-label">
     <span>Set review when daily total ≤</span>
-    <input id="customReviewMg" type="number" min="1" placeholder="mg/day" />
-  </label>
+    <div class="input-suffix">
+      <input id="customReviewMg" type="number" min="0" placeholder="e.g., 50">
+      <span class="suffix">mg/day</span>
+    </div>
+  </div>
+
+  <div class="hint" style="margin-top:8px">
+    Tips: “time of day” accepts common phrases (e.g., <em>in the morning</em>, <em>at midday</em>, <em>at dinner</em>, <em>at night</em>). You can leave Step 1 empty, or add 1–4 lines. These settings don’t change calculations yet—layout only.
+  </div>
 </div>
-      </div>
 
     </div>
   </details>
