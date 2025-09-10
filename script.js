@@ -987,76 +987,6 @@ function strengthsForSelectedSafe(cls, med, form){
     return [];
   }
 }
-function renderProductPicker(){
-  const clsEl  = document.getElementById("classSelect");
-  const medEl  = document.getElementById("medicineSelect");
-  const formEl = document.getElementById("formSelect");
-  const cls  = (clsEl && clsEl.value)  || "";
-  const med  = (medEl && medEl.value)  || "";
-  const form = (formEl && formEl.value) || "";
-
-  const card = document.getElementById("productPickerCard");
-  const host = document.getElementById("productPicker");
-  if (!card || !host) return;
-
-  // Show/hide picker based on allowed medicines/forms
-  if (typeof shouldShowProductPicker === "function" && !shouldShowProductPicker(cls, med, form)) {
-    card.style.display = "none";
-    if (window.SelectedFormulations && typeof SelectedFormulations.clear === "function") SelectedFormulations.clear();
-    host.innerHTML = "";
-    return;
-  }
-  card.style.display = "";
-
-  // Build checkbox list
-  host.innerHTML = "";
-  const strengths = (typeof strengthsForPicker === "function" ? strengthsForPicker() : []);
-  strengths.forEach(s => {
-    const mg = (typeof parseMgFromStrength === "function") ? parseMgFromStrength(s) : parseFloat(String(s).replace(/[^\d.]/g,"")) || 0;
-    if (!Number.isFinite(mg) || mg <= 0) return;
-
-    const id = `prod_${String(med).replace(/\W+/g,'_')}_${mg}`;
-    const wrap = document.createElement("label");
-    wrap.className = "checkbox";
-    wrap.setAttribute("for", id);
-
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.id = id;
-
-    // If user has made any selection, reflect it; otherwise show unchecked (using all products by default)
-    const isChecked = (window.SelectedFormulations && SelectedFormulations.size > 0) ? SelectedFormulations.has(mg) : false;
-    cb.checked = isChecked;
-
-    cb.addEventListener("change", () => {
-      if (!window.SelectedFormulations) window.SelectedFormulations = new Set();
-      if (cb.checked) SelectedFormulations.add(mg);
-      else SelectedFormulations.delete(mg);
-      if (typeof setDirty === "function") setDirty(true);
-    });
-
-    const span = document.createElement("span");
-    const title = (typeof strengthToProductLabel === "function")
-      ? strengthToProductLabel(cls, med, form, s)
-      : `${mg} mg`;
-    span.textContent = title; // e.g., "600 mg tablet" / "25 mg capsule"
-
-    wrap.appendChild(cb);
-    wrap.appendChild(span);
-    host.appendChild(wrap);
-  });
-
-  // Wire "Clear selection" button
-  const clearBtn = document.getElementById("clearProductSelection");
-  if (clearBtn && !clearBtn._wired) {
-    clearBtn._wired = true;
-    clearBtn.addEventListener("click", () => {
-      if (window.SelectedFormulations && typeof SelectedFormulations.clear === "function") SelectedFormulations.clear();
-      host.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
-      if (typeof setDirty === "function") setDirty(true);
-    });
-  }
-}
 
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
 
@@ -2416,7 +2346,7 @@ function renderProductPicker(){
     const title = (typeof strengthToProductLabel === "function")
       ? strengthToProductLabel(cls, med, form, s)   // e.g., "600 mg tablet"
       : `${mg} mg`;
-    span.innerHTML = formatOxyNalHTML(title);
+    span.innerHTML = formatOxyOnlyHTML(title);
 
     label.appendChild(cb);
     label.appendChild(span);
