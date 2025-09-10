@@ -337,6 +337,150 @@ function formatOxyOnlyHTML(label){
   return html;
 }
 
+/* ---------- Custom Mode (layout only): Step 1 & Step 2 ---------- */
+
+// Default reduction order per class (UI only; engine unchanged)
+const CLASS_DEFAULT_PRIORITY = {
+  opioids:        ['DIN','MID','AM','PM'],
+  ppi:            ['MID','PM','AM','DIN'],
+  bzd:            null, // hides Step 1
+  antipsychotic:  ['MID','DIN','AM','PM'],
+  gabapentinoid:  ['DIN','MID','AM','PM'], // UI shows full order; engine still applies class specifics
+};
+
+// Derive a class key from current selection (robust to labels)
+function currentClassKey(){
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const clsVal = (clsSel?.value || '').toLowerCase();
+  const medVal = (medSel?.value || '').toLowerCase();
+
+  if (clsVal.includes('opioid')) return 'opioids';
+  if (clsVal.includes('ppi'))    return 'ppi';
+  if (clsVal.includes('benz') || clsVal.includes('bzd')) return 'bzd';
+  if (clsVal.includes('antipsych')) return 'antipsychotic';
+
+  // Gabapentinoids—detect by class or specific medicines
+  if (clsVal.includes('gabapentin') || clsVal.includes('pregabalin')
+      || medVal.includes('gabapentin') || medVal.includes('pregabalin')
+      || clsVal.includes('gabapentinoid')) return 'gabapentinoid';
+
+  // Fallback: opioids
+  return 'opioids';
+}
+
+let priorityOrder = ['AM','MID','DIN','PM'];
+
+function renderPriorityChips(order){
+  const host = document.getElementById('priorityList');
+  if (!host) return;
+  host.innerHTML = '';
+  order.forEach(slot=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chip';
+    btn.textContent = slot;
+    btn.title = 'Click to move this slot to the end';
+    btn.addEventListener('click', ()=>{
+      const idx = priorityOrder.indexOf(slot);
+      if (idx > -1){
+        priorityOrder.splice(idx,1);
+        priorityOrder.push(slot);
+        renderPriorityChips(priorityOrder);
+      }
+    });
+    host.appendChild(btn);
+  });
+}
+
+function resetPriorityToClassDefault(){
+  const key = currentClassKey();
+  const def = CLASS_DEFAULT_PRIORITY[key];
+  const step1Notice   = document.getElementById('step1Notice');
+  const step1Hidden   = document.getElementById('step1HiddenMsg');
+
+  if (def && Array.isArray(def)){
+    priorityOrder = def.slice();
+    if (step1Notice) step1Notice.style.display = '';
+    if (step1Hidden) step1Hidden.style.display = 'none';
+    renderPriorityChips(priorityOrder);
+  } else {
+    // BZD: hide Step 1 content
+    if (step1Notice) step1Notice.style.display = 'none';
+    if (step1Hidden) step1Hidden.style.display = '';
+    const host = document.getElementById('priorityList');
+    if (host) host.innerHTML = '';
+  }
+}
+
+function updateClassSplitRules(){
+  const key = currentClassKey();
+  const el  = document.getElementById('classRuleText');
+  if (!el) return;
+
+  let html = '';
+  switch(key){
+    case 'opioids':
+      html = `
+        <ul class="rule-list">
+          <li><strong>BID:</strong> try even; if not exact, <em>PM ≥ AM</em> and <em>PM − AM ≤ one grid step</em>.</li>
+          <li><strong>TID:</strong> PM may carry the remainder.</li>
+        </ul>`;
+      break;
+
+    case 'gabapentinoid':
+      html = `
+        <ul class="rule-list">
+          <li><strong>Gabapentin:</strong> reduce DIN first; then TID <em>centre-light</em> (MID ≤ min(AM, PM); PM may carry remainder).</li>
+          <li><strong>Pregabalin:</strong> reduce DIN → MID; then BID with <em>PM ≥ AM</em>.</li>
+        </ul>`;
+      break;
+
+    case 'antipsychotic':
+      html = `
+        <ul class="rule-list">
+          <li><strong>TID centre-light:</strong> MID ≤ min(AM, PM); PM may carry remainder.</li>
+          <li><strong>BID:</strong> PM ≥ AM.</li>
+        </ul>`;
+      break;
+
+    case 'ppi':
+      html = `
+        <ul class="rule-list">
+          <li><strong>Default order:</strong> MID → PM → AM → DIN.</li>
+        </ul>`;
+      break;
+
+    case 'bzd':
+      html = `
+        <ul class="rule-list">
+          <li>Custom reduction order is not applicable for this class.</li>
+        </ul>`;
+      break;
+
+    default:
+      html = `
+        <ul class="rule-list">
+          <li>Class split rules are applied automatically per medicine.</li>
+        </ul>`;
+  }
+  el.innerHTML = html;
+}
+
+function wireCustomPanel(){
+  // Reset when class/medicine changes
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const resetBtn = document.getElementById('resetPriority');
+
+  if (clsSel) clsSel.addEventListener('change', ()=>{ resetPriorityToClassDefault(); updateClassSplitRules(); });
+  if (medSel) medSel.addEventListener('change', ()=>{ resetPriorityToClassDefault(); updateClassSplitRules(); });
+  if (resetBtn) resetBtn.addEventListener('click', resetPriorityToClassDefault);
+
+  // Initial fill
+  resetPriorityToClassDefault();
+  updateClassSplitRules();
+}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -3024,6 +3168,7 @@ updateBestPracticeBox();
 updateClassFooter();
   renderProductPicker();
   wireModeToggle();
+  wireCustomPanel();
 
   
   // 7) Live gating + interval hints for patches
