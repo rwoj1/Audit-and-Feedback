@@ -483,37 +483,34 @@ function wireCustomPanel(){
   updateClassSplitRules();
 }
 
-/* ===== Custom Mode: Step 1 UI (layout only) ===== */
+/* ===== Custom Mode: Step 1 UI (layout only, with single enable + unique slots) ===== */
 
 const MAX_REDUCTION_LINES = 4;
 
-// returns a reduction row element
+// Build a single reduction row: THEN Reduce [slot] until [mg] mg/day
 function buildReductionRow(idx){
   const row = document.createElement('div');
   row.className = 'reduction-row';
   row.dataset.index = String(idx);
 
-  // left: enable checkbox
+  // left: THEN (only after the first row)
   const left = document.createElement('div');
   left.className = 'row-left';
-  const enable = document.createElement('input');
-  enable.type = 'checkbox';
-  enable.checked = true;
-  enable.id = `redEnable${idx}`;
-  const enableLbl = document.createElement('label');
-  enableLbl.htmlFor = enable.id;
-  enableLbl.textContent = 'Enable';
-  left.appendChild(enable);
-  left.appendChild(enableLbl);
+  if (idx > 0){
+    const thenTag = document.createElement('span');
+    thenTag.className = 'then-tag';
+    thenTag.textContent = 'THEN';
+    left.appendChild(thenTag);
+  }
 
   // main: "Reduce [slot] until [mg] mg/day"
   const main = document.createElement('div');
   main.className = 'row-main';
 
   const w1 = document.createElement('span'); w1.className='inline-word'; w1.textContent = 'Reduce';
+
   const slot = document.createElement('select');
   slot.id = `redSlot${idx}`;
-  // common phrases
   [
     {v:'AM',   label:'in the morning'},
     {v:'MID',  label:'at midday'},
@@ -547,6 +544,8 @@ function buildReductionRow(idx){
   remove.textContent = 'Remove';
   remove.addEventListener('click', ()=>{
     row.remove();
+    refreshThenTags();
+    enforceUniqueTimeSelections();
     updateReductionButtonsState();
   });
   actions.appendChild(remove);
@@ -554,12 +553,17 @@ function buildReductionRow(idx){
   row.appendChild(left);
   row.appendChild(main);
   row.appendChild(actions);
+
+  // When the slot changes, re-enforce uniqueness across rows
+  slot.addEventListener('change', enforceUniqueTimeSelections);
+
   return row;
 }
 
 function currentReductionCount(){
   return document.querySelectorAll('#step1List .reduction-row').length;
 }
+
 function updateReductionButtonsState(){
   const addBtn   = document.getElementById('addReduction');
   const clearBtn = document.getElementById('clearReductions');
@@ -567,14 +571,38 @@ function updateReductionButtonsState(){
   if (addBtn)   addBtn.disabled   = (n >= MAX_REDUCTION_LINES);
   if (clearBtn) clearBtn.disabled = (n === 0);
 }
+
+function refreshThenTags(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((row, i) => {
+    const left = row.querySelector('.row-left');
+    if (!left) return;
+    left.innerHTML = '';
+    if (i > 0){
+      const thenTag = document.createElement('span');
+      thenTag.className = 'then-tag';
+      thenTag.textContent = 'THEN';
+      left.appendChild(thenTag);
+    }
+  });
+}
+
 function addReductionRow(){
   const list = document.getElementById('step1List');
   if (!list) return;
   const idx = currentReductionCount();
   if (idx >= MAX_REDUCTION_LINES) return;
-  list.appendChild(buildReductionRow(idx));
+
+  const row = buildReductionRow(idx);
+  list.appendChild(row);
+
+  // Default the new row to the first available slot not already used
+  pickFirstAvailableSlot(row);
+  enforceUniqueTimeSelections();
+  refreshThenTags();
   updateReductionButtonsState();
 }
+
 function clearReductionRows(){
   const list = document.getElementById('step1List');
   if (!list) return;
@@ -582,7 +610,54 @@ function clearReductionRows(){
   updateReductionButtonsState();
 }
 
-// Wire Step 1 & Step 2 panel (layout only)
+function pickFirstAvailableSlot(row){
+  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
+  const used = new Set(selects.filter(s => s !== row.querySelector('select')).map(s => s.value));
+  const mySel = row.querySelector('select');
+  if (!mySel) return;
+
+  const options = Array.from(mySel.options);
+  const preferred = options.find(o => !used.has(o.value));
+  if (preferred) mySel.value = preferred.value;
+}
+
+function enforceUniqueTimeSelections(){
+  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
+  const used = new Map(); // value -> count
+  selects.forEach(sel => used.set(sel.value, (used.get(sel.value)||0)+1));
+
+  // disable options that are already chosen in another select
+  selects.forEach(owner => {
+    const ownerVal = owner.value;
+    Array.from(owner.options).forEach(opt => {
+      const val = opt.value;
+      const count = used.get(val)||0;
+      // allow the owner to keep its own choice; disable only if chosen elsewhere
+      const chosenElsewhere = (val !== ownerVal && count > 0);
+      opt.disabled = chosenElsewhere;
+    });
+  });
+}
+
+// Show/hide the whole Step-1 block based on the single enable Yes/No
+function syncStep1Enable(){
+  const yes = document.getElementById('enableStep1Yes')?.checked;
+  const help = document.getElementById('step1Help');
+  const list = document.getElementById('step1List');
+  const btns = document.getElementById('step1Btns');
+
+  const on = !!yes;
+  if (help) help.style.display = on ? '' : 'none';
+  if (list) list.style.display = on ? '' : 'none';
+  if (btns) btns.style.display = on ? '' : 'none';
+
+  if (on && currentReductionCount() === 0){
+    addReductionRow(); // start with one line when turned on
+  }
+  updateReductionButtonsState();
+}
+
+// Wire Step 1/2 layout (no logic changes)
 function wireCustomStepsLayout(){
   const addBtn   = document.getElementById('addReduction');
   const clearBtn = document.getElementById('clearReductions');
@@ -590,10 +665,15 @@ function wireCustomStepsLayout(){
   if (addBtn)   addBtn.addEventListener('click', addReductionRow);
   if (clearBtn) clearBtn.addEventListener('click', clearReductionRows);
 
-  // start with zero lines
-  clearReductionRows();
-}
+  // Enable Step 1 toggle
+  const enNo  = document.getElementById('enableStep1No');
+  const enYes = document.getElementById('enableStep1Yes');
+  if (enNo)  enNo.addEventListener('change', syncStep1Enable);
+  if (enYes) enYes.addEventListener('change', syncStep1Enable);
 
+  // initial state: Step 1 disabled (No checked), keep list hidden
+  syncStep1Enable();
+}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
