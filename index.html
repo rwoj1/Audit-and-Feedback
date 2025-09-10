@@ -10,8 +10,9 @@
 </head>
 <body>
   <main class="container">
-    <h1>Medicine Chart Input</h1>
+    <h1>Medicine Tapering Calculator</h1>
 
+    <section class="card">
     <div class="grid">
       <label>Medicine Class
         <select id="classSelect"></select>
@@ -23,23 +24,12 @@
         <select id="formSelect"></select>
       </label>
     </div>
-
-    <div class="grid">
-      <label>Start date
-        <input id="startDate" class="datepick" placeholder="Select date" />
-      </label>
-      <label>Next review date (optional)
-        <input id="reviewDate" class="datepick" placeholder="Select date" />
-      </label>
-    </div>
-
-    <section class="card">
+    
       <div class="card-head">
-        <h2>Dose lines</h2>
+        <h2>Current Dosage</h2>
         <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
       </div>
       <div id="doseLinesContainer" class="dose-lines"></div>
-<p class="hint">Only <strong>Strength</strong>, <strong>Number of doses</strong> and <strong>Frequency</strong> can be changed.</p>
     </section>
 
     <section class="card">
@@ -49,6 +39,15 @@
 <section class="card">
 <h2>Taper controls</h2>
 
+      <div class="grid">
+      <label>Start date for tapering
+        <input id="startDate" class="datepick" placeholder="Select date" />
+      </label>
+      <label>Next review date (optional)
+        <input id="reviewDate" class="datepick" placeholder="Select date" />
+      </label>
+    </div>
+  
 <div class="taper-block">
   <h3>Phase 1</h3>
   <div class="taper-row">
@@ -79,18 +78,30 @@
   </div>
 
   <p class="hint">
-    If Phase 2 is partially complete or empty, only a single-phase taper will generate.
+    If Phase 2 is partially complete or empty, only a single-phase taper will generate. <br>
     Hard limit: 3 months (or review date, if earlier).
   </p>
 </div>
 
+<!-- Product/formulation picker (only shown for supported meds) -->
+<div id="productPickerCard" class="card-subtle" style="display:none;margin-top:12px">
+  <h3 style="margin:0 0 6px 0;">Select formulations to use in the taper (optional)</h3>
+  <p class="hint" style="margin-top:0">
+    Select the commercial products to generate a tapering plan. If none are selected, all products will be used.
+  </p>
+  <div id="productPicker" class="product-grid"></div>
+ <div class="taper-row" style="gap:8px; margin-top:8px;">
+  <button id="selectAllProductSelection" type="button" class="secondary">Select all</button>
+  <button id="clearProductSelection"  type="button" class="secondary">Clear selection</button>
+</div>
+</div>
+  </section>
   <div class="actions">
     <button id="generateBtn" type="button">Generate Chart</button>
     <button id="printBtn" type="button" class="secondary">Print</button>
-    <button id="savePdfBtn" type="button" class="secondary">Save as PDF…</button>
     <button id="resetBtn" type="button" class="ghost">Reset</button>
   </div>
-</section>
+
 
  <section id="outputCard" class="card output">
   <div class="output-head">
