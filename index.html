@@ -120,20 +120,27 @@
           </label>
         </div>
 
-        <!-- Custom panel (collapsed until "Customise" is selected) -->
-        <div id="customPanel" style="display:none">
-          <h4 class="subhead">Step 1 — Default reduction order</h4>
-          <p class="hint">Set the order (AM, MID, DIN, PM). Pre-filled per medicine class.</p>
+  <div id="customPanel" style="display:none">
+  <!-- STEP 1 -->
+  <h4 class="subhead">Step 1 — Default reduction order</h4>
+  <p class="hint" id="step1HiddenMsg" style="display:none">Not applicable for this class.</p>
+  <p class="hint" id="step1Notice">Click a pill to move it to the end (left → right = highest → lowest priority).</p>
+  <div id="priorityList" class="chip-list" aria-label="Dose reduction priority"></div>
+  <div class="taper-row" style="margin-top:6px;">
+    <button id="resetPriority" type="button" class="secondary">Reset to class default</button>
+  </div>
 
-          <h4 class="subhead">Step 2 — Class split rules</h4>
-          <p class="hint">Rules are always enforced after each step (e.g., BID PM ≥ AM; TID centre-light).</p>
+  <!-- STEP 2 -->
+  <h4 class="subhead">Step 2 — Class split rules</h4>
+  <div id="classRuleText" class="rule-box"></div>
 
-          <h4 class="subhead">Step 3 — Review trigger (optional)</h4>
-          <label class="inline-label">
-            <span>Set review when daily total ≤</span>
-            <input id="customReviewMg" type="number" min="1" placeholder="mg/day" />
-          </label>
-        </div>
+  <!-- STEP 3 (unchanged, still layout only) -->
+  <h4 class="subhead">Step 3 — Review trigger (optional)</h4>
+  <label class="inline-label">
+    <span>Set review when daily total ≤</span>
+    <input id="customReviewMg" type="number" min="1" placeholder="mg/day" />
+  </label>
+</div>
       </div>
 
     </div>
