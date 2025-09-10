@@ -274,7 +274,6 @@ function escapeHtml(s){
 }
 
 // Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
-// Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
 function formatOxyOnlyHTML(label){
   if (!label) return "";
 
@@ -282,31 +281,45 @@ function formatOxyOnlyHTML(label){
   const esc = s => String(s)
     .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 
-  let s = esc(label);
+  let txt = esc(label);
 
-  // Case A: "Oxycodone 30 mg ..." → make the whole 'Oxycodone 30 mg' bold
-  s = s.replace(/Oxycodone([^0-9<]*)(\d+(?:\.\d+)?)\s*mg/i,
-                (m, pre, mg) => `<strong class="oxy-strong">Oxycodone${pre}${mg} mg</strong>`);
+  // Bold the word "Oxycodone"
+  txt = txt.replace(/\b(Oxycodone)\b/i, '<strong class="oxy-strong">$1</strong>');
 
-  // Case B1: "10 mg/5 mg" → bold the first mg block only
-  s = s.replace(/(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
-                (m, a, b) => `<strong class="oxy-strong">${a} mg</strong>/${b} mg`);
+  // Case A: explicit "Oxycodone 10 mg + Naloxone 5 mg ..."
+  txt = txt.replace(
+    /(Oxycodone[^0-9]*)(\d+(?:\.\d+)?)\s*mg/ig,
+    (_, pre, mg) => `<strong class="oxy-strong">${esc(pre)}${mg} mg</strong>`
+  );
 
-  // Case B2: "10/5 mg" → bold the first number only
-  s = s.replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
-                (m, a, b) => `<strong class="oxy-strong">${a}</strong>/${b} mg`);
+  // Case B: combined strength like "10 mg / 5 mg" or "10/5 mg"
+  // Bold only the *first* mg block (conventionally oxycodone in oxy/nal combos)
+  txt = txt.replace(
+    /(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
+    (m, a, b) => `<strong class="oxy-strong">${a} mg</strong>/${b} mg`
+  );
+  txt = txt.replace(
+    /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
+    (m, a, b) => `<strong class="oxy-strong">${a}</strong>/${b} mg`
+  );
 
-  // Ensure the word “Oxycodone” itself is bold too (if not already)
-  if (!/<strong[^>]*>\s*Oxycodone\s*<\/strong>/i.test(s)) {
-    s = s.replace(/\bOxycodone\b/i, '<strong class="oxy-strong">$&</strong>');
-  }
+  // (Optional) keep form suffix slightly toned down if you already did that
+  txt = txt.replace(/\b(SR\s*(?:tablet|capsule))\b/i, '<span class="form-dim">$1</span>');
 
-  // Soften form suffix
-  s = s.replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
-
-  return s;
+  return txt;
 }
 
+// --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
+
+//#endregion
+//#region 3. Print & PDF Helpers
+function getPrintTableAndType() {
+  const std = document.querySelector("#scheduleBlock table");
+  if (std) return { table: std, type: "standard" };
+  const pat = document.querySelector("#patchBlock table");
+  if (pat) return { table: pat, type: "patch" };
+  return { table: null, type: null };
+}
 // 1) Inject print-only header (Medicine, special instruction, disclaimer)
 // De-duped print header: Medicine + special instruction + disclaimer
 function injectPrintHeader() {
