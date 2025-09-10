@@ -338,6 +338,33 @@ label.radio{
   background:var(--card);
 }
 label.radio input{ accent-color:var(--accent); }
+/* ===== Custom Mode: Step 1 pills & Step 2 rules box ===== */
+#customPanel .chip-list{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+#customPanel .chip{
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:var(--card);
+  color:var(--text);
+  cursor:pointer;
+  user-select:none;
+  transition:transform .06s ease;
+}
+#customPanel .chip:active{ transform:scale(0.98); }
+
+#customPanel .rule-box{
+  border:1px dashed var(--border);
+  background:var(--card);
+  padding:10px 12px;
+  border-radius:8px;
+}
+#customPanel .rule-list{
+  margin:6px 0 0 18px;
+}
 
 
 /* ==============================
