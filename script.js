@@ -336,6 +336,107 @@ function formatOxyOnlyHTML(label){
 
   return html;
 }
+/* ===== Accordion chevron ===== */
+details.accordion > summary {
+  position: relative;
+  padding-right: 28px; /* room for chevron */
+}
+details.accordion > summary::after{
+  content: "";
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  width: 10px; height: 10px;
+  transform: translateY(-50%) rotate(0deg);
+  transition: transform .15s ease;
+  /* chevron via borders */
+  border-right: 2px solid var(--text);
+  border-bottom: 2px solid var(--text);
+  transform-origin: 60% 40%;
+  /* initial: pointing right (↘ rotated) */
+  rotate: -45deg;
+}
+details.accordion[open] > summary::after{
+  /* pointing down */
+  rotate: 45deg;
+}
+
+/* ===== Step 1 reduction rows ===== */
+.reduction-list{
+  display: grid;
+  gap: 8px;
+}
+.reduction-row{
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px dashed var(--border);
+  background: var(--card);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.reduction-row .row-left{
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.reduction-row .row-main{
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.reduction-row .row-actions{
+  display: flex;
+  gap: 6px;
+}
+
+/* inline bits */
+.inline-word{ opacity: .85; }
+
+/* time-of-day control */
+.reduction-row select,
+.reduction-row input[type="text"],
+.reduction-row input[type="number"]{
+  min-width: 120px;
+}
+
+/* tiny buttons */
+button.small{
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+/* input with suffix (mg/day) */
+.input-suffix{
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.input-suffix input{
+  padding-right: 56px; /* room for suffix */
+}
+.input-suffix .suffix{
+  position: absolute;
+  right: 10px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+/* radio pills (already present; ensure compact) */
+label.radio{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--card);
+}
+label.radio input{ accent-color: var(--accent); }
 
 /* ---------- Custom Mode (layout only): Step 1 & Step 2 ---------- */
 
@@ -3169,6 +3270,7 @@ updateClassFooter();
   renderProductPicker();
   wireModeToggle();
   wireCustomPanel();
+  wireCustomStepsLayout();
 
   
   // 7) Live gating + interval hints for patches
