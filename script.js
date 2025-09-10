@@ -273,37 +273,40 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 }
 
-function formatOxyNalHTML(label){
+// Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
+function formatOxyOnlyHTML(label){
   if (!label) return "";
-  // Work on an escaped copy to avoid injecting markup from data
-  let s = escapeHtml(label);
 
-  if (!/oxy(?:codone)?/i.test(s) || !/nalo(?:xone)?/i.test(s)) {
-    // Non-combo: return plain text
-    return s;
-  }
+  // Simple HTML escape
+  const esc = s => String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 
-  // 1) Name emphasis
-  s = s.replace(/Oxycodone/ig, '<strong class="oxy-strong">$&</strong>');
-  s = s.replace(/Naloxone/ig,  '<span class="nalo-dim">$&</span>');
+  let txt = esc(label);
 
-  // 2) Common mg formats → bold first (oxycodone), dim second (naloxone)
-  // e.g., "10 mg/5 mg" or "10/5 mg"
-  s = s.replace(/(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/ig,
-                '<strong class="oxy-strong">$1 mg</strong>/<span class="nalo-dim">$2 mg</span>');
-  s = s.replace(/(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/ig,
-                '<strong class="oxy-strong">$1 mg</strong>/<span class="nalo-dim">$2 mg</span>');
+  // Bold the word "Oxycodone"
+  txt = txt.replace(/\b(Oxycodone)\b/i, '<strong class="oxy-strong">$1</strong>');
 
-  // 3) Name-then-mg formats: "...Oxycodone 10 mg..." and "...Naloxone 5 mg..."
-  s = s.replace(/(Oxycodone[^<]*?)(\d+(?:\.\d+)?)\s*mg/ig,
-                (_, a, n) => a + '<strong class="oxy-strong">' + n + ' mg</strong>');
-  s = s.replace(/(Naloxone[^<]*?)(\d+(?:\.\d+)?)\s*mg/ig,
-                (_, a, n) => a + '<span class="nalo-dim">' + n + ' mg</span>');
+  // Case A: explicit "Oxycodone 10 mg + Naloxone 5 mg ..."
+  txt = txt.replace(
+    /(Oxycodone[^0-9]*)(\d+(?:\.\d+)?)\s*mg/ig,
+    (_, pre, mg) => `<strong class="oxy-strong">${esc(pre)}${mg} mg</strong>`
+  );
 
-  // 4) Dim the form suffix
-  s = s.replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
+  // Case B: combined strength like "10 mg / 5 mg" or "10/5 mg"
+  // Bold only the *first* mg block (conventionally oxycodone in oxy/nal combos)
+  txt = txt.replace(
+    /(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
+    (m, a, b) => `<strong class="oxy-strong">${a} mg</strong>/${b} mg`
+  );
+  txt = txt.replace(
+    /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i,
+    (m, a, b) => `<strong class="oxy-strong">${a}</strong>/${b} mg`
+  );
 
-  return s;
+  // (Optional) keep form suffix slightly toned down if you already did that
+  txt = txt.replace(/\b(SR\s*(?:tablet|capsule))\b/i, '<span class="form-dim">$1</span>');
+
+  return txt;
 }
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
@@ -1455,10 +1458,18 @@ function renderStandardTable(stepRows){
       tr.appendChild(tdDate);
 
 // [2] Strength — emphasise oxycodone over naloxone on ALL rows
+// [Strength cell] — emphasise oxycodone (screen only)
 const tdStrength = document.createElement("td");
 tdStrength.className = "col-strength";
-tdStrength.innerHTML = formatOxyNalHTML(line.strength || "");
+
+const rawLabel = line.strength || "";
+if (/oxy(?:codone)?/i.test(rawLabel)) {
+  tdStrength.innerHTML = formatOxyOnlyHTML(rawLabel);
+} else {
+  tdStrength.textContent = rawLabel;
+}
 tr.appendChild(tdStrength);
+
 
       // [3] Instructions — keep \n, print via textContent
       const tdInstr = document.createElement("td");
