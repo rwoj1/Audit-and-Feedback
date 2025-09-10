@@ -1700,7 +1700,7 @@ function oxyNxPairLabel(oxyMg){
   return `Oxycodone ${stripZeros(oxy)} mg + naloxone ${stripZeros(nx)} mg SR tablet`;
 }
 /* =================== Dropdowns & dose lines =================== */
-const ANTIPSYCHOTIC_MODE = "hide";
+const ANTIPSYCHOTIC_MODE = "Show";
 
 function populateClasses() {
   const el = $("classSelect");
