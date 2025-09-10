@@ -1418,10 +1418,22 @@ function renderStandardTable(stepRows){
       tr.appendChild(tdDate);
 
       // [2] Strength
-      const tdStrength = document.createElement("td");
-      tdStrength.className = "col-strength";
-      tdStrength.textContent = line.strength || "";
-      tr.appendChild(tdStrength);
+   // [2] Strength — emphasise oxycodone over naloxone (screen only)
+const tdStrength = document.createElement("td");
+tdStrength.className = "col-strength";
+
+const rawLabel = line.strength || "";
+if (/oxy(?:codone)?/i.test(rawLabel) && /nalo(?:xone)?/i.test(rawLabel)) {
+  // Common patterns: "Oxycodone 10 mg + Naloxone 5 mg SR tablet" or "… 10 mg/5 mg …"
+  let html = rawLabel
+    .replace(/(Oxycodone[^0-9]*\d+\s*mg)/i, '<strong class="oxy-strong">$1</strong>')
+    .replace(/(Naloxone[^0-9]*\d+\s*mg)/i, '<span class="nalo-dim">$1</span>')
+    .replace(/(SR\s*tablet|SR\s*capsule)/i, '<span class="form-dim">$1</span>');
+  tdStrength.innerHTML = html;
+} else {
+  tdStrength.textContent = rawLabel;
+}
+tr.appendChild(tdStrength);
 
       // [3] Instructions — keep \n, print via textContent
       const tdInstr = document.createElement("td");
