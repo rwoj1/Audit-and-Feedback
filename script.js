@@ -536,9 +536,20 @@ function buildReductionRow(idx){
   main.appendChild(w2);
   main.appendChild(mgWrap);
 
-  // actions: remove
+  // actions: Up / Down / Remove
   const actions = document.createElement('div');
   actions.className = 'row-actions';
+
+  const up = document.createElement('button');
+  up.type = 'button'; up.className = 'secondary small btn-up';
+  up.textContent = '↑ Up';
+  up.addEventListener('click', ()=> moveReductionRow(row, -1));
+
+  const down = document.createElement('button');
+  down.type = 'button'; down.className = 'secondary small btn-down';
+  down.textContent = '↓ Down';
+  down.addEventListener('click', ()=> moveReductionRow(row, +1));
+
   const remove = document.createElement('button');
   remove.type = 'button'; remove.className = 'ghost small';
   remove.textContent = 'Remove';
@@ -546,8 +557,13 @@ function buildReductionRow(idx){
     row.remove();
     refreshThenTags();
     enforceUniqueTimeSelections();
+    updateRowIndices();
     updateReductionButtonsState();
+    disableUpDownButtons();
   });
+
+  actions.appendChild(up);
+  actions.appendChild(down);
   actions.appendChild(remove);
 
   row.appendChild(left);
@@ -559,6 +575,48 @@ function buildReductionRow(idx){
 
   return row;
 }
+function moveReductionRow(row, dir){
+  const list = document.getElementById('step1List');
+  if (!list) return;
+  const rows = Array.from(list.querySelectorAll('.reduction-row'));
+  const i = rows.indexOf(row);
+  if (i < 0) return;
+
+  const j = i + dir;
+  if (j < 0 || j >= rows.length) return; // already at edge
+
+  // Reinsert DOM node in new position
+  if (dir < 0) list.insertBefore(row, rows[j]);            // move up before the row above
+  else          list.insertBefore(row, rows[j].nextSibling); // move down after the row below
+
+  refreshThenTags();
+  updateRowIndices();
+  enforceUniqueTimeSelections();
+  disableUpDownButtons();
+}
+
+function updateRowIndices(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    r.dataset.index = String(idx);
+    // keep IDs tidy (not strictly required, but nice)
+    const sel = r.querySelector('select[id^="redSlot"]');
+    const mg  = r.querySelector('input[id^="redMg"]');
+    if (sel) sel.id = `redSlot${idx}`;
+    if (mg)  mg.id  = `redMg${idx}`;
+  });
+}
+
+function disableUpDownButtons(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    const up   = r.querySelector('.btn-up');
+    const down = r.querySelector('.btn-down');
+    if (up)   up.disabled   = (idx === 0);
+    if (down) down.disabled = (idx === rows.length - 1);
+  });
+}
+
 
 function currentReductionCount(){
   return document.querySelectorAll('#step1List .reduction-row').length;
@@ -601,7 +659,9 @@ function addReductionRow(){
   enforceUniqueTimeSelections();
   refreshThenTags();
   updateReductionButtonsState();
+  disableUpDownButtons(); // <-- add this line
 }
+
 
 function clearReductionRows(){
   const list = document.getElementById('step1List');
@@ -673,6 +733,7 @@ function wireCustomStepsLayout(){
 
   // initial state: Step 1 disabled (No checked), keep list hidden
   syncStep1Enable();
+  disableUpDownButtons(); // <-- add this
 }
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
