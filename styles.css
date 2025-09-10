@@ -229,6 +229,20 @@ button.ghost{
 .plan-standard td.instructions-pre {
   white-space: pre-line;
 }
+/* Strength cell emphasis for Oxycodone/Naloxone */
+.plan-standard td.col-strength .oxy-strong { font-weight: 700; }
+.plan-standard td.col-strength .nalo-dim  { opacity: .7; }
+.plan-standard td.col-strength .form-dim  { opacity: .6; }
+
+/* Do not alter the printed output */
+@media print {
+  .plan-standard td.col-strength .oxy-strong,
+  .plan-standard td.col-strength .nalo-dim,
+  .plan-standard td.col-strength .form-dim {
+    font-weight: 400;
+    opacity: 1;
+  }
+}
 
 /* =========================================================
    RESPONSIVE (global grid fallback)
