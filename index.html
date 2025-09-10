@@ -36,66 +36,110 @@
       <div id="bestPracticeBox"></div>
     </section>
 
-<section class="card">
-<h2>Taper controls</h2>
+<section class="card" id="taperCard">
+  <h2>Taper controls</h2>
 
-      <div class="grid">
-      <label>Start date for tapering
-        <input id="startDate" class="datepick" placeholder="Select date" />
+  <!-- Dates row -->
+  <div class="grid">
+    <label>Start date for tapering
+      <input id="startDate" class="datepick" placeholder="Select date" />
+    </label>
+    <label>Next review date (optional)
+      <input id="reviewDate" class="datepick" placeholder="Select date" />
+    </label>
+  </div>
+
+  <!-- Phase 1 stays visible -->
+  <div class="taper-block">
+    <h3>Phase 1</h3>
+    <div class="taper-row">
+      <label class="inline-label">
+        <span>Reduce by (%):</span>
+        <input id="p1Percent" type="number" min="1" max="100" placeholder="%" />
       </label>
-      <label>Next review date (optional)
-        <input id="reviewDate" class="datepick" placeholder="Select date" />
+      <label class="inline-label">
+        <span>Every (days):</span>
+        <input id="p1Interval" type="number" min="1" placeholder="days" />
       </label>
     </div>
-  
-<div class="taper-block">
-  <h3>Phase 1</h3>
-  <div class="taper-row">
-    <label class="inline-label">
-      <span>Reduce by (%):</span>
-      <input id="p1Percent" type="number" min="1" max="100" placeholder="%" />
-    </label>
-    <label class="inline-label">
-      <span>Every (days):</span>
-      <input id="p1Interval" type="number" min="1" placeholder="days" />
-    </label>
   </div>
 
-  <h3>Phase 2 <span class="muted">(optional)</span></h3>
-  <div class="taper-row">
-    <label class="inline-label">
-      <span>Start Phase 2 from:</span>
-      <input id="p2StartDate" class="datepick" placeholder="DD/MM/YYYY" />
-    </label>
-    <label class="inline-label">
-      <span>Reduce by (%):</span>
-      <input id="p2Percent" type="number" min="1" max="100" placeholder="%" />
-    </label>
-    <label class="inline-label">
-      <span>Every (days):</span>
-      <input id="p2Interval" type="number" min="1" placeholder="days" />
-    </label>
-  </div>
+  <!-- NEW: Advanced Settings accordion (everything for Phase 2 lives here) -->
+  <details id="advancedSettings" class="accordion">
+    <summary>Advanced Settings (Optional)</summary>
+    <div class="accordion-body">
 
-  <p class="hint">
-    If Phase 2 is partially complete or empty, only a single-phase taper will generate. <br>
-    Hard limit: 3 months (or review date, if earlier).
-  </p>
-</div>
+      <!-- Phase 2 (entirely inside the accordion) -->
+      <div class="taper-block">
+        <h3>Phase 2</h3>
+        <p class="hint" style="margin-top:0">
+          Phase 2 will start at the closest date after the last step of Phase 1 is complete.
+          If Phase 2 is blank or only partly set up, a single-phase taper will be generated.
+        </p>
+        <div class="taper-row">
+          <label class="inline-label">
+            <span>Start Phase 2 from:</span>
+            <input id="p2StartDate" class="datepick" placeholder="DD/MM/YYYY" />
+          </label>
+          <label class="inline-label">
+            <span>Reduce by (%):</span>
+            <input id="p2Percent" type="number" min="1" max="100" placeholder="%" />
+          </label>
+          <label class="inline-label">
+            <span>Every (days):</span>
+            <input id="p2Interval" type="number" min="1" placeholder="days" />
+          </label>
+        </div>
+      </div>
 
-<!-- Product/formulation picker (only shown for supported meds) -->
-<div id="productPickerCard" class="card-subtle" style="display:none;margin-top:12px">
-  <h3 style="margin:0 0 6px 0;">Select formulations to use in the taper (optional)</h3>
-  <p class="hint" style="margin-top:0">
-    Select the commercial products to generate a tapering plan. If none are selected, all products will be used.
-  </p>
-  <div id="productPicker" class="product-grid"></div>
- <div class="taper-row" style="gap:8px; margin-top:8px;">
-  <button id="selectAllProductSelection" type="button" class="secondary">Select all</button>
-  <button id="clearProductSelection"  type="button" class="secondary">Clear selection</button>
-</div>
-</div>
-  </section>
+      <!-- Product/formulation picker: moved inside the accordion, above Mode -->
+      <div id="productPickerCard" class="card-subtle" style="display:none; margin-top:8px;">
+        <h3 style="margin:0 0 6px 0;">Select formulations to use in the taper (optional)</h3>
+        <p class="hint" style="margin-top:0">
+          Select the commercial products to generate a tapering plan.<br>
+          If none are selected, all products will be used.
+        </p>
+        <div id="productPicker" class="product-grid"></div>
+        <div class="taper-row" style="gap:8px; margin-top:8px;">
+          <button id="selectAllProductSelection" type="button" class="secondary">Select all</button>
+          <button id="clearProductSelection"  type="button" class="secondary">Clear selection</button>
+        </div>
+      </div>
+
+      <!-- Mode: defaults vs custom (layout only; logic unchanged) -->
+      <div class="taper-block" id="modeBlock" style="margin-top:10px;">
+        <h3>Mode</h3>
+        <div class="taper-row">
+          <label class="radio">
+            <input type="radio" name="taperMode" id="modeDefault" checked>
+            <span>Use recommended defaults</span>
+          </label>
+          <label class="radio">
+            <input type="radio" name="taperMode" id="modeCustom">
+            <span>Customise taper</span>
+          </label>
+        </div>
+
+        <!-- Custom panel (collapsed until "Customise" is selected) -->
+        <div id="customPanel" style="display:none">
+          <h4 class="subhead">Step 1 — Default reduction order</h4>
+          <p class="hint">Set the order (AM, MID, DIN, PM). Pre-filled per medicine class.</p>
+
+          <h4 class="subhead">Step 2 — Class split rules</h4>
+          <p class="hint">Rules are always enforced after each step (e.g., BID PM ≥ AM; TID centre-light).</p>
+
+          <h4 class="subhead">Step 3 — Review trigger (optional)</h4>
+          <label class="inline-label">
+            <span>Set review when daily total ≤</span>
+            <input id="customReviewMg" type="number" min="1" placeholder="mg/day" />
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </details>
+</section>
+
   <div class="actions">
     <button id="generateBtn" type="button">Generate Chart</button>
     <button id="printBtn" type="button" class="secondary">Print</button>
