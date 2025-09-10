@@ -277,6 +277,27 @@ button.ghost{
     0 10px 22px rgba(17,139,213,0.06),
     0 2px 6px rgba(0,0,0,0.03);
 }
+/* Strength emphasis (screen) */
+.table td.col-strength .oxy-strong,
+.plan-standard td.col-strength .oxy-strong{ font-weight:700; }
+.table td.col-strength .nalo-dim,
+.plan-standard td.col-strength .nalo-dim{ opacity:.75; }
+.table td.col-strength .form-dim,
+.plan-standard td.col-strength .form-dim{ opacity:.6; }
+
+/* Also apply in product picker bubbles */
+#productPicker .oxy-strong{ font-weight:700; }
+#productPicker .nalo-dim{ opacity:.8; }
+#productPicker .form-dim{ opacity:.75; }
+
+/* Keep printed output neutral */
+@media print{
+  .table td.col-strength .oxy-strong,
+  .table td.col-strength .nalo-dim,
+  .table td.col-strength .form-dim{
+    font-weight:400; opacity:1;
+  }
+}
 
 
 /* ==============================
