@@ -224,6 +224,15 @@ button.ghost{
 .footer-notes{ margin-top:12px; padding-top:8px; border-top:1px solid var(--border); }
 .class-footer{ white-space:pre-wrap; line-height:1.35; font-size:0.95rem; color:var(--text); }
 
+/* Show each instruction on its own line */
+.instructions-pre {
+  white-space: pre-line;  /* render \n as line breaks, wrap long lines */
+  line-height: 1.25;
+}
+
+@media print {
+  .instructions-pre { white-space: pre-line; }
+}
 /* =========================================================
    RESPONSIVE (global grid fallback)
    ========================================================= */
