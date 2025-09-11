@@ -1306,6 +1306,43 @@ function strengthsForSelectedSafe(cls, med, form){
   }
 }
 
+// ---- Phase 2: auto-start one day after Phase 1's final dose step ----
+function autoFillP2StartFromPhase1(phase1Rows){
+  try{
+    if (!Array.isArray(phase1Rows) || !phase1Rows.length) return;
+
+    // Find the last DOSE row in Phase 1 (skip REVIEW/STOP)
+    const doseRows = phase1Rows.filter(r => !r.kind || r.kind === 'DOSE');
+    if (!doseRows.length) return;
+
+    const last = doseRows[doseRows.length - 1];
+    const lastDateStr = last.dateStr || last.date || last.when || last.applyOn;
+    if (!lastDateStr) return;
+
+    const p2 = document.getElementById('p2StartDate');
+    if (!p2) return;
+
+    // Only auto-fill if user left it blank
+    const trimmed = String(p2.value || '').trim();
+    if (trimmed) return;
+
+    const d = new Date(lastDateStr);
+    if (isNaN(d.getTime())) return;
+
+    // "closest date after" → next calendar day
+    d.setDate(d.getDate() + 1);
+
+    // write back in the same yyyy-mm-dd format most date inputs expect
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    p2.value = `${y}-${m}-${day}`;
+  } catch(e){
+    console.warn('autoFillP2StartFromPhase1 skipped:', e);
+  }
+}
+
+
 /* ================== OPIOID SR: safety + end-dose helpers ================== */
 
 // Hard caps (spread = maxSlotMg - minSlotMg)
