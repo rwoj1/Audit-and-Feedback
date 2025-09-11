@@ -2278,13 +2278,14 @@ const doStep = (phasePct) => {
     const nextByP2 = addDays(date, p2Int);
     let nextDate;
 
-    if (p2Start && +date < +p2Start) {
-      nextDate = (+nextByP1 > +p2Start) ? new Date(p2Start) : nextByP1;
-    } else if (p2Start && +date >= +p2Start) {
-      nextDate = nextByP2;
-    } else {
-      nextDate = nextByP1;
-    }
+   // Phase rule: Phase 2 begins only AFTER the current Phase 1 step completes
+if (p2Start && +date < +p2Start) {
+  nextDate = nextByP1;
+} else if (p2Start && +date >= +p2Start) {
+  nextDate = nextByP2;
+} else {
+  nextDate = nextByP1;
+}
 
     if (reviewDate && +nextDate >= +reviewDate) { rows.push({ week: week+1, date: fmtDate(reviewDate), packs:{}, med, form, cls, review:true }); break; }
     if (+nextDate - +startDate >= THREE_MONTHS_MS) { rows.push({ week: week+1, date: fmtDate(nextDate), packs:{}, med, form, cls, review:true }); break; }
