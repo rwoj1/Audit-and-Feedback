@@ -2225,16 +2225,11 @@ function stepAP(packs, percent, med, form){
 }
 
 /* ===== Gabapentinoids — Gabapentin (TID centre-light; AM=PM when feasible) | Pregabalin (mirror SR-Opioid BID) ===== */
-// --- Decide QID vs TID handling up-front ---
-const freq = (typeof inferFreqFromPacks === 'function') ? inferFreqFromPacks(packs) : null;
-
-// If current packs show QID, do the “reduce DIN first” pass, then fall through to TID logic.
-if (/^Gabapentin$/i.test(med) && freq === 'QID') {
+function stepGabapentinoid(packs, percent, med, form){
+  const freq = (typeof inferFreqFromPacks === 'function') ? inferFreqFromPacks(packs) : null;
+  if (/^Gabapentin$/i.test(med) && freq === 'QID') {
   packs = distributeGabapentinQIDReduceDIN(packs, percent, med, form);
 }
-// If TID/TDS, we simply continue into the existing TID logic below.
-
-function stepGabapentinoid(packs, percent, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
