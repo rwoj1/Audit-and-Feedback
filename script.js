@@ -3260,6 +3260,3 @@ if (document.readyState === 'loading') {
 }
 document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
 //#endregion
-
-// --- Auto-closed constructs appended ---
-"])}
