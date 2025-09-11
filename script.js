@@ -679,37 +679,103 @@ function cmpByDosePref(target, A, B) {
 }
 
 // Choose the best achievable daily total by enumerating combinations under a per-slot cap.
+// Drop-in replacement
 function selectBestOralTotal(target, strengths, freq, unitCapPerSlot = 4) {
-  const maxSlots = slotsForFreq(freq);
-  const maxUnitsPerDay = Math.max(1, maxSlots * unitCapPerSlot);
-  const S = strengths.slice().sort((a,b)=>b-a); // try higher strengths first
-  let best = null;
+  // --- 0) Normalise inputs ---------------------------------------------------
+  target = Number(target) || 0;
+  unitCapPerSlot = Math.max(1, unitCapPerSlot | 0);
 
-  function dfs(i, unitsUsed, totalMg, counts) {
-    if (unitsUsed > maxUnitsPerDay) return;
-    if (i === S.length) {
-      if (unitsUsed === 0) return;
-      const flat = [];
-      S.forEach((mg, idx) => { for (let k=0;k<(counts[idx]||0);k++) flat.push(mg); });
-      const cand = {
-        total: totalMg,
-        units: unitsUsed,
-        strengths: flat,
-        byStrength: new Map(S.map((mg, idx)=>[mg, counts[idx]||0]))
-      };
-      if (!best || cmpByDosePref(target, cand, best) < 0) best = cand;
+  // Respect the user's explicit product selections (no sneaking in unselected strengths)
+  try {
+    if (typeof selectedProductMgs === "function") {
+      const picked = selectedProductMgs(); // e.g., [100,300,400]
+      if (Array.isArray(picked) && picked.length) {
+        const allow = new Set(picked.map(Number));
+        strengths = (strengths || []).filter(mg => allow.has(Number(mg)));
+      }
+    }
+  } catch (_) { /* safe fallback */ }
+
+  // Dedupe and sort strengths DESC (helps search converge)
+  const S = Array.from(new Set((strengths || []).map(Number)))
+    .filter(n => Number.isFinite(n) && n > 0)
+    .sort((a,b) => b - a);
+
+  if (!S.length) return null;
+
+  // --- 1) Slots / units per day bounds --------------------------------------
+  const slots = (typeof slotsForFreq === "function")
+    ? slotsForFreq(freq)
+    : (String(freq).toUpperCase() === "QID" ? 4
+      : /^(TID|TDS)$/i.test(freq) ? 3
+      : /^BID$/i.test(freq) ? 2
+      : 4); // safe fallback
+
+  const maxUnitsPerDay = Math.max(1, slots * unitCapPerSlot);
+
+  // --- 2) DFS search over counts per strength (bounded by maxUnitsPerDay) ---
+  // Candidate shape: { total, units, strengths: number[], byStrength: Map }
+  let best = null;
+  const EPS = 1e-9;
+
+  function better(a, b) {
+    // Comparator: negative if a is better than b
+    // 1) minimal |total - target|
+    const ad = Math.abs(a.total - target), bd = Math.abs(b.total - target);
+    if (ad !== bd) return ad - bd;
+
+    // 2) fewest items (units)
+    if (a.units !== b.units) return a.units - b.units;
+
+    // 3) round UP on tie (prefer higher total)
+    if ((a.total >= target) !== (b.total >= target)) return (a.total >= target) ? -1 : 1;
+
+    // 4) stable final tie-break: lower total to avoid oscillation
+    if (a.total !== b.total) return a.total - b.total;
+
+    return 0;
+  }
+
+  function pushCandidate(counts) {
+    let total = 0, units = 0, flat = [];
+    const byStrength = new Map();
+    for (let i = 0; i < S.length; i++) {
+      const mg = S[i], c = counts[i] | 0;
+      if (c <= 0) continue;
+      total += mg * c;
+      units += c;
+      byStrength.set(mg, c);
+      for (let k = 0; k < c; k++) flat.push(mg);
+    }
+    if (units === 0) return; // ignore the empty combo
+    const cand = { total, units, strengths: flat, byStrength };
+    if (!best || better(cand, best) < 0) best = cand;
+  }
+
+  // DFS with pruning by remaining capacity
+  function dfs(i, usedUnits, runningTotal, counts) {
+    if (usedUnits > maxUnitsPerDay) return;
+
+    // If we've placed all strength buckets or filled units, evaluate
+    if (i === S.length || usedUnits === maxUnitsPerDay) {
+      pushCandidate(counts);
       return;
     }
+
     const mg = S[i];
-    const remain = maxUnitsPerDay - unitsUsed;
-    for (let c = remain; c >= 0; c--) {
+    const remainingUnits = maxUnitsPerDay - usedUnits;
+
+    // Upper bound: try larger counts first (heavier items first tends to converge quickly)
+    for (let c = remainingUnits; c >= 0; c--) {
       counts[i] = c;
-      dfs(i+1, unitsUsed + c, totalMg + c*mg, counts);
+      dfs(i + 1, usedUnits + c, runningTotal + c * mg, counts);
     }
     counts[i] = 0;
   }
 
   dfs(0, 0, 0, []);
+
+  // If nothing feasible (shouldn't happen), return null
   return best;
 }
 
@@ -886,6 +952,53 @@ const isPickerEligible = () => {
   return !!PRODUCT_PICKER_ALLOW[med];
 };
 
+
+// Gabapentin QID: reduce DIN first, then fall into the TID pattern.
+// Strategy: place everything into TID using your existing centre-light logic,
+// then only use DIN if any per-slot caps are exceeded (overflow spill).
+function distributeGabapentinQIDReduceDIN(unitsArr, perSlotCap) {
+  // 1) Start from your TID distribution (AM/MID/PM only)
+  const out = distributeGabapentinTDS(unitsArr, perSlotCap);
+  out.DIN = out.DIN || {}; // ensure DIN exists
+
+  const slotCnt = (m) => Object.values(m || {}).reduce((s, q) => s + q, 0);
+  const smallestKey = (obj) => {
+    const ks = Object.keys(obj || {}).map(Number).filter(k => (obj[k] || 0) > 0).sort((a,b)=>a-b);
+    return ks.length ? ks[0] : null;
+  };
+  const moveSmallest = (fromMap, toMap) => {
+    const k = smallestKey(fromMap);
+    if (k == null) return false;
+    fromMap[k]--; if (fromMap[k] === 0) delete fromMap[k];
+    toMap[k] = (toMap[k] || 0) + 1;
+    return true;
+  };
+
+  // 2) If any of AM/MID/PM exceeds the cap, bleed the smallest unit(s) into DIN
+  //    until all three are ≤ cap or DIN is full.
+  const offenders = () => [
+    ["PM", slotCnt(out.PM)],
+    ["AM", slotCnt(out.AM)],
+    ["MID", slotCnt(out.MID)]
+  ].sort((a,b)=>b[1]-a[1]); // heaviest first
+
+  let guard = 128;
+  while (guard-- &&
+         (slotCnt(out.AM) > perSlotCap || slotCnt(out.MID) > perSlotCap || slotCnt(out.PM) > perSlotCap) &&
+         slotCnt(out.DIN) < perSlotCap) {
+
+    let moved = false;
+    for (const [name] of offenders()) {
+      const from = (name === "AM" ? out.AM : name === "MID" ? out.MID : out.PM);
+      if (slotCnt(from) > perSlotCap && slotCnt(out.DIN) < perSlotCap) {
+        if (moveSmallest(from, out.DIN)) { moved = true; break; }
+      }
+    }
+    if (!moved) break;
+  }
+
+  return out;
+}
 // Gabapentin: strength uniquely implies form
 // Map gabapentin strength → form (never guess "Capsule" for 600/800)
 function gabapentinFormForMg(mg){
@@ -2112,6 +2225,15 @@ function stepAP(packs, percent, med, form){
 }
 
 /* ===== Gabapentinoids — Gabapentin (TID centre-light; AM=PM when feasible) | Pregabalin (mirror SR-Opioid BID) ===== */
+// --- Decide QID vs TID handling up-front ---
+const freq = (typeof inferFreqFromPacks === 'function') ? inferFreqFromPacks(packs) : null;
+
+// If current packs show QID, do the “reduce DIN first” pass, then fall through to TID logic.
+if (/^Gabapentin$/i.test(med) && freq === 'QID') {
+  packs = distributeGabapentinQIDReduceDIN(packs, percent, med, form);
+}
+// If TID/TDS, we simply continue into the existing TID logic below.
+
 function stepGabapentinoid(packs, percent, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
@@ -2235,6 +2357,38 @@ function stepGabapentinoid(packs, percent, med, form){
     return out;
   }
 }
+function distributeGabapentinQIDReduceDIN(packs, percent, med, form){
+  const tot = packsTotalMg(packs);
+  if (tot <= EPS) return packs;
+
+  // Use your existing rounding granularity (smallest selected strength)
+  const stepMg = lowestStepMg("Gabapentinoids", med, form) || 1;
+
+  // Target daily total for this step
+  let target = Math.round((tot * (1 - percent/100)) / stepMg) * stepMg;
+  if (target === tot && tot > 0) target = Math.max(0, tot - stepMg);
+
+  // Current slot totals
+  const cur = {
+    AM:  slotTotalMg(packs,"AM"),
+    MID: slotTotalMg(packs,"MID"),
+    DIN: slotTotalMg(packs,"DIN"),
+    PM:  slotTotalMg(packs,"PM")
+  };
+
+  let reduce = +(tot - target).toFixed(3);
+  if (reduce <= EPS) return packs;
+
+  // Shave DIN first (up to the reduction needed), snapped to stepMg
+  const shave = Math.min(cur.DIN, Math.max(stepMg, Math.round(reduce/stepMg)*stepMg));
+  const dec   = Math.min(cur.DIN, shave);
+  cur.DIN = +(cur.DIN - dec).toFixed(3);
+  reduce  = +(reduce - dec).toFixed(3);
+
+  // Recompose with the same per-slot composer you already use
+  return recomposeSlots(cur, "Gabapentinoids", med, form);
+}
+
 
 
 /* ===== BZRA ===== */
