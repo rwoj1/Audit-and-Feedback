@@ -118,7 +118,16 @@ if (!inp._patchSnapAttached){
 }
   });
 }
-
+// Debug (no-op unless enabled)
+window.GABA_DBG = false;
+function dbgGaba(label, data){
+  if (!window.GABA_DBG) return;
+  try {
+    console.group(`[GABA] ${label}`);
+    console.log(data);
+    console.groupEnd();
+  } catch {}
+}
 // ensure the hint <div>s exist under the inputs; returns [h1, h2]
 function ensureIntervalHints(){
   const mk = (id, inputId) => {
@@ -2111,8 +2120,10 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
-/* ===== Gabapentinoids — Gabapentin (TID centre-light; AM=PM when feasible) | Pregabalin (mirror SR-Opioid BID) ===== */
+/* ===== Gabapentinoids — Gabapentin (TID centre-light; AM=PM when feasible; DIN-first if QID) | Pregabalin (mirror SR-Opioid BID) ===== */
 function stepGabapentinoid(packs, percent, med, form){
+  dbgGaba("enter stepGabapentinoid", { med, form, tot: packsTotalMg(packs) });
+
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
@@ -2124,103 +2135,169 @@ function stepGabapentinoid(packs, percent, med, form){
     return packs;
   }
 
-  // ---- Gabapentin (TID) ----
-  const strengths = getSelectedStrengths();              // e.g., [100,300,400,600,800] or a subset
+  // ---- Gabapentin ----
+  const strengths = getSelectedStrengthsOnly();          // e.g., [100,300,400,600,800] or a user-selected subset
   if (!strengths.length) return packs;
-  const stepMg = strengths[0];                           // smallest selected strength = quantisation step
-  const hasLowestAvailable100 = (stepMg === 100);        // true if 100 mg is selected
+  const stepMg = strengths[0];                            // quantisation step = smallest selected strength
+  const has100 = (stepMg === 100);
 
-  // ===== End-sequence overrides when 100 mg is selected =====
-  // If we've reached the tail, override % reduction with the required terminal sequence:
-  // 300 -> 100 AM + 100 PM   | 200 -> 100 PM   | 100 -> Stop
-  if (hasLowestAvailable100 && tot <= 300 + EPS) {
-    if (tot > 200 + EPS) { // current 300 -> next 200 (BID)
-      return makePacks({ AM: {[100]:1}, MID:{}, DIN:{}, PM: {[100]:1} });
+  // Compute this step's daily target (rounded to step), based on PREVIOUS ACHIEVED total
+  const rawTarget = tot * (1 - percent/100);
+  const targetRounded = nearestStep(rawTarget, stepMg);   // ties round up by design
+  const reductionNeeded = Math.max(0, +(tot - targetRounded).toFixed(3));
+
+  // If current packs are QID, shave DIN first (toward this step's target), in multiples of step
+  const freq = (typeof inferFreqFromPacks === 'function') ? inferFreqFromPacks(packs) : null;
+  const curDIN = slotTotalMg(packs, "DIN");
+  let totAfterDIN = tot;
+  if (/^QID$/i.test(freq) || curDIN > EPS) {
+    const dec = floorTo(Math.min(curDIN, reductionNeeded), stepMg);  // never overshave
+    if (dec > 0) {
+      // remove 'dec' mg from DIN (smallest-first) and rebuild the packs with DIN reduced
+      const newPacks = clonePacks(packs);
+      shaveSlotSmallestFirst(newPacks, "DIN", dec);
+      totAfterDIN = packsTotalMg(newPacks);
+      dbgGaba("DIN-first shave", { curDIN, reductionNeeded, dec, totAfterDIN });
+      // fall through to TID recomposition for the remainder (even if DIN is now 0)
+      packs = newPacks;
     }
-    if (tot > 100 + EPS) { // current 200 -> next 100 (PM only)
-      return makePacks({ AM:{}, MID:{}, DIN:{}, PM: {[100]:1} });
-    }
-    // current 100 -> next STOP (empty)
-    return makePacks({ AM:{}, MID:{}, DIN:{}, PM:{} });
   }
 
-  // ===== Normal step: compute from PREVIOUS ACHIEVED total, then TID-equalise in step units =====
-  const rawTarget = tot * (1 - percent/100);
-  const down = floorTo(rawTarget, stepMg);
-  const up   = ceilTo (rawTarget, stepMg);
+  // End-sequence overrides when 100 mg is selected (lowest available):
+  // 300 -> 100 AM + 100 PM ; 200 -> 100 PM ; 100 -> STOP
+  if (has100 && tot <= 300 + EPS) {
+    if (tot > 200 + EPS) { // current 300 -> next 200 (BID)
+      const out = makePacks({ AM: {[100]:1}, MID:{}, DIN:{}, PM: {[100]:1} });
+      dbgGaba("end-seq 300->200", { out });
+      return out;
+    }
+    if (tot > 100 + EPS) { // current 200 -> next 100 (PM only)
+      const out = makePacks({ AM:{}, MID:{}, DIN:{}, PM: {[100]:1} });
+      dbgGaba("end-seq 200->100", { out });
+      return out;
+    }
+    // current 100 -> STOP
+    const out = makePacks({ AM:{}, MID:{}, DIN:{}, PM:{} });
+    dbgGaba("end-seq 100->STOP", { out });
+    return out;
+  }
+
+  // Build candidate sums around the target (down/up), then split to TID (centre-light, AM=PM when possible)
+  const down = floorTo(targetRounded, stepMg);
+  const up   = ceilTo (targetRounded, stepMg);
   const candidateSums = (down === up) ? [down] : [down, up];
 
-  const candidates = candidateSums.map(S => {
-    // TID equalisation in *units*: keep MID light; if 2 units remainder, prefer AM = PM
-    const { AMu, MIDu, PMu } = splitUnitsTID(S, stepMg);
-    const desired = { AM: AMu*stepMg, MID: MIDu*stepMg, PM: PMu*stepMg };
+  dbgGaba("selected strengths + target", {
+    strengthsSelected: (typeof selectedProductMgs === "function") ? selectedProductMgs() : "(fn missing)",
+    strengthsUsedInCalc: strengths,
+    rawTarget, targetRounded, totAfterDIN,
+    freq: freq || "(unknown)"
+  });
 
-    // Pack each slot using largest-first to minimise items per slot; per-slot cap = 4
-    const packed = { AM:{}, MID:{}, DIN:{}, PM:{} };
-    const items  = { AM:0, MID:0, PM:0 };
+  const candidates = candidateSums.map(S => buildTidPackedForDailySum(S, strengths));
+
+  // Choose best: 1) minimal |S - rawTarget|, 2) FEWEST total items, 3) ROUND UP on tie.
+  candidates.sort((a,b)=>{
+    const ad = Math.abs(a.S - rawTarget), bd = Math.abs(b.S - rawTarget);
+    if (ad !== bd) return ad - bd;
+    if (a.totalItems !== b.totalItems) return a.totalItems - b.totalItems;
+    if ((a.S >= rawTarget) !== (b.S >= rawTarget)) return (a.S >= rawTarget) ? -1 : 1;
+    return a.S - b.S; // stable
+  });
+
+  const best = candidates[0];
+  const out = best.packed;
+  dbgGaba("result packs", { bestS: best.S, totalItems: best.totalItems, out, totalMgOut: packsTotalMg(out) });
+  return out;
+
+  // ---------- helpers (scoped) ----------
+  function getSelectedStrengthsOnly(){
+    // Prefer explicit picks
+    if (typeof selectedProductMgs === "function") {
+      const picked = selectedProductMgs();
+      if (Array.isArray(picked) && picked.length) {
+        return picked.map(Number).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
+      }
+    }
+    // Fallbacks (legacy)
+    let arr = [];
+    if (typeof strengthsForSelected === 'function') arr = strengthsForSelected();
+    else if (typeof allowedStrengthsFilteredBySelection === 'function') arr = allowedStrengthsFilteredBySelection();
+    return (arr || []).map(s=>{
+      if (typeof s === 'number') return s;
+      if (typeof parseMgFromStrength === 'function') return parseMgFromStrength(s);
+      const m = String(s||'').match(/(\d+(\.\d+)?)/); return m ? Number(m[1]) : NaN;
+    }).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+  }
+
+  function nearestStep(x, step){
+    if (!Number.isFinite(x) || !step) return 0;
+    const r = x / step, flo = Math.floor(r), cei = Math.ceil(r);
+    const dFlo = Math.abs(r - flo), dCei = Math.abs(cei - r);
+    if (dFlo < dCei) return flo * step;
+    if (dCei < dFlo) return cei * step;
+    return cei * step; // exact tie -> round up
+  }
+
+  function floorTo(x, step){ return step ? Math.floor(x/step)*step : x; }
+  function ceilTo(x, step){  return step ? Math.ceil (x/step)*step : x; }
+
+  // Build TID target S using centre-light split (AM=PM when possible), then pack each slot largest->smallest
+  function buildTidPackedForDailySum(S, strengths){
+    const { AMu, MIDu, PMu } = splitUnitsTID(S, strengths[0]);
+    const desired = { AM: AMu*strengths[0], MID: MIDu*strengths[0], PM: PMu*strengths[0] };
+    const packed  = { AM:{}, MID:{}, DIN:{}, PM:{} };
+    const items   = { AM:0, MID:0, PM:0 };
+
     for (const slot of ["AM","MID","PM"]) {
       let r = desired[slot];
-      for (let i=strengths.length-1; i>=0 && r>0; i--){
+      for (let i = strengths.length - 1; i >= 0 && r > 0; i--) {
         const mg = strengths[i];
-        while (r >= mg && items[slot] < 4){
+        while (r >= mg && items[slot] < 4) {
           packed[slot][mg] = (packed[slot][mg] || 0) + 1;
           r -= mg; items[slot]++;
         }
       }
-      // Finish with smallest step if any benign remainder persists
       while (r > 0 && items[slot] < 4) {
         const mg = strengths[0];
         packed[slot][mg] = (packed[slot][mg] || 0) + 1;
         r -= mg; items[slot]++;
       }
     }
-
     const totalItems = items.AM + items.MID + items.PM;
-    return {
-      S,
-      diff: Math.abs(S - rawTarget),
-      totalItems,
-      roundedUp: S >= rawTarget,
-      packed
-    };
-  });
-
-  // Choose best: 1) min |S - target|, 2) FEWEST total items, 3) ROUND UP on tie.
-  candidates.sort((a,b)=>{
-    if (a.diff !== b.diff) return a.diff - b.diff;
-    if (a.totalItems !== b.totalItems) return a.totalItems - b.totalItems;
-    if (a.roundedUp !== b.roundedUp)   return a.roundedUp ? -1 : 1;
-    return a.S - b.S; // stable
-  });
-
-  const best = candidates[0];
-  return makePacks(best.packed);
-
-  // ---------- helpers ----------
-  function getSelectedStrengths(){
-    let arr = [];
-    if (typeof strengthsForSelected === 'function') arr = strengthsForSelected();
-    else if (typeof allowedStrengthsFilteredBySelection === 'function') arr = allowedStrengthsFilteredBySelection();
-    const mg = (arr || []).map(s=>{
-      if (typeof s === 'number') return s;
-      if (typeof parseMgFromStrength === 'function') return parseMgFromStrength(s);
-      const m = String(s||'').match(/(\d+(\.\d+)?)/); return m ? Number(m[1]) : NaN;
-    }).filter(v=>Number.isFinite(v) && v>0).sort((a,b)=>a-b);
-    return mg;
+    return { S, totalItems, packed };
   }
-  function floorTo(x, step){ return step ? Math.floor(x/step)*step : x; }
-  function ceilTo(x, step){  return step ? Math.ceil (x/step)*step : x; }
 
-  // Split daily sum S (multiple of step) into TID *units* (AMu, MIDu, PMu)
-  // Start equal, put remainder to PM first, then AM (so AM=PM when possible); MID stays centre-light.
+  // Split daily sum S into TID *units*; keep MID light; if 2-unit remainder, ensure AM=PM
   function splitUnitsTID(S, step){
-    const units = Math.max(0, Math.round(S/step));
-    const base = Math.floor(units/3);
+    const units = Math.max(0, Math.round(S / step));
+    const base = Math.floor(units / 3);
     let AMu = base, MIDu = base, PMu = base;
     const rem = units - base*3;
     if (rem === 1) { PMu += 1; }
-    else if (rem === 2) { PMu += 1; AMu += 1; } // keeps AM=PM when feasible
+    else if (rem === 2) { PMu += 1; AMu += 1; } // AM=PM when feasible
     return { AMu, MIDu, PMu };
+  }
+
+  function shaveSlotSmallestFirst(p, slot, decMg){
+    if (!p || !p[slot] || decMg <= 0) return;
+    const keys = Object.keys(p[slot]).map(Number).filter(k=>k>0).sort((a,b)=>a-b); // smallest first
+    let remain = decMg;
+    for (const mg of keys){
+      if (remain <= 0) break;
+      let q = p[slot][mg] | 0;
+      while (q > 0 && remain >= mg) { q--; remain -= mg; }
+      if (q <= 0) delete p[slot][mg]; else p[slot][mg] = q;
+    }
+  }
+
+  function clonePacks(p){
+    const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+    for (const slot of Object.keys(out)){
+      const src = p[slot] || {};
+      for (const k of Object.keys(src)) out[slot][k] = src[k];
+    }
+    return out;
   }
 
   function makePacks(obj){
@@ -2235,7 +2312,6 @@ function stepGabapentinoid(packs, percent, med, form){
     return out;
   }
 }
-
 
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
