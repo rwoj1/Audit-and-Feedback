@@ -467,34 +467,6 @@ label.radio{
 }
 label.radio input{ accent-color: var(--accent); }
 
-/* Step 1 THEN tag */
-.then-tag{
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  font-size: 12px;
-  opacity: .85;
-  background: var(--card);
-}
-<!-- Safety confirm modal (screen-only) -->
-<div id="safetyModal" style="display:none">
-  <div class="safety-backdrop"></div>
-  <div class="safety-dialog" role="dialog" aria-modal="true" aria-labelledby="safetyTitle">
-    <h3 id="safetyTitle">Dose split is uneven for this medicine</h3>
-    <div id="safetyBody" class="safety-body"></div>
-
-    <label class="ack">
-      <input id="safetyAck" type="checkbox">
-      <span>I acknowledge the dose split exceeds the recommended difference and wish to proceed.</span>
-    </label>
-
-    <div class="actions" style="margin-top:10px">
-      <button id="safetyProceed" class="primary" disabled>Proceed anyway</button>
-      <button id="safetyStop" class="ghost">Insert Review & stop</button>
-    </div>
-  </div>
-</div>
-
 
 /* ==============================
    PRINT / PDF rules
