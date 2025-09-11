@@ -2111,7 +2111,7 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
-/* ===== Gabapentinoids — Gabapentin: TID equalisation (AM=PM when feasible) | Pregabalin: mirror SR-Opioid BID ===== */
+/* ===== Gabapentinoids — Gabapentin (TID centre-light; AM=PM when feasible) | Pregabalin (mirror SR-Opioid BID) ===== */
 function stepGabapentinoid(packs, percent, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
@@ -2119,58 +2119,63 @@ function stepGabapentinoid(packs, percent, med, form){
   // ---- Pregabalin: identical stepping to SR-opioids (your gold standard) ----
   if (/pregabalin/i.test(med)) {
     if (typeof stepOpioid_Shave === 'function') return stepOpioid_Shave(packs, percent, "Opioids", med, form);
-    if (typeof stepOpioidOral === 'function')  return stepOpioidOral(packs,  percent, "Opioids", med, form);
-    if (typeof stepOpioid === 'function')      return stepOpioid(packs,      percent, "Opioids", med, form);
+    if (typeof stepOpioidOral  === 'function')   return stepOpioidOral (packs, percent, "Opioids", med, form);
+    if (typeof stepOpioid      === 'function')   return stepOpioid     (packs, percent, "Opioids", med, form);
     return packs;
   }
 
-  // ---- Gabapentin (TID): compute from PREVIOUS ACHIEVED total, then TID-equalise in step units ----
-  const strengths = getSelectedStrengths();
+  // ---- Gabapentin (TID) ----
+  const strengths = getSelectedStrengths();              // e.g., [100,300,400,600,800] or a subset
   if (!strengths.length) return packs;
-  const stepMg = strengths[0]; // smallest selected (e.g., 100 mg)
+  const stepMg = strengths[0];                           // smallest selected strength = quantisation step
+  const hasLowestAvailable100 = (stepMg === 100);        // true if 100 mg is selected
 
-  // Next target from *previous achieved* total
+  // ===== End-sequence overrides when 100 mg is selected =====
+  // If we've reached the tail, override % reduction with the required terminal sequence:
+  // 300 -> 100 AM + 100 PM   | 200 -> 100 PM   | 100 -> Stop
+  if (hasLowestAvailable100 && tot <= 300 + EPS) {
+    if (tot > 200 + EPS) { // current 300 -> next 200 (BID)
+      return makePacks({ AM: {[100]:1}, MID:{}, DIN:{}, PM: {[100]:1} });
+    }
+    if (tot > 100 + EPS) { // current 200 -> next 100 (PM only)
+      return makePacks({ AM:{}, MID:{}, DIN:{}, PM: {[100]:1} });
+    }
+    // current 100 -> next STOP (empty)
+    return makePacks({ AM:{}, MID:{}, DIN:{}, PM:{} });
+  }
+
+  // ===== Normal step: compute from PREVIOUS ACHIEVED total, then TID-equalise in step units =====
   const rawTarget = tot * (1 - percent/100);
-
-  // Consider only the two nearest step-multiples (down/up)
   const down = floorTo(rawTarget, stepMg);
-  const up   = ceilTo(rawTarget,  stepMg);
-  const candSums = (down === up) ? [down] : [down, up];
+  const up   = ceilTo (rawTarget, stepMg);
+  const candidateSums = (down === up) ? [down] : [down, up];
 
-  // Build candidates by: (1) splitting S into TID in step units (AM=PM when possible; MID light)
-  // then (2) packing each slot with available strengths (largest-first) under per-slot cap.
-  const candidates = candSums.map(S => {
-    const split = splitUnitsTID(S, stepMg);                 // {AMu, MIDu, PMu} in units (e.g., 2,2,3)
-    const desired = {                                       // convert to mg targets per slot
-      AM: split.AMu * stepMg,
-      MID: split.MIDu * stepMg,
-      PM: split.PMu * stepMg,
-    };
-    const packed = { AM: {}, MID: {}, DIN: {}, PM: {} };
-    const itemsPerSlot = { AM: 0, MID: 0, PM: 0 };
+  const candidates = candidateSums.map(S => {
+    // TID equalisation in *units*: keep MID light; if 2 units remainder, prefer AM = PM
+    const { AMu, MIDu, PMu } = splitUnitsTID(S, stepMg);
+    const desired = { AM: AMu*stepMg, MID: MIDu*stepMg, PM: PMu*stepMg };
 
-    // Pack each slot using available strengths (largest → smallest) to MINIMISE items in that slot.
-    // This preserves the equalised totals but keeps item counts sensible.
+    // Pack each slot using largest-first to minimise items per slot; per-slot cap = 4
+    const packed = { AM:{}, MID:{}, DIN:{}, PM:{} };
+    const items  = { AM:0, MID:0, PM:0 };
     for (const slot of ["AM","MID","PM"]) {
-      let remaining = desired[slot];
-      for (let i = strengths.length - 1; i >= 0 && remaining > 0; i--) {
+      let r = desired[slot];
+      for (let i=strengths.length-1; i>=0 && r>0; i--){
         const mg = strengths[i];
-        while (remaining >= mg && itemsPerSlot[slot] < 4) {
+        while (r >= mg && items[slot] < 4){
           packed[slot][mg] = (packed[slot][mg] || 0) + 1;
-          remaining -= mg;
-          itemsPerSlot[slot] += 1;
+          r -= mg; items[slot]++;
         }
       }
-      // Finish with smallest if any remainder persists (shouldn’t, because stepMg is the base)
-      while (remaining > 0 && itemsPerSlot[slot] < 4) {
+      // Finish with smallest step if any benign remainder persists
+      while (r > 0 && items[slot] < 4) {
         const mg = strengths[0];
         packed[slot][mg] = (packed[slot][mg] || 0) + 1;
-        remaining -= mg;
-        itemsPerSlot[slot] += 1;
+        r -= mg; items[slot]++;
       }
     }
 
-    const totalItems = itemsPerSlot.AM + itemsPerSlot.MID + itemsPerSlot.PM;
+    const totalItems = items.AM + items.MID + items.PM;
     return {
       S,
       diff: Math.abs(S - rawTarget),
@@ -2180,57 +2185,57 @@ function stepGabapentinoid(packs, percent, med, form){
     };
   });
 
-  // Choose best by:
-  // 1) minimal |S - target|;
-  // 2) if tie: FEWEST total items (after TID packing);
-  // 3) if tie: ROUND UP (higher S).
-  candidates.sort((a, b) => {
+  // Choose best: 1) min |S - target|, 2) FEWEST total items, 3) ROUND UP on tie.
+  candidates.sort((a,b)=>{
     if (a.diff !== b.diff) return a.diff - b.diff;
     if (a.totalItems !== b.totalItems) return a.totalItems - b.totalItems;
-    if (a.roundedUp !== b.roundedUp) return a.roundedUp ? -1 : 1;
-    return (a.S - b.S);
+    if (a.roundedUp !== b.roundedUp)   return a.roundedUp ? -1 : 1;
+    return a.S - b.S; // stable
   });
 
   const best = candidates[0];
-  const out = best.packed;
-
-  // normalise
-  for (const slot of ["AM","MID","DIN","PM"]) {
-    for (const k of Object.keys(out[slot])) {
-      if (!Number.isFinite(out[slot][k]) || out[slot][k] <= 0) delete out[slot][k];
-    }
-  }
-  return out;
+  return makePacks(best.packed);
 
   // ---------- helpers ----------
   function getSelectedStrengths(){
     let arr = [];
     if (typeof strengthsForSelected === 'function') arr = strengthsForSelected();
     else if (typeof allowedStrengthsFilteredBySelection === 'function') arr = allowedStrengthsFilteredBySelection();
-    const mg = (arr || []).map(s => {
+    const mg = (arr || []).map(s=>{
       if (typeof s === 'number') return s;
       if (typeof parseMgFromStrength === 'function') return parseMgFromStrength(s);
-      const m = String(s || '').match(/(\d+(\.\d+)?)/);
-      return m ? Number(m[1]) : NaN;
-    }).filter(v => Number.isFinite(v) && v > 0).sort((a,b)=>a-b);
+      const m = String(s||'').match(/(\d+(\.\d+)?)/); return m ? Number(m[1]) : NaN;
+    }).filter(v=>Number.isFinite(v) && v>0).sort((a,b)=>a-b);
     return mg;
   }
-
   function floorTo(x, step){ return step ? Math.floor(x/step)*step : x; }
-  function ceilTo(x, step){  return step ? Math.ceil(x/step)*step  : x; }
+  function ceilTo(x, step){  return step ? Math.ceil (x/step)*step : x; }
 
-  // Split a daily sum S (multiple of step) into TID *units* (AMu, MIDu, PMu)
-  // Rule: start equal, put remainder to PM first, then AM, so AM=PM when possible; MID stays centre-light.
+  // Split daily sum S (multiple of step) into TID *units* (AMu, MIDu, PMu)
+  // Start equal, put remainder to PM first, then AM (so AM=PM when possible); MID stays centre-light.
   function splitUnitsTID(S, step){
-    const units = Math.max(0, Math.round(S / step));
-    const base = Math.floor(units / 3);
-    let AMu  = base, MIDu = base, PMu  = base;
+    const units = Math.max(0, Math.round(S/step));
+    const base = Math.floor(units/3);
+    let AMu = base, MIDu = base, PMu = base;
     const rem = units - base*3;
     if (rem === 1) { PMu += 1; }
-    else if (rem === 2) { PMu += 1; AMu += 1; } // keep AM=PM when possible
+    else if (rem === 2) { PMu += 1; AMu += 1; } // keeps AM=PM when feasible
     return { AMu, MIDu, PMu };
   }
+
+  function makePacks(obj){
+    const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+    for (const slot of Object.keys(out)) {
+      if (!obj[slot]) continue;
+      for (const k of Object.keys(obj[slot])) {
+        const v = obj[slot][k] | 0;
+        if (v > 0) out[slot][k] = v;
+      }
+    }
+    return out;
+  }
 }
+
 
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
