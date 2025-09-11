@@ -430,7 +430,6 @@ function injectPrintDisclaimer() {
   };
 }
 
-
 // validate intervals, show hints, toggle input error class, and optionally toast
 function validatePatchIntervals(showToastToo=false){
   const rule = patchIntervalRule();            // 3 or 7 for patches, else null
@@ -895,7 +894,6 @@ function gabapentinFormForMg(mg){
   return "Capsule";
 }
 
-
 // Build the list of commercial products (form + strength) for the selected medicine
 function allCommercialProductsForSelected(){
   const cls = document.getElementById("classSelect")?.value || "";
@@ -1121,7 +1119,6 @@ function updateClassFooter() {
   const target = document.getElementById("classFooter");
   if (target) target.textContent = text;
 }
-
 
 let _lastPracticeKey = null;
 
@@ -1627,7 +1624,6 @@ function renderPatchTable(stepRows) {
   if (typeof normalizeFooterSpans === "function") normalizeFooterSpans();
 }
 
-
 /* =================== Catalogue (commercial only) =================== */
 
 //#endregion
@@ -1928,7 +1924,6 @@ function allowedPiecesMg(cls, med, form){
   if(split.quarter)uniq.forEach(v=>pieces.push(+(v/4).toFixed(3)));
   return [...new Set(pieces)].sort((a,b)=>a-b);
 }
-
 
 function lowestStepMg(cls, med, form){
   if(cls==="Benzodiazepines / Z-Drug (BZRA)" && /Zolpidem/i.test(med) && isMR(form)) return 6.25;
@@ -2236,7 +2231,6 @@ function stepGabapentinoid(packs, percent, med, form){
   }
 }
 
-
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
   const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
@@ -2433,7 +2427,6 @@ function renderProductPicker(){
   if (med  && !med._ppReset)  { med._ppReset  = true; med.addEventListener("change", reset); }
   if (form && !form._ppReset) { form._ppReset = true; form.addEventListener("change", reset); }
 })();
-
 
 /* =================== Patches builder — date-based Phase-2; start at step 2 =================== */
 
@@ -2788,7 +2781,6 @@ function updateRecommendedAndLines(){
   setFooterText($("classSelect")?.value);
   setDirty(true);
 }
-
 
 //#endregion
 //#region 11. Boot / Init
