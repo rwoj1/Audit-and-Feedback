@@ -3257,6 +3257,14 @@ if (document.readyState === 'loading') {
 } else {
   setupDisclaimerGate();
 }
-}
-document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
+
+// Make sure init() wiring is correct and contains no ellipsis characters
+document.addEventListener("DOMContentLoaded", () => {
+  try {
+    init();
+  } catch (e) {
+    console.error(e);
+    alert("Init error: " + (e?.message || String(e)));
+  }
+});
 //#endregion
