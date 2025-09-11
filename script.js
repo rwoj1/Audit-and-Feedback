@@ -607,7 +607,24 @@ function wireCustomStepsLayout(){
   // Initial state (No)
   syncStep1Enable();
 }
+function syncModeVisibility(){
+  const key = currentClassKey();
+  const mode = document.getElementById('modeBlock');
+  if (!mode) return;
+  mode.style.display = (key === 'bzd') ? 'none' : '';
+}
+function wireCustomPanel(){
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const resetBtn = document.getElementById('resetPriority'); // if you still have it; otherwise ignore
 
+  const onChange = ()=>{ syncModeVisibility(); };
+  if (clsSel) clsSel.addEventListener('change', onChange);
+  if (medSel) medSel.addEventListener('change', onChange);
+
+  // Initial fill (if you still show Step-1 pills elsewhere, keep your old calls)
+  syncModeVisibility();
+}
 
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
