@@ -2111,171 +2111,126 @@ function stepAP(packs, percent, med, form){
   return recomposeSlots(cur, "Antipsychotic", med, form);
 }
 
-/* ===== Gabapentinoids — Gabapentin: DIN→(MID)→rebalance TID | Pregabalin: DIN→MID→rebalance BID ===== */
+/* ===== Gabapentinoids — Gabapentin: TID equalisation (AM=PM when feasible) | Pregabalin: mirror SR-Opioid BID ===== */
 function stepGabapentinoid(packs, percent, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // ---- Pregabalin: mirror SR Opioid stepper (your "good" path) ----
+  // ---- Pregabalin: identical stepping to SR-opioids (your gold standard) ----
   if (/pregabalin/i.test(med)) {
     if (typeof stepOpioid_Shave === 'function') return stepOpioid_Shave(packs, percent, "Opioids", med, form);
-    if (typeof stepOpioidOral === 'function') return stepOpioidOral(packs, percent, "Opioids", med, form);
-    if (typeof stepOpioid === 'function') return stepOpioid(packs, percent, "Opioids", med, form);
-    return packs; // fallback: do nothing if no opioid stepper found
+    if (typeof stepOpioidOral === 'function')  return stepOpioidOral(packs,  percent, "Opioids", med, form);
+    if (typeof stepOpioid === 'function')      return stepOpioid(packs,      percent, "Opioids", med, form);
+    return packs;
   }
 
-  // ---- Gabapentin (TID logic) ----
-  // Pull selected strengths (mg) the user actually ticked
-  const selectedStrengths = (() => {
-    let arr = [];
-    if (typeof strengthsForSelected === 'function') arr = strengthsForSelected();
-    else if (typeof allowedStrengthsFilteredBySelection === 'function') arr = allowedStrengthsFilteredBySelection();
-    return (arr || [])
-      .map(s => {
-        if (typeof s === 'number') return s;
-        if (typeof parseMgFromStrength === 'function') return parseMgFromStrength(s);
-        const m = String(s || '').match(/(\d+(\.\d+)?)/);
-        return m ? Number(m[1]) : NaN;
-      })
-      .filter(v => Number.isFinite(v) && v > 0)
-      .sort((a,b) => a - b);
-  })();
+  // ---- Gabapentin (TID): compute from PREVIOUS ACHIEVED total, then TID-equalise in step units ----
+  const strengths = getSelectedStrengths();
+  if (!strengths.length) return packs;
+  const stepMg = strengths[0]; // smallest selected (e.g., 100 mg)
 
-  if (!selectedStrengths.length) return packs;
-  const stepMg = selectedStrengths[0]; // smallest available unit
+  // Next target from *previous achieved* total
+  const rawTarget = tot * (1 - percent/100);
 
-  // Next daily target is based on PREVIOUS ACHIEVED total (not baseline)
-  let target = tot * (1 - percent/100);
-  target = nearestStep(target, stepMg);
-  if (target === tot && tot > 0) target = Math.max(0, tot - stepMg); // ensure progress
+  // Consider only the two nearest step-multiples (down/up)
+  const down = floorTo(rawTarget, stepMg);
+  const up   = ceilTo(rawTarget,  stepMg);
+  const candSums = (down === up) ? [down] : [down, up];
 
-  // Build the best daily combination with tie-breakers:
-  // 1) minimal |sum - target|
-  // 2) if tie: prefer combos that SUPPORT TID (>=3 items)
-  // 3) if still tie: FEWEST items
-  // 4) if still tie: ROUND UP (higher sum)
-  const best = findBestDailyComboTID(selectedStrengths, target);
-  if (!best) return packs;
+  // Build candidates by: (1) splitting S into TID in step units (AM=PM when possible; MID light)
+  // then (2) packing each slot with available strengths (largest-first) under per-slot cap.
+  const candidates = candSums.map(S => {
+    const split = splitUnitsTID(S, stepMg);                 // {AMu, MIDu, PMu} in units (e.g., 2,2,3)
+    const desired = {                                       // convert to mg targets per slot
+      AM: split.AMu * stepMg,
+      MID: split.MIDu * stepMg,
+      PM: split.PMu * stepMg,
+    };
+    const packed = { AM: {}, MID: {}, DIN: {}, PM: {} };
+    const itemsPerSlot = { AM: 0, MID: 0, PM: 0 };
 
-  // Distribute daily items into TID centre-light:
-  // give bigger units to PM first, then AM, then MID, repeating
-  const out = { AM: {}, MID: {}, DIN: {}, PM: {} };
-  distributeTID_CentreLight(best.byStrength, out, /*unitCapPerSlot*/ 4);
+    // Pack each slot using available strengths (largest → smallest) to MINIMISE items in that slot.
+    // This preserves the equalised totals but keeps item counts sensible.
+    for (const slot of ["AM","MID","PM"]) {
+      let remaining = desired[slot];
+      for (let i = strengths.length - 1; i >= 0 && remaining > 0; i--) {
+        const mg = strengths[i];
+        while (remaining >= mg && itemsPerSlot[slot] < 4) {
+          packed[slot][mg] = (packed[slot][mg] || 0) + 1;
+          remaining -= mg;
+          itemsPerSlot[slot] += 1;
+        }
+      }
+      // Finish with smallest if any remainder persists (shouldn’t, because stepMg is the base)
+      while (remaining > 0 && itemsPerSlot[slot] < 4) {
+        const mg = strengths[0];
+        packed[slot][mg] = (packed[slot][mg] || 0) + 1;
+        remaining -= mg;
+        itemsPerSlot[slot] += 1;
+      }
+    }
 
-  // Cleanup zeros/NaNs
+    const totalItems = itemsPerSlot.AM + itemsPerSlot.MID + itemsPerSlot.PM;
+    return {
+      S,
+      diff: Math.abs(S - rawTarget),
+      totalItems,
+      roundedUp: S >= rawTarget,
+      packed
+    };
+  });
+
+  // Choose best by:
+  // 1) minimal |S - target|;
+  // 2) if tie: FEWEST total items (after TID packing);
+  // 3) if tie: ROUND UP (higher S).
+  candidates.sort((a, b) => {
+    if (a.diff !== b.diff) return a.diff - b.diff;
+    if (a.totalItems !== b.totalItems) return a.totalItems - b.totalItems;
+    if (a.roundedUp !== b.roundedUp) return a.roundedUp ? -1 : 1;
+    return (a.S - b.S);
+  });
+
+  const best = candidates[0];
+  const out = best.packed;
+
+  // normalise
   for (const slot of ["AM","MID","DIN","PM"]) {
     for (const k of Object.keys(out[slot])) {
-      const v = out[slot][k] || 0;
-      if (!Number.isFinite(v) || v <= 0) delete out[slot][k];
+      if (!Number.isFinite(out[slot][k]) || out[slot][k] <= 0) delete out[slot][k];
     }
   }
   return out;
 
-  // ---------- helpers (scoped to this function) ----------
-
-  function nearestStep(x, step){
-    if (!Number.isFinite(x) || !step) return 0;
-    // nearest; ties to "round up" per your global rule
-    const r = x / step;
-    const flo = Math.floor(r), cei = Math.ceil(r);
-    if (Math.abs(r - flo) < Math.abs(cei - r)) return flo * step; // nearer down
-    if (Math.abs(r - flo) > Math.abs(cei - r)) return cei * step; // nearer up
-    return cei * step; // exact tie -> round up
+  // ---------- helpers ----------
+  function getSelectedStrengths(){
+    let arr = [];
+    if (typeof strengthsForSelected === 'function') arr = strengthsForSelected();
+    else if (typeof allowedStrengthsFilteredBySelection === 'function') arr = allowedStrengthsFilteredBySelection();
+    const mg = (arr || []).map(s => {
+      if (typeof s === 'number') return s;
+      if (typeof parseMgFromStrength === 'function') return parseMgFromStrength(s);
+      const m = String(s || '').match(/(\d+(\.\d+)?)/);
+      return m ? Number(m[1]) : NaN;
+    }).filter(v => Number.isFinite(v) && v > 0).sort((a,b)=>a-b);
+    return mg;
   }
 
-  function findBestDailyComboTID(strengths, target){
-    // Prefer solutions with >=3 items (true TID); search k = 3..6 first
-    // Then fall back to k = 2, then k = 1 if nothing feasible.
-    const ranges = [[3,6],[2,2],[1,1]];
-    let globalBest = null;
+  function floorTo(x, step){ return step ? Math.floor(x/step)*step : x; }
+  function ceilTo(x, step){  return step ? Math.ceil(x/step)*step  : x; }
 
-    for (const [kMin, kMax] of ranges) {
-      for (let k = kMin; k <= kMax; k++){
-        const candidate = searchKItems(strengths, target, k);
-        if (!candidate) continue;
-        if (!globalBest || compareCombos(candidate, globalBest, target) < 0) {
-          globalBest = candidate;
-        }
-      }
-      if (globalBest) break; // stop once we found something in this preference tier
-    }
-    return globalBest;
-
-    // enumerate sequences with repetition; manageable set in practice
-    function searchKItems(strs, tgt, k){
-      const n = strs.length;
-      let best = null;
-      function rec(idx, chosen, sum){
-        if (idx === k){
-          const byStrength = {};
-          for (const mg of chosen) byStrength[mg] = (byStrength[mg] || 0) + 1;
-          const itemCount = chosen.length;
-          const diff = Math.abs(sum - tgt);
-          const roundedUp = sum >= tgt;
-          const cand = { sum, itemCount, diff, roundedUp, byStrength };
-          if (!best || compareCombos(cand, best, tgt) < 0) best = cand;
-          return;
-        }
-        for (let i = 0; i < n; i++) rec(idx+1, chosen.concat(strs[i]), sum + strs[i]);
-      }
-      rec(0, [], 0);
-      return best;
-    }
-
-    // negative if a is "better" than b
-    function compareCombos(a, b, tgt){
-      // 1) minimal |sum - target|
-      if (a.diff !== b.diff) return a.diff - b.diff;
-      // 2) prefer those that allow TID (>=3 items)
-      const aTID = a.itemCount >= 3, bTID = b.itemCount >= 3;
-      if (aTID !== bTID) return aTID ? -1 : 1;
-      // 3) fewest items
-      if (a.itemCount !== b.itemCount) return a.itemCount - b.itemCount;
-      // 4) round up on tie
-      if (a.roundedUp !== b.roundedUp) return a.roundedUp ? -1 : 1;
-      // 5) stable final tie-break: lower sum
-      if (a.sum !== b.sum) return a.sum - b.sum;
-      return 0;
-    }
-  }
-
-  function distributeTID_CentreLight(byStrength, out, unitCapPerSlot){
-    // Flatten into individual units and sort DESC so larger mg placed first.
-    const units = [];
-    for (const [mgStr, q] of Object.entries(byStrength)) {
-      const mg = Number(mgStr);
-      for (let i = 0; i < q; i++) units.push(mg);
-    }
-    units.sort((a,b)=>b-a); // big → small
-
-    const order = ["PM","AM","MID"]; // ensures PM gets heaviest, then AM, MID stays light
-    const counts = { AM:0, MID:0, PM:0 };
-    const cap = Math.max(1, unitCapPerSlot|0);
-
-    let ptr = 0;
-    for (const mg of units){
-      // round-robin but skip a slot if at cap
-      let placed = false;
-      for (let t = 0; t < order.length && !placed; t++){
-        const slot = order[(ptr + t) % order.length];
-        if (counts[slot] < cap) {
-          out[slot][mg] = (out[slot][mg] || 0) + 1;
-          counts[slot]++;
-          placed = true;
-          ptr = (ptr + 1) % order.length;
-        }
-      }
-      if (!placed) {
-        // if somehow all at cap (rare), drop into PM as last resort
-        const slot = "PM";
-        out[slot][mg] = (out[slot][mg] || 0) + 1;
-      }
-    }
+  // Split a daily sum S (multiple of step) into TID *units* (AMu, MIDu, PMu)
+  // Rule: start equal, put remainder to PM first, then AM, so AM=PM when possible; MID stays centre-light.
+  function splitUnitsTID(S, step){
+    const units = Math.max(0, Math.round(S / step));
+    const base = Math.floor(units / 3);
+    let AMu  = base, MIDu = base, PMu  = base;
+    const rem = units - base*3;
+    if (rem === 1) { PMu += 1; }
+    else if (rem === 2) { PMu += 1; AMu += 1; } // keep AM=PM when possible
+    return { AMu, MIDu, PMu };
   }
 }
-
-
-
 
 /* ===== BZRA ===== */
 function stepBZRA(packs, percent, med, form){
