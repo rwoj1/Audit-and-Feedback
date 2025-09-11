@@ -1306,6 +1306,231 @@ function strengthsForSelectedSafe(cls, med, form){
   }
 }
 
+/* ================== OPIOID SR: safety + end-dose helpers ================== */
+
+// Hard caps (spread = maxSlotMg - minSlotMg)
+const OPIOID_SPREAD_LIMITS = {
+  morphine: 30,
+  oxycodone: 20,
+  "oxycodone-naloxone": 20,
+  tapentadol: 100,
+  tramadol: 100,
+};
+
+// Identify opioid SR from a strength label
+function opioidKeyFromStrength(label) {
+  const s = String(label||"").toLowerCase();
+  if (!/sr\s*(tablet|tab|capsule|cap)/.test(s)) return null;     // SR tablet/caps only
+  if (s.includes("oxycodone") && s.includes("naloxone")) return "oxycodone-naloxone";
+  if (s.includes("oxycodone")) return "oxycodone";
+  if (s.includes("morphine")) return "morphine";
+  if (s.includes("tapentadol")) return "tapentadol";
+  if (s.includes("tramadol")) return "tramadol";
+  return null;
+}
+
+// Parse the "primary" mg from a strength label (for oxy/nal, take the oxycodone mg)
+// Examples:
+//  "Oxycodone 10 mg + Naloxone 5 mg SR tablet" -> 10
+//  "Oxycodone/Naloxone 10/5 mg SR tablet"      -> 10
+//  "Morphine 30 mg SR tablet"                  -> 30
+function parsePrimaryMg(label) {
+  const t = String(label||"");
+  let m = /Oxycodone[^0-9]*([\d.]+)\s*mg/i.exec(t); if (m) return +m[1];
+  m = /Oxycodone\/Naloxone\s+([\d.]+)\s*\/\s*([\d.]+)\s*mg/i.exec(t); if (m) return +m[1];
+  m = /([\d.]+)\s*mg/i.exec(t); return m ? +m[1] : 0;
+}
+
+// Compute per-step slot totals (mg)
+function slotTotalsMg(step){
+  const lines = step?.lines || step?.rows || [];
+  const totals = { AM:0, MID:0, DIN:0, PM:0 };
+  for (const line of lines){
+    const mg = parsePrimaryMg(line.strength || line.strengthLabel || "");
+    const am  = (line.morning ?? line.am  ?? 0) * mg;
+    const mid = (line.midday  ?? line.mid ?? 0) * mg;
+    const din = (line.dinner  ?? line.din ?? 0) * mg;
+    const pm  = (line.night   ?? line.pm  ?? line.nocte ?? 0) * mg;
+    totals.AM  += am; totals.MID += mid; totals.DIN += din; totals.PM  += pm;
+  }
+  return totals;
+}
+function spreadOfTotals(t){
+  const vals = [t.AM,t.MID,t.DIN,t.PM].filter(v => v>0.0001);
+  if (vals.length<=1) return 0;
+  return Math.max(...vals) - Math.min(...vals);
+}
+function opioidKeyForStep(step){
+  const lines = step?.lines || step?.rows || [];
+  for (const line of lines){
+    const key = opioidKeyFromStrength(line.strength || line.strengthLabel || "");
+    if (key) return key;
+  }
+  return null;
+}
+
+// Does the current product picker include the lowest commercial strength?
+// We infer from the visible product picker for the current medicine.
+// If the lowest-mg checkbox(es) are checked → true.
+function lowestStrengthSelectedFromPicker(){
+  const host = document.getElementById('productPicker');
+  if (!host) return true; // no picker visible -> assume all available (includes lowest)
+  const boxes = Array.from(host.querySelectorAll('input[type="checkbox"]'));
+  if (!boxes.length) return true; // nothing rendered -> treat as "all"
+  // build: [{mg, checked}]
+  const items = boxes.map(input=>{
+    let text = "";
+    // try sibling <span>, else label text, else parent text
+    if (input.nextElementSibling) text = input.nextElementSibling.textContent || "";
+    if (!text) {
+      const lbl = host.querySelector(`label[for="${input.id}"]`);
+      text = (lbl && lbl.textContent) || input.parentElement?.textContent || "";
+    }
+    // get primary mg as above
+    const mg = parsePrimaryMg(text);
+    return { mg, checked: input.checked };
+  }).filter(x=>x.mg>0);
+  if (!items.length) return true;
+
+  const minMg = Math.min(...items.map(x=>x.mg));
+  const anyLowestChecked = items.some(x=>x.mg===minMg && x.checked);
+  return anyLowestChecked;
+}
+
+// Apply "end-dose rule" for opioid SR:
+// - If lowest is selected: allow BID -> PM-only -> Stop (no changes)
+// - If lowest is NOT selected: when the plan first reaches PM-only, truncate there and insert Review
+function applyOpioidEndDoseRule(stepRows){
+  if (!Array.isArray(stepRows)) return stepRows;
+
+  // quick check: is this an opioid SR plan? (look at first dose step with label)
+  const firstDose = stepRows.find(s=>!s.kind || s.kind==='DOSE');
+  const ok = firstDose && opioidKeyForStep(firstDose);
+  if (!ok) return stepRows;
+
+  const lowestSelected = lowestStrengthSelectedFromPicker();
+  if (lowestSelected) return stepRows;
+
+  for (let i=0;i<stepRows.length;i++){
+    const step = stepRows[i];
+    if (step?.kind && step.kind!=='DOSE') continue;
+    const t = slotTotalsMg(step);
+    const active = ['AM','MID','DIN','PM'].filter(k=>t[k]>0.0001);
+    if (active.length===1 && active[0]==='PM'){
+      // Replace this step (and any after) with a Review row
+      const dateStr = step.dateStr || step.date || step.when || step.applyOn || "";
+      const reviewRow = { kind:'REVIEW', dateStr, message:'Review with your doctor the ongoing plan' };
+      const pruned = stepRows.slice(0, i); pruned.push(reviewRow);
+      return pruned;
+    }
+  }
+  return stepRows;
+}
+
+// Hard confirm (blocking) when a step exceeds spread limit.
+// Uses native confirm for now (blocking). We can swap to a custom modal later.
+function applyOpioidUnevenHardConfirm(stepRows){
+  if (!Array.isArray(stepRows)) return stepRows;
+
+  let prevActiveCount = null;
+  let graceUsed = false;
+
+  for (let i=0;i<stepRows.length;i++){
+    const step = stepRows[i];
+    if (step?.kind && step.kind!=='DOSE') continue;
+
+    const key = opioidKeyForStep(step);
+    if (!key) continue; // only opioids SR
+
+    const limit = OPIOID_SPREAD_LIMITS[key];
+    if (!limit) continue;
+
+    const t = slotTotalsMg(step);
+    const activeCount = ['AM','MID','DIN','PM'].reduce((n,k)=>n+(t[k]>0.0001?1:0),0);
+
+    // One-time grace when a slot first retires
+    const justRetired = (prevActiveCount!==null && activeCount<prevActiveCount && !graceUsed);
+    if (justRetired){ graceUsed = true; prevActiveCount = activeCount; continue; }
+
+    const spread = spreadOfTotals(t);
+    if (spread > limit){
+      const fmt = v => (Math.round(v*10)/10).toLocaleString();
+      const msg = [
+        `Dose split is uneven for this medicine.`,
+        ``,
+        `Allowed difference (spread) for ${key.replace('-',' / ')}: ≤ ${limit} mg`,
+        `This step: AM ${fmt(t.AM)} mg • MID ${fmt(t.MID)} mg • DIN ${fmt(t.DIN)} mg • PM ${fmt(t.PM)} mg`,
+        `Spread: ${Math.round(spread)} mg (exceeds limit)`,
+        ``,
+        `To proceed you must acknowledge this risk.`,
+        `Press "OK" to Proceed anyway, or "Cancel" to Insert Review & stop.`,
+      ].join('\n');
+
+      if (!window.confirm(msg)){
+        // User chose to stop: insert Review and truncate
+        const dateStr = step.dateStr || step.date || step.when || step.applyOn || "";
+        const reviewRow = { kind:'REVIEW', dateStr, message:'Review with your doctor the ongoing plan' };
+        const pruned = stepRows.slice(0, i);
+        pruned.push(reviewRow);
+        return pruned;
+      }
+      // else Proceed anyway → continue scanning
+    }
+
+    prevActiveCount = activeCount;
+  }
+  return stepRows;
+}
+
+/* ================== Custom Step-1 (layout) validation ================== */
+
+// If Step 1 enabled, require contiguous filled rows (top-down) and unique slots
+function customStep1IsValid(){
+  const modeCustom = document.getElementById('modeCustom');
+  const modeBlock  = document.getElementById('modeBlock');
+  if (!modeBlock || !modeCustom?.checked) return true; // only when Custom selected
+
+  const step1Yes = document.getElementById('enableStep1Yes');
+  if (!step1Yes?.checked) return true; // Step-1 not enabled -> OK
+
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  if (!rows.length) return true;
+
+  // unique slot selection
+  const slots = rows.map(r => r.querySelector('select[id^="redSlot"]')?.value).filter(Boolean);
+  const unique = new Set(slots);
+  if (unique.size !== slots.length) return false;
+
+  // contiguous mg filled top-down
+  const mgs = rows.map(r => r.querySelector('input[id^="redMg"]')?.value.trim());
+  let seenEmpty = false;
+  for (let i=0;i<mgs.length;i++){
+    const v = mgs[i];
+    if (!v){ seenEmpty = true; continue; }
+    if (seenEmpty) return false; // gap
+    if (isNaN(+v) || +v<0) return false;
+  }
+  return true;
+}
+
+// Show/hide a top-of-table banner if invalid
+function ensureCustomValidationBanner(ok){
+  let bar = document.getElementById('validationBanner');
+  if (ok){
+    if (bar) bar.remove();
+    return;
+  }
+  if (!bar){
+    bar = document.createElement('div');
+    bar.id = 'validationBanner';
+    bar.style.cssText = 'margin:8px 0;padding:10px;border:1px solid #f59e0b;background:#fff7ed;color:#7c2d12;border-radius:8px;';
+    bar.textContent = 'All sections must be completed to be able to generate a chart. Check Step 1 inputs.';
+    const card = document.getElementById('taperCard');
+    if (card) card.insertBefore(bar, card.firstChild);
+  }
+}
+
+
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
 
 // PRINT: use your existing print CSS and guard against stale charts
@@ -1743,6 +1968,16 @@ function renderStandardTable(stepRows){
   const patchHost    = document.getElementById("patchBlock");
   if (!scheduleHost) return;
 
+  const ok = customStep1IsValid();
+  ensureCustomValidationBanner(ok);
+  if (!ok) return; // don’t render
+
+  // 1) Opioid SR: enforce end-dose rule (PM-only allowed only if lowest is selected)
+  stepRows = applyOpioidEndDoseRule(stepRows);
+
+  // 2) Opioid SR: hard confirm on uneven steps
+  stepRows = applyOpioidUnevenHardConfirm(stepRows);
+  
   // Screen: show tablets, hide patches
   scheduleHost.style.display = "";
   scheduleHost.innerHTML = "";
