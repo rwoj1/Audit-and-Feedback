@@ -123,12 +123,27 @@
 <div id="customPanel" style="display:none">
   <!-- STEP 1 -->
   <h4 class="subhead">Step 1 — Reduction order (optional)</h4>
-  <p class="hint">Define up to four reductions. Each line reads “Reduce [time of day] until [X] mg/day”, then flows to the next line.</p>
 
-  <div id="step1List" class="reduction-list"></div>
+  <!-- Single enable control for Step 1 -->
+  <div class="taper-row" role="radiogroup" aria-label="Enable Step 1">
+    <label class="radio">
+      <input type="radio" name="enableStep1" id="enableStep1No" checked>
+      <span>No</span>
+    </label>
+    <label class="radio">
+      <input type="radio" name="enableStep1" id="enableStep1Yes">
+      <span>Yes</span>
+    </label>
+  </div>
 
-  <div class="taper-row" style="gap:8px; margin-top:8px;">
-    <button id="addReduction" type="button" class="secondary">Add reduction</button>
+  <p class="hint" id="step1Help" style="display:none">
+    Define up to four reductions. Each line reads “Reduce [time of day] until [X] mg/day”, then flows to the next line.
+  </p>
+
+  <div id="step1List" class="reduction-list" style="display:none"></div>
+
+  <div class="taper-row" id="step1Btns" style="gap:8px; margin-top:8px; display:none">
+    <button id="addReduction"   type="button" class="secondary">Add reduction</button>
     <button id="clearReductions" type="button" class="ghost">Clear all</button>
     <span class="hint">0–4 lines supported.</span>
   </div>
@@ -137,13 +152,14 @@
   <h4 class="subhead">Step 2 — Equalise after Step 1</h4>
   <p class="hint">After Step 1 is complete, reduce each dose time equally.</p>
   <div class="taper-row" role="radiogroup" aria-label="Equalise after Step 1">
-    <label class="radio">
-      <input type="radio" name="equaliseAfter" id="equaliseYes" checked>
-      <span>Yes</span>
-    </label>
+    <!-- Flipped order: No first, Yes second (Yes remains default checked) -->
     <label class="radio">
       <input type="radio" name="equaliseAfter" id="equaliseNo">
       <span>No</span>
+    </label>
+    <label class="radio">
+      <input type="radio" name="equaliseAfter" id="equaliseYes" checked>
+      <span>Yes</span>
     </label>
   </div>
 
@@ -158,7 +174,9 @@
   </div>
 
   <div class="hint" style="margin-top:8px">
-    Tips: “time of day” accepts common phrases (e.g., <em>in the morning</em>, <em>at midday</em>, <em>at dinner</em>, <em>at night</em>). You can leave Step 1 empty, or add 1–4 lines. These settings don’t change calculations yet—layout only.
+    Tips: “time of day” accepts common phrases (e.g., <em>in the morning</em>, <em>at midday</em>,
+    <em>at dinner</em>, <em>at night</em>). You can leave Step 1 empty, or add 1–4 lines.
+    These settings don’t change calculations yet—layout only.
   </div>
 </div>
 
