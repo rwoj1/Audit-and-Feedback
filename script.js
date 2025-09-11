@@ -3258,13 +3258,21 @@ if (document.readyState === 'loading') {
   setupDisclaimerGate();
 }
 
-// Make sure init() wiring is correct and contains no ellipsis characters
-document.addEventListener("DOMContentLoaded", () => {
-  try {
-    init();
-  } catch (e) {
-    console.error(e);
-    alert("Init error: " + (e?.message || String(e)));
+// ===== Boot / Init (balanced, no ellipsis) =====
+(function(){
+  function safeInit(){
+    try {
+      init();
+    } catch (e) {
+      console.error(e);
+      alert("Init error: " + (e && e.message ? e.message : String(e)));
+    }
   }
-});
-//#endregion
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", safeInit);
+  } else {
+    safeInit();
+  }
+})();
+// End of script.js
+
