@@ -138,6 +138,48 @@ function ensureIntervalHints(){
   return [mk("p1IntHint","p1Interval"), mk("p2IntHint","p2Interval")];
 }
 
+// --- End-sequence helpers for BID classes (SR opioids & pregabalin) ---
+
+// Lowest commercial strength AVAILABLE in the catalogue for the CURRENT med/form (ignores user selection)
+function lowestCommercialStrengthMg(cls, med, form){
+  try {
+    const cat = (window.CATALOG?.[cls]?.[med]) || {};
+    const list = (cat[form] || Object.values(cat).flat() || []);
+    const mg = list.map(v => (typeof v === 'number' ? v : parseMgFromStrength(v)))
+                   .filter(n => Number.isFinite(n) && n > 0)
+                   .sort((a,b)=>a-b);
+    return mg.length ? mg[0] : null;
+  } catch(_) { return null; }
+}
+
+// Lowest strength the USER actually selected (LSS)
+function lowestSelectedStrengthMg(){
+  try {
+    if (typeof selectedProductMgs === "function") {
+      const picked = selectedProductMgs();
+      if (Array.isArray(picked) && picked.length) {
+        return Math.min(...picked.map(Number).filter(n=>Number.isFinite(n) && n>0));
+      }
+    }
+  } catch(_) {}
+  return null;
+}
+
+// True if packs are exactly BID of `mg` (AM = mg, PM = mg; MID & DIN ≈ 0)
+function isExactBIDAt(packs, mg){
+  const AM = slotTotalMg(packs,"AM"), MID = slotTotalMg(packs,"MID"),
+        DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
+  return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS
+      && MID < EPS && DIN < EPS;
+}
+
+// True if packs are exactly PM-only of `mg` (AM, MID, DIN ≈ 0; PM = mg)
+function isExactPMOnlyAt(packs, mg){
+  const AM = slotTotalMg(packs,"AM"), MID = slotTotalMg(packs,"MID"),
+        DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
+  return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
+}
+
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
 // - 100, 300, 400 mg → Capsules
@@ -2018,6 +2060,33 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   // Respect selected products for rounding granularity
   const step = lowestStepMg(cls, med, form) || 1;
 
+  // --- BID end-sequence gate (applies to SR opioids and pregabalin via this stepper) ---
+  // Threshold: LCS if it is selected, else LSS
+  const lcs = lowestCommercialStrengthMg(cls, med, form);
+  const lss = lowestSelectedStrengthMg();
+  const picked = (typeof selectedProductMgs === "function") ? (selectedProductMgs() || []) : [];
+  const lcsSelected = (picked.length === 0) ? true : picked.some(m => +m === +lcs);
+  const threshold = lcsSelected ? (lcs ?? lss) : (lss ?? lcs);
+
+  if (threshold && Number.isFinite(threshold)) {
+    // If we are already at PM-only (threshold), next step is STOP.
+    if (isExactPMOnlyAt(packs, threshold)) {
+      return {}; // empty packs => STOP row will be emitted by the caller
+    }
+    // If we are at BID(threshold), next step is either PM-only (Case A) or REVIEW (Case B).
+    if (isExactBIDAt(packs, threshold)) {
+      if (lcsSelected) {
+        // Case A: LCS selected => produce PM-only at threshold
+        const cur = { AM:0, MID:0, DIN:0, PM: threshold };
+        return recomposeSlots(cur, cls, med, form);
+      } else {
+        // Case B: LCS not selected => force a REVIEW on the next boundary
+        window._forceReviewNext = true;  // handled in buildPlanTablets (see patch below)
+        return packs; // no dose change here; loop will add a Review row next and end
+      }
+    }
+  }
+  
   let target = roundTo(tot * (1 - percent/100), step);
   if (target === tot && tot > 0) {
     target = Math.max(0, tot - step);
@@ -2303,6 +2372,13 @@ if (p2Start && +date < +p2Start) {
     if (reviewDate && +nextDate >= +reviewDate) { rows.push({ week: week+1, date: fmtDate(reviewDate), packs:{}, med, form, cls, review:true }); break; }
     if (+nextDate - +startDate >= THREE_MONTHS_MS) { rows.push({ week: week+1, date: fmtDate(nextDate), packs:{}, med, form, cls, review:true }); break; }
 
+// NEW: end-sequence Case B (LCS not selected) → force Review on the next boundary
+if (window._forceReviewNext) {
+  rows.push({ week: week+1, date: fmtDate(nextDate), packs:{}, med, form, cls, review:true });
+  window._forceReviewNext = false;
+  break;
+}
+    
     date = nextDate; week++;
     const nowInP2 = p2Start && (+date >= +p2Start);
     doStep(nowInP2 ? p2Pct : p1Pct);
