@@ -2071,67 +2071,34 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     return all.length ? all[0] : null;
   }
   function lowestSelectedStrengthMgLocal(){
-    // Gather any user-selected strengths (mg), robust to strings like "5 mg" or full labels.
-    const toMg = (v) => {
-      if (typeof v === "number") return v;
-      if (typeof parseMgFromStrength === "function") {
-        const x = parseMgFromStrength(v);
-        if (Number.isFinite(x) && x > 0) return x;
-      }
-      const x = parseFloat(String(v).replace(/[^\d.]/g,""));
-      return Number.isFinite(x) && x > 0 ? x : NaN;
-    };
-
     try {
-      // Primary: selectedProductMgs() if present
       if (typeof selectedProductMgs === "function") {
         const picked = selectedProductMgs() || [];
-        const mg = picked.map(toMg).filter(n => Number.isFinite(n) && n > 0);
+        const mg = picked.map(Number).filter(n => Number.isFinite(n) && n > 0);
         if (mg.length) return Math.min(...mg);
       }
-      // Fallback: live SelectedFormulations Set (if any)
+      // fallback to live SelectedFormulations set (if present)
       if (window.SelectedFormulations && SelectedFormulations.size > 0) {
-        const mg = Array.from(SelectedFormulations).map(toMg).filter(n => Number.isFinite(n) && n > 0);
+        const mg = Array.from(SelectedFormulations).map(Number).filter(n => Number.isFinite(n) && n > 0);
         if (mg.length) return Math.min(...mg);
       }
     } catch(_) {}
-
-    // No explicit selection → return null so the caller will use LCS
     return null;
   }
-
   function lcsIsSelectedLocal(lcs){
-    // True if: (a) no explicit selection (treat as “all allowed”), OR (b) LCS present in the selection.
-    const toMg = (v) => {
-      if (typeof v === "number") return v;
-      if (typeof parseMgFromStrength === "function") {
-        const x = parseMgFromStrength(v);
-        if (Number.isFinite(x) && x > 0) return x;
-      }
-      const x = parseFloat(String(v).replace(/[^\d.]/g,""));
-      return Number.isFinite(x) && x > 0 ? x : NaN;
-    };
-
     try{
       if (!Number.isFinite(lcs)) return false;
       const n = Number(lcs);
-
-      // If the user has NOT ticked anything → treat as “all products selected”
-      const noSet = !window.SelectedFormulations || SelectedFormulations.size === 0;
-      const noList = !(typeof selectedProductMgs === "function") || !((selectedProductMgs()||[]).length);
-      if (noSet && noList) return true; // this preserves the good behaviour you already see when none are selected
-
-      // Otherwise, check both sources robustly
       if (window.SelectedFormulations && SelectedFormulations.size > 0){
-        for (const v of SelectedFormulations) if (toMg(v) === n) return true;
+        for (const v of SelectedFormulations) if (Number(v) === n) return true;
       }
       if (typeof selectedProductMgs === "function"){
-        for (const v of (selectedProductMgs() || [])) if (toMg(v) === n) return true;
+        const arr = selectedProductMgs() || [];
+        for (const v of arr) if (Number(v) === n) return true;
       }
       return false;
     }catch(_){ return false; }
   }
-
   function isExactBIDAtLocal(p, mg){
     const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
           DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
