@@ -2090,39 +2090,138 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   // Respect selected products for rounding granularity
   const step = lowestStepMg(cls, med, form) || 1;
 
-  // --- BID end-sequence gate (improved) ---
-  const lcs = lowestCommercialStrengthMg(cls, med, form);       // e.g., 5
-  const lss = lowestSelectedStrengthMg();                       // e.g., 10
-  const threshold = lcsSelected ? lcs : lss;
-}
+  // ---------- local helpers (self-contained) ----------
+  function allCommercialStrengthsMg(cls, med, form){
+    try {
+      if (typeof strengthsForPicker === "function") {
+        const arr = strengthsForPicker(cls, med, form);
+        const mg = (arr || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
+        if (mg.length) return Array.from(new Set(mg)).sort((a,b)=>a-b);
+      }
+    } catch(_) {}
+    try {
+      const cat = (window.CATALOG?.[cls]?.[med]) || {};
+      const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
+      const mg = (pool || [])
+        .map(v => (typeof v === 'number' ? v : parseMgFromStrength(v)))
+        .filter(n => Number.isFinite(n) && n > 0)
+        .sort((a,b)=>a-b);
+      if (mg.length) return Array.from(new Set(mg));
+    } catch(_) {}
+    return [];
+  }
+  function lowestCommercialStrengthMgLocal(cls, med, form){
+    const all = allCommercialStrengthsMg(cls, med, form);
+    return all.length ? all[0] : null;
+  }
+  function lowestSelectedStrengthMgLocal(){
+    try {
+      if (typeof selectedProductMgs === "function") {
+        const picked = selectedProductMgs() || [];
+        const mg = picked.map(Number).filter(n => Number.isFinite(n) && n > 0);
+        if (mg.length) return Math.min(...mg);
+      }
+      // fallback to live SelectedFormulations set (if present)
+      if (window.SelectedFormulations && SelectedFormulations.size > 0) {
+        const mg = Array.from(SelectedFormulations).map(Number).filter(n => Number.isFinite(n) && n > 0);
+        if (mg.length) return Math.min(...mg);
+      }
+    } catch(_) {}
+    return null;
+  }
+  function lcsIsSelectedLocal(lcs){
+    try{
+      if (!Number.isFinite(lcs)) return false;
+      const n = Number(lcs);
+      if (window.SelectedFormulations && SelectedFormulations.size > 0){
+        for (const v of SelectedFormulations) if (Number(v) === n) return true;
+      }
+      if (typeof selectedProductMgs === "function"){
+        const arr = selectedProductMgs() || [];
+        for (const v of arr) if (Number(v) === n) return true;
+      }
+      return false;
+    }catch(_){ return false; }
+  }
+  function isExactBIDAtLocal(p, mg){
+    const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
+          DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
+    return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
+  }
+  function isExactPMOnlyAtLocal(p, mg){
+    const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
+          DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
+    return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
+  }
+  // ----------------------------------------------------
 
-  // Safety: if we can’t determine LCS, don’t accidentally force Review
+  // --- BID end-sequence gate (applies to SR opioids and pregabalin via this stepper) ---
+  const lcs = lowestCommercialStrengthMgLocal(cls, med, form);   // lowest commercial strength available
+  const lss = lowestSelectedStrengthMgLocal();                   // lowest strength selected by user
+  const lcsSelected = lcsIsSelectedLocal(lcs);
+  const threshold = (lcsSelected ? lcs : lss);
+
   if (threshold != null && Number.isFinite(threshold)) {
-    // If we are already at PM-only(threshold), next row is STOP.
-    if (isExactPMOnlyAt(packs, threshold)) {
-      // clear any stale flag; then STOP
+    // Already PM-only at threshold → next is STOP
+    if (isExactPMOnlyAtLocal(packs, threshold)) {
       if (window._forceReviewNext) window._forceReviewNext = false;
-      return {}; // empty packs => Stop row
+      return {}; // empty packs => STOP row
     }
-
-    // If we are at BID(threshold), decide next step:
-    if (isExactBIDAt(packs, threshold)) {
+    // First hit of BID(threshold)
+    if (isExactBIDAtLocal(packs, threshold)) {
       if (lcsSelected) {
         // Case A: LCS selected → PM-only at threshold (explicit, no rebalancing)
-        if (window._forceReviewNext) window._forceReviewNext = false; // ensure no stray review
+        if (window._forceReviewNext) window._forceReviewNext = false;
         const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
-        // Since threshold == LCS, it's an exact 1-unit tablet/capsule
         out.PM[Number(threshold)] = 1;
         return out;
       } else {
-        // Case B: LCS not selected → Review at next boundary
+        // Case B: LCS NOT selected → Review on next boundary
         window._forceReviewNext = true;
-        return packs; // leave current BID row; loop will emit Review next
+        return packs; // return unchanged; plan loop will emit Review next
       }
     }
   }
 
+  // --- continue with normal BID stepping (original V2 logic) ---
+  let target = roundTo(tot * (1 - percent/100), step);
+  if (target === tot && tot > 0) {
+    target = Math.max(0, tot - step);
+    target = roundTo(target, step);
+  }
 
+  let cur = {
+    AM:  slotTotalMg(packs, "AM"),
+    MID: slotTotalMg(packs, "MID"),
+    DIN: slotTotalMg(packs, "DIN"),
+    PM:  slotTotalMg(packs, "PM")
+  };
+
+  let reduce = +(tot - target).toFixed(3);
+
+  const shave = (slot) => {
+    if (reduce <= EPS || cur[slot] <= EPS) return;
+    const can = cur[slot];
+    const dec = Math.min(can, roundTo(reduce, step));
+    cur[slot] = +(cur[slot] - dec).toFixed(3);
+    reduce    = +(reduce    - dec).toFixed(3);
+  };
+
+  // SR-style: reduce DIN first; then MID
+  if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
+  else               { shave("MID"); }
+
+  if (reduce > EPS) {
+    const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
+    const bid = preferredBidTargets(bidTarget, cls, med, form);
+    cur.AM = bid.AM; cur.PM = bid.PM;
+    reduce = 0;
+  }
+
+  for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
+
+  return recomposeSlots(cur, cls, med, form);
+}
 
 /* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN ===== */
 function stepPPI(packs, percent, cls, med, form){
