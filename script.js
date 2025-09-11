@@ -35,6 +35,12 @@ const MAX_WEEKS = 60;
 const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 const EPS = 1e-6;
 
+// ---- Safety modal state ----
+let __CURRENT_ROWS_FOR_CONFIRM__ = null;   // last rows we attempted to render
+let __PENDING_UNSAFE__ = null;            // details for the step that triggered
+const __OVERRIDE_KEYS__ = new Set();      // remembers acknowledged steps
+
+
 /* ===== Patch interval safety (Fentanyl: ×3 days, Buprenorphine: ×7 days) ===== */
 //#endregion
 //#region 2. Patch Interval Rules (safety)
@@ -626,6 +632,47 @@ function wireCustomPanel(){
   syncModeVisibility();
 }
 
+// Build a unique override key for a step
+function stepOverrideKey(key, dateStr, totals){
+  const tot = [totals.AM,totals.MID,totals.DIN,totals.PM].map(x=>Math.round((x||0)*10)/10).join('|');
+  return `${key}|${dateStr||''}|${tot}`;
+}
+
+// Show/hide modal
+function showSafetyModal(details, onProceed, onStop){
+  const modal = document.getElementById('safetyModal');
+  const body  = document.getElementById('safetyBody');
+  const ack   = document.getElementById('safetyAck');
+  const go    = document.getElementById('safetyProceed');
+  const stop  = document.getElementById('safetyStop');
+  if (!modal || !body || !ack || !go || !stop) return;
+
+  const fmt = v => (Math.round(v*10)/10).toLocaleString();
+  const { key, limit, totals, spread } = details;
+
+  body.innerHTML = `
+    <div>Allowed difference (spread) for <b>${key.replace('-',' / ')}</b>: ≤ <b>${limit} mg</b></div>
+    <div style="margin-top:4px">
+      This step: AM ${fmt(totals.AM)} mg • MID ${fmt(totals.MID)} mg • DIN ${fmt(totals.DIN)} mg • PM ${fmt(totals.PM)} mg
+      <br>Spread: <b>${Math.round(spread)} mg</b> (exceeds limit)
+    </div>
+  `;
+
+  ack.checked = false;
+  go.disabled = true;
+
+  const sync = ()=>{ go.disabled = !ack.checked; };
+  ack.onchange = sync; sync();
+
+  go.onclick = ()=>{ hideSafetyModal(); onProceed && onProceed(); };
+  stop.onclick = ()=>{ hideSafetyModal(); onStop && onStop(); };
+
+  modal.classList.add('show');
+}
+function hideSafetyModal(){
+  const modal = document.getElementById('safetyModal');
+  if (modal) modal.classList.remove('show');
+}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -1999,21 +2046,50 @@ function applySpreadSafetyInteractive(stepRows) {
 //#endregion
 //#region 5. Renderers (Standard & Patch)
 function renderStandardTable(stepRows){
+   if (typeof autoFillP2StartFromPhase1 === "function") {
+    autoFillP2StartFromPhase1(stepRows);
   stepRows = applySpreadSafetyInteractive(stepRows);
   if (!stepRows) return;
   const scheduleHost = document.getElementById("scheduleBlock");
   const patchHost    = document.getElementById("patchBlock");
   if (!scheduleHost) return;
 
+// 0) Custom Step-1 validation
   const ok = customStep1IsValid();
   ensureCustomValidationBanner(ok);
-  if (!ok) return; // don’t render
+  if (!ok) return;
 
-  // 1) Opioid SR: enforce end-dose rule (PM-only allowed only if lowest is selected)
+  // keep a copy for proceed/stop callbacks
+  __CURRENT_ROWS_FOR_CONFIRM__ = stepRows;
+
+  // 1) Opioid SR end-dose rule
   stepRows = applyOpioidEndDoseRule(stepRows);
 
-  // 2) Opioid SR: hard confirm on uneven steps
-  stepRows = applyOpioidUnevenHardConfirm(stepRows);
+  // 2) Opioid SR: hard confirm using modal (non-blocking)
+  const unsafe = findFirstUnsafeOpioidStep(stepRows);
+  if (unsafe){
+    __PENDING_UNSAFE__ = unsafe;
+
+    showSafetyModal(
+      unsafe,
+      // onProceed:
+      ()=>{
+        __OVERRIDE_KEYS__.add(unsafe.overrideKey);
+        // re-render the same plan (now allowed)
+        renderStandardTable(__CURRENT_ROWS_FOR_CONFIRM__);
+      },
+      // onStop (insert review and stop)
+      ()=>{
+        const i = unsafe.index;
+        const dateStr = unsafe.dateStr || '';
+        const reviewRow = { kind:'REVIEW', dateStr, message:'Review with your doctor the ongoing plan' };
+        const pruned = stepRows.slice(0, i);
+        pruned.push(reviewRow);
+        renderStandardTable(pruned);
+      }
+    );
+    return; // pause until user chooses
+  }
   
   // Screen: show tablets, hide patches
   scheduleHost.style.display = "";
@@ -3445,6 +3521,9 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 /* =================== Build & init =================== */
 
 function buildPlan(){
+  // If we previously overrode a guardrail, forget it for this fresh build
+  if (typeof __OVERRIDE_KEYS__ !== "undefined" && __OVERRIDE_KEYS__?.clear) {
+    __OVERRIDE_KEYS__.clear();  
   // Patch-specific guard: enforce multiples (Fentanyl ×3d, Buprenorphine ×7d)
   if (typeof patchIntervalRule === "function" &&
       typeof validatePatchIntervals === "function" &&
@@ -3613,7 +3692,13 @@ updateClassFooter();
   setDirty(true);
   setGenerateEnabled();
   if (typeof validatePatchIntervals === "function") validatePatchIntervals(false);
-/* ===================== Disclaimer gate + UI copy tweaks ===================== */
+
+    // Advanced/custom panel wiring
+  if (typeof wireCustomStepsLayout === "function") wireCustomStepsLayout();
+  if (typeof wireCustomPanel === "function")      wireCustomPanel();
+
+  
+  /* ===================== Disclaimer gate + UI copy tweaks ===================== */
 function setupDisclaimerGate(){
   const container = document.querySelector('.container') || document.body;
   if (!container || document.getElementById('disclaimerCard')) return;
