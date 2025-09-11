@@ -336,107 +336,117 @@ function formatOxyOnlyHTML(label){
 
   return html;
 }
-/* ===== Accordion chevron ===== */
-details.accordion > summary {
-  position: relative;
-  padding-right: 28px; /* room for chevron */
-}
-details.accordion > summary::after{
-  content: "";
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  width: 10px; height: 10px;
-  transform: translateY(-50%) rotate(0deg);
-  transition: transform .15s ease;
-  /* chevron via borders */
-  border-right: 2px solid var(--text);
-  border-bottom: 2px solid var(--text);
-  transform-origin: 60% 40%;
-  /* initial: pointing right (↘ rotated) */
-  rotate: -45deg;
-}
-details.accordion[open] > summary::after{
-  /* pointing down */
-  rotate: 45deg;
+/* ===== Custom Mode: Step 1 UI (layout only) ===== */
+
+const MAX_REDUCTION_LINES = 4;
+
+// returns a reduction row element
+function buildReductionRow(idx){
+  const row = document.createElement('div');
+  row.className = 'reduction-row';
+  row.dataset.index = String(idx);
+
+  // left: enable checkbox
+  const left = document.createElement('div');
+  left.className = 'row-left';
+  const enable = document.createElement('input');
+  enable.type = 'checkbox';
+  enable.checked = true;
+  enable.id = `redEnable${idx}`;
+  const enableLbl = document.createElement('label');
+  enableLbl.htmlFor = enable.id;
+  enableLbl.textContent = 'Enable';
+  left.appendChild(enable);
+  left.appendChild(enableLbl);
+
+  // main: "Reduce [slot] until [mg] mg/day"
+  const main = document.createElement('div');
+  main.className = 'row-main';
+
+  const w1 = document.createElement('span'); w1.className='inline-word'; w1.textContent = 'Reduce';
+  const slot = document.createElement('select');
+  slot.id = `redSlot${idx}`;
+  // common phrases
+  [
+    {v:'AM',   label:'in the morning'},
+    {v:'MID',  label:'at midday'},
+    {v:'DIN',  label:'at dinner'},
+    {v:'PM',   label:'at night'},
+  ].forEach(opt => {
+    const o = document.createElement('option');
+    o.value = opt.v; o.textContent = opt.label;
+    slot.appendChild(o);
+  });
+
+  const w2 = document.createElement('span'); w2.className='inline-word'; w2.textContent = 'until';
+
+  const mgWrap = document.createElement('div'); mgWrap.className = 'input-suffix';
+  const mg = document.createElement('input');
+  mg.type = 'number'; mg.min = '0'; mg.placeholder = 'e.g., 50';
+  mg.id = `redMg${idx}`;
+  const suf = document.createElement('span'); suf.className='suffix'; suf.textContent = 'mg/day';
+  mgWrap.appendChild(mg); mgWrap.appendChild(suf);
+
+  main.appendChild(w1);
+  main.appendChild(slot);
+  main.appendChild(w2);
+  main.appendChild(mgWrap);
+
+  // actions: remove
+  const actions = document.createElement('div');
+  actions.className = 'row-actions';
+  const remove = document.createElement('button');
+  remove.type = 'button'; remove.className = 'ghost small';
+  remove.textContent = 'Remove';
+  remove.addEventListener('click', ()=>{
+    row.remove();
+    updateReductionButtonsState();
+  });
+  actions.appendChild(remove);
+
+  row.appendChild(left);
+  row.appendChild(main);
+  row.appendChild(actions);
+  return row;
 }
 
-/* ===== Step 1 reduction rows ===== */
-.reduction-list{
-  display: grid;
-  gap: 8px;
+function currentReductionCount(){
+  return document.querySelectorAll('#step1List .reduction-row').length;
 }
-.reduction-row{
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: center;
-  border: 1px dashed var(--border);
-  background: var(--card);
-  padding: 8px 10px;
-  border-radius: 8px;
+function updateReductionButtonsState(){
+  const addBtn   = document.getElementById('addReduction');
+  const clearBtn = document.getElementById('clearReductions');
+  const n = currentReductionCount();
+  if (addBtn)   addBtn.disabled   = (n >= MAX_REDUCTION_LINES);
+  if (clearBtn) clearBtn.disabled = (n === 0);
 }
-.reduction-row .row-left{
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+function addReductionRow(){
+  const list = document.getElementById('step1List');
+  if (!list) return;
+  const idx = currentReductionCount();
+  if (idx >= MAX_REDUCTION_LINES) return;
+  list.appendChild(buildReductionRow(idx));
+  updateReductionButtonsState();
 }
-.reduction-row .row-main{
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-}
-.reduction-row .row-actions{
-  display: flex;
-  gap: 6px;
+function clearReductionRows(){
+  const list = document.getElementById('step1List');
+  if (!list) return;
+  list.innerHTML = '';
+  updateReductionButtonsState();
 }
 
-/* inline bits */
-.inline-word{ opacity: .85; }
+// Wire Step 1 & Step 2 panel (layout only)
+function wireCustomStepsLayout(){
+  const addBtn   = document.getElementById('addReduction');
+  const clearBtn = document.getElementById('clearReductions');
 
-/* time-of-day control */
-.reduction-row select,
-.reduction-row input[type="text"],
-.reduction-row input[type="number"]{
-  min-width: 120px;
-}
+  if (addBtn)   addBtn.addEventListener('click', addReductionRow);
+  if (clearBtn) clearBtn.addEventListener('click', clearReductionRows);
 
-/* tiny buttons */
-button.small{
-  padding: 6px 8px;
-  font-size: 12px;
-  border-radius: 6px;
+  // start with zero lines
+  clearReductionRows();
 }
 
-/* input with suffix (mg/day) */
-.input-suffix{
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-}
-.input-suffix input{
-  padding-right: 56px; /* room for suffix */
-}
-.input-suffix .suffix{
-  position: absolute;
-  right: 10px;
-  color: var(--muted);
-  font-size: 0.9rem;
-  pointer-events: none;
-}
-
-/* radio pills (already present; ensure compact) */
-label.radio{
-  display:inline-flex;
-  align-items:center;
-  gap:8px;
-  padding:6px 10px;
-  border:1px solid var(--border);
-  border-radius:8px;
-  background:var(--card);
-}
-label.radio input{ accent-color: var(--accent); }
 
 /* ---------- Custom Mode (layout only): Step 1 & Step 2 ---------- */
 
