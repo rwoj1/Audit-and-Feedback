@@ -164,56 +164,6 @@ function allCommercialStrengthsMg(cls, med, form){
   return [];
 }
 
-function lowestCommercialStrengthMg(cls, med, form){
-  const all = allCommercialStrengthsMg(cls, med, form);
-  return all.length ? all[0] : null;
-}
-
-function lowestSelectedStrengthMg(){
-  try {
-    if (typeof selectedProductMgs === "function") {
-      const picked = selectedProductMgs();
-      const mg = (picked || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
-      if (mg.length) return Math.min(...mg);
-    }
-     if (window.SelectedFormulations && SelectedFormulations.size > 0) {
-        const mg = Array.from(SelectedFormulations).map(Number).filter(n => Number.isFinite(n) && n > 0);
-        if (mg.length) return Math.min(...mg);
-      }
-  } catch(_) {}
-  return null;
-}
-
-// Exact-shape checks
-function isExactBIDAt(packs, mg){
-  const AM = slotTotalMg(packs,"AM"), MID = slotTotalMg(packs,"MID"),
-        DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
-  return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
-}
-function isExactPMOnlyAt(packs, mg){
-  const AM = slotTotalMg(packs,"AM"), MID = slotTotalMg(packs,"MID"),
-        DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
-  return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
-}
-function lcsIsSelected(lcs){
-  try{
-    if (!Number.isFinite(lcs)) return false;
-    const n = Number(lcs);
-
-    // 1) Trust the live checkbox set if present
-    if (window.SelectedFormulations && SelectedFormulations.size > 0){
-      for (const v of SelectedFormulations) if (Number(v) === n) return true;
-    }
-    // 2) Fallback to product-MG list if available
-    if (typeof selectedProductMgs === "function"){
-      const arr = selectedProductMgs() || [];
-      for (const v of arr) if (Number(v) === n) return true;
-    }
-    return false;
-  }catch(_){ return false; }
-}
-
-
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
 // - 100, 300, 400 mg → Capsules
@@ -2093,6 +2043,71 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
 
   // Respect selected products for rounding granularity
   const step = lowestStepMg(cls, med, form) || 1;
+
+  // ---------- local helpers (self-contained) ----------
+  function allCommercialStrengthsMg(cls, med, form){
+    try {
+      if (typeof strengthsForPicker === "function") {
+        const arr = strengthsForPicker(cls, med, form);
+        const mg = (arr || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
+        if (mg.length) return Array.from(new Set(mg)).sort((a,b)=>a-b);
+      }
+    } catch(_) {}
+    try {
+      const cat = (window.CATALOG?.[cls]?.[med]) || {};
+      const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
+      const mg = (pool || [])
+        .map(v => (typeof v === 'number' ? v : parseMgFromStrength(v)))
+        .filter(n => Number.isFinite(n) && n > 0)
+        .sort((a,b)=>a-b);
+      if (mg.length) return Array.from(new Set(mg));
+    } catch(_) {}
+    return [];
+  }
+  function lowestCommercialStrengthMgLocal(cls, med, form){
+    const all = allCommercialStrengthsMg(cls, med, form);
+    return all.length ? all[0] : null;
+  }
+  function lowestSelectedStrengthMgLocal(){
+    try {
+      if (typeof selectedProductMgs === "function") {
+        const picked = selectedProductMgs() || [];
+        const mg = picked.map(Number).filter(n => Number.isFinite(n) && n > 0);
+        if (mg.length) return Math.min(...mg);
+      }
+      // fallback to live SelectedFormulations set (if present)
+      if (window.SelectedFormulations && SelectedFormulations.size > 0) {
+        const mg = Array.from(SelectedFormulations).map(Number).filter(n => Number.isFinite(n) && n > 0);
+        if (mg.length) return Math.min(...mg);
+      }
+    } catch(_) {}
+    return null;
+  }
+  function lcsIsSelectedLocal(lcs){
+    try{
+      if (!Number.isFinite(lcs)) return false;
+      const n = Number(lcs);
+      if (window.SelectedFormulations && SelectedFormulations.size > 0){
+        for (const v of SelectedFormulations) if (Number(v) === n) return true;
+      }
+      if (typeof selectedProductMgs === "function"){
+        const arr = selectedProductMgs() || [];
+        for (const v of arr) if (Number(v) === n) return true;
+      }
+      return false;
+    }catch(_){ return false; }
+  }
+  function isExactBIDAtLocal(p, mg){
+    const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
+          DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
+    return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
+  }
+  function isExactPMOnlyAtLocal(p, mg){
+    const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
+          DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
+    return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
+  }
+  // ----------------------------------------------------
 
   // --- BID end-sequence gate (applies to SR opioids and pregabalin via this stepper) ---
   const lcs = lowestCommercialStrengthMgLocal(cls, med, form);   // lowest commercial strength available
