@@ -268,404 +268,6 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
 
   return { target, step };
 }
-// --- Emphasise Oxycodone vs Naloxone in strength labels (safe HTML) ---
-function escapeHtml(s){
-  return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-}
-
-// Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
-// Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
-// Safe: we escape the original string, then replace exact escaped substrings once.
-function formatOxyOnlyHTML(label){
-  if (!label) return "";
-
-  const escapeHtml = s => String(s)
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,"&quot;");
-
-  // Work from the raw then map replacements onto the escaped string
-  const raw = String(label);
-  let html = escapeHtml(raw);
-
-  // Helper: replace exactly one occurrence of 'needle' (escaped) with HTML
-  const replaceOnce = (escapedNeedle, htmlFrag) => {
-    const idx = html.indexOf(escapedNeedle);
-    if (idx >= 0) {
-      html = html.slice(0, idx) + htmlFrag + html.slice(idx + escapedNeedle.length);
-    }
-  };
-
-  // Case 1: "Oxycodone 30 mg + Naloxone 15 mg ..."
-  const mPlus = /Oxycodone[^0-9]*\b(\d+(?:\.\d+)?)\s*mg\b/i.exec(raw);
-  if (mPlus) {
-    // Bold the *entire* "Oxycodone ... mg" phrase once
-    const oxyPhrase = raw.match(/Oxycodone[^0-9]*\d+(?:\.\d+)?\s*mg/i)[0];
-    const oxyEsc = escapeHtml(oxyPhrase);
-    replaceOnce(oxyEsc, `<strong class="oxy-strong">${oxyEsc}</strong>`);
-  }
-
-  // Case 2: "Oxycodone/Naloxone 10/5 mg ..." → bold the first (oxycodone) value
-  if (/Oxycodone/i.test(raw)) {
-    const slash1 = /(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
-    if (slash1) {
-      const firstEsc = escapeHtml(`${slash1[1]} mg`);
-      replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
-    } else {
-      const slash2 = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
-      if (slash2) {
-        const firstEsc = escapeHtml(`${slash2[1]}`);
-        replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
-      }
-    }
-  }
-
-  // Always ensure the word "Oxycodone" itself (first occurrence) is bold,
-  // but only if it isn't already inside a <strong>.
-  if (/Oxycodone/i.test(raw)) {
-    // Do a light check on the escaped HTML to avoid inserting inside existing <strong>
-    const oxyWordEsc = escapeHtml("Oxycodone");
-    if (!/<strong[^>]*>\s*Oxycodone\s*<\/strong>/i.test(html)) {
-      replaceOnce(oxyWordEsc, `<strong class="oxy-strong">${oxyWordEsc}</strong>`);
-    }
-  }
-
-  // Soften the form suffix "SR tablet|SR capsule"
-  html = html.replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
-
-  return html;
-}
-function moveReductionRow(row, dir){
-  const list = document.getElementById('step1List');
-  if (!list) return;
-  const rows = Array.from(list.querySelectorAll('.reduction-row'));
-  const i = rows.indexOf(row);
-  if (i < 0) return;
-
-  const j = i + dir;
-  if (j < 0 || j >= rows.length) return; // already at edge
-
-  // Reinsert DOM node in new position
-  if (dir < 0) list.insertBefore(row, rows[j]);            // move up before the row above
-  else          list.insertBefore(row, rows[j].nextSibling); // move down after the row below
-
-  refreshThenTags();
-  updateRowIndices();
-  enforceUniqueTimeSelections();
-  disableUpDownButtons();
-}
-
-function updateRowIndices(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((r, idx) => {
-    r.dataset.index = String(idx);
-    // keep IDs tidy (not strictly required, but nice)
-    const sel = r.querySelector('select[id^="redSlot"]');
-    const mg  = r.querySelector('input[id^="redMg"]');
-    if (sel) sel.id = `redSlot${idx}`;
-    if (mg)  mg.id  = `redMg${idx}`;
-  });
-}
-
-function disableUpDownButtons(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((r, idx) => {
-    const up   = r.querySelector('.btn-up');
-    const down = r.querySelector('.btn-down');
-    if (up)   up.disabled   = (idx === 0);
-    if (down) down.disabled = (idx === rows.length - 1);
-  });
-}
-
-/* ===== Custom Mode: Step 1 UI (per-slot mg, 4 rows, reorder, unique slots) ===== */
-
-const MAX_REDUCTION_LINES = 4;
-
-// Class defaults for Step 1 ordering (UI only)
-const CLASS_DEFAULT_PRIORITY = {
-  opioids:        ['DIN','MID','AM','PM'],
-  ppi:            ['MID','PM','AM','DIN'],
-  bzd:            null, // hide Mode entirely for BZD
-  antipsychotic:  ['MID','DIN','AM','PM'],
-  gabapentinoid:  ['DIN','MID','AM','PM'],
-};
-
-// Map class from selects
-function currentClassKey(){
-  const clsSel = document.getElementById('classSelect');
-  const medSel = document.getElementById('medicineSelect');
-  const clsVal = (clsSel?.value || '').toLowerCase();
-  const medVal = (medSel?.value || '').toLowerCase();
-
-  if (clsVal.includes('benz') || clsVal.includes('bzd')) return 'bzd';
-  if (clsVal.includes('ppi'))    return 'ppi';
-  if (clsVal.includes('antipsych')) return 'antipsychotic';
-  if (clsVal.includes('gabapentin') || clsVal.includes('pregabalin')
-      || medVal.includes('gabapentin') || medVal.includes('pregabalin')
-      || clsVal.includes('gabapentinoid')) return 'gabapentinoid';
-  if (clsVal.includes('opioid')) return 'opioids';
-  return 'opioids';
-}
-
-// Build one reduction row: THEN Reduce [slot] until [mg] mg
-function buildReductionRow(idx){
-  const row = document.createElement('div');
-  row.className = 'reduction-row';
-  row.dataset.index = String(idx);
-
-  // left: THEN (only after the first row)
-  const left = document.createElement('div');
-  left.className = 'row-left';
-  if (idx > 0){
-    const thenTag = document.createElement('span');
-    thenTag.className = 'then-tag';
-    thenTag.textContent = 'THEN';
-    left.appendChild(thenTag);
-  }
-
-  // main: "Reduce [slot] until [mg] mg"
-  const main = document.createElement('div');
-  main.className = 'row-main';
-
-  const w1 = document.createElement('span'); w1.className='inline-word'; w1.textContent = 'Reduce';
-
-  const slot = document.createElement('select');
-  slot.id = `redSlot${idx}`;
-  [
-    {v:'AM',   label:'in the morning'},
-    {v:'MID',  label:'at midday'},
-    {v:'DIN',  label:'at dinner'},
-    {v:'PM',   label:'at night'},
-  ].forEach(opt => {
-    const o = document.createElement('option');
-    o.value = opt.v; o.textContent = opt.label;
-    slot.appendChild(o);
-  });
-
-  const w2 = document.createElement('span'); w2.className='inline-word'; w2.textContent = 'until';
-
-  const mgWrap = document.createElement('div'); mgWrap.className = 'input-suffix';
-  const mg = document.createElement('input');
-  mg.type = 'number'; mg.min = '0'; mg.placeholder = 'e.g., 50';
-  mg.id = `redMg${idx}`;
-  const suf = document.createElement('span'); suf.className='suffix'; suf.textContent = 'mg';
-  mgWrap.appendChild(mg); mgWrap.appendChild(suf);
-
-  main.appendChild(w1);
-  main.appendChild(slot);
-  main.appendChild(w2);
-  main.appendChild(mgWrap);
-
-  // actions: Up / Down (no Remove)
-  const actions = document.createElement('div');
-  actions.className = 'row-actions';
-
-  const up = document.createElement('button');
-  up.type = 'button'; up.className = 'secondary small btn-up';
-  up.textContent = '↑ Up';
-  up.addEventListener('click', ()=> moveReductionRow(row, -1));
-
-  const down = document.createElement('button');
-  down.type = 'button'; down.className = 'secondary small btn-down';
-  down.textContent = '↓ Down';
-  down.addEventListener('click', ()=> moveReductionRow(row, +1));
-
-  actions.appendChild(up);
-  actions.appendChild(down);
-
-  row.appendChild(left);
-  row.appendChild(main);
-  row.appendChild(actions);
-
-  // keep uniqueness across rows
-  slot.addEventListener('change', enforceUniqueTimeSelections);
-
-  return row;
-}
-
-function currentReductionCount(){
-  return document.querySelectorAll('#step1List .reduction-row').length;
-}
-
-function refreshThenTags(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((row, i) => {
-    const left = row.querySelector('.row-left');
-    if (!left) return;
-    left.innerHTML = '';
-    if (i > 0){
-      const thenTag = document.createElement('span');
-      thenTag.className = 'then-tag';
-      thenTag.textContent = 'THEN';
-      left.appendChild(thenTag);
-    }
-  });
-}
-
-function updateRowIndices(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((r, idx) => {
-    r.dataset.index = String(idx);
-    const sel = r.querySelector('select[id^="redSlot"]');
-    const mg  = r.querySelector('input[id^="redMg"]');
-    if (sel) sel.id = `redSlot${idx}`;
-    if (mg)  mg.id  = `redMg${idx}`;
-  });
-}
-
-function disableUpDownButtons(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((r, idx) => {
-    const up   = r.querySelector('.btn-up');
-    const down = r.querySelector('.btn-down');
-    if (up)   up.disabled   = (idx === 0);
-    if (down) down.disabled = (idx === rows.length - 1);
-  });
-}
-
-function pickFirstAvailableSlot(row){
-  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
-  const used = new Set(selects.filter(s => s !== row.querySelector('select')).map(s => s.value));
-  const mySel = row.querySelector('select');
-  if (!mySel) return;
-
-  const options = Array.from(mySel.options);
-  const preferred = options.find(o => !used.has(o.value));
-  if (preferred) mySel.value = preferred.value;
-}
-
-function enforceUniqueTimeSelections(){
-  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
-  const used = new Map(); // value -> count
-  selects.forEach(sel => used.set(sel.value, (used.get(sel.value)||0)+1));
-
-  selects.forEach(owner => {
-    const ownerVal = owner.value;
-    Array.from(owner.options).forEach(opt => {
-      const val = opt.value;
-      const count = used.get(val)||0;
-      const chosenElsewhere = (val !== ownerVal && count > 0);
-      opt.disabled = chosenElsewhere;
-    });
-  });
-}
-
-function moveReductionRow(row, dir){
-  const list = document.getElementById('step1List');
-  if (!list) return;
-  const rows = Array.from(list.querySelectorAll('.reduction-row'));
-  const i = rows.indexOf(row);
-  if (i < 0) return;
-
-  const j = i + dir;
-  if (j < 0 || j >= rows.length) return;
-
-  if (dir < 0) list.insertBefore(row, rows[j]);
-  else         list.insertBefore(row, rows[j].nextSibling);
-
-  refreshThenTags();
-  updateRowIndices();
-  enforceUniqueTimeSelections();
-  disableUpDownButtons();
-}
-
-// Build 4 rows and set class default order
-function ensureFourRows(){
-  const list = document.getElementById('step1List');
-  if (!list) return;
-  list.innerHTML = '';
-  for (let i=0;i<4;i++){
-    const row = buildReductionRow(i);
-    list.appendChild(row);
-  }
-  applyClassDefaultToRows();
-  enforceUniqueTimeSelections();
-  refreshThenTags();
-  disableUpDownButtons();
-}
-
-function applyClassDefaultToRows(){
-  const key = currentClassKey();
-  const def = CLASS_DEFAULT_PRIORITY[key] || ['DIN','MID','AM','PM'];
-  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
-  // Assign in order; any extras keep first available slot
-  selects.forEach((sel, idx) => {
-    const target = def[idx] || null;
-    if (target){
-      sel.value = target;
-    } else {
-      // fall back to first available
-      const used = new Set(selects.filter(s => s !== sel).map(s => s.value));
-      const opt = Array.from(sel.options).find(o => !used.has(o.value));
-      if (opt) sel.value = opt.value;
-    }
-    enforceUniqueTimeSelections();
-  });
-}
-
-// Show/hide Step 1 container and build rows when enabled
-function syncStep1Enable(){
-  const yes = document.getElementById('enableStep1Yes')?.checked;
-  const help = document.getElementById('step1Help');
-  const list = document.getElementById('step1List');
-
-  const on = !!yes;
-  if (help) help.style.display = on ? '' : 'none';
-  if (list) list.style.display = on ? '' : 'none';
-
-  if (on && currentReductionCount() === 0){
-    ensureFourRows();
-  } else if (on){
-    // if class changed while on, re-apply class default order
-    applyClassDefaultToRows();
-    enforceUniqueTimeSelections();
-    refreshThenTags();
-    disableUpDownButtons();
-  }
-}
-
-// Wire Step 1 layout
-function wireCustomStepsLayout(){
-  // Enable Step 1 toggle
-  const enNo  = document.getElementById('enableStep1No');
-  const enYes = document.getElementById('enableStep1Yes');
-  if (enNo)  enNo.addEventListener('change', syncStep1Enable);
-  if (enYes) enYes.addEventListener('change', syncStep1Enable);
-
-  // React to class/medicine changes: keep 4 rows & class defaults in sync
-  const clsSel = document.getElementById('classSelect');
-  const medSel = document.getElementById('medicineSelect');
-  const reapply = () => {
-    if (document.getElementById('enableStep1Yes')?.checked){
-      ensureFourRows();
-    }
-  };
-  if (clsSel) clsSel.addEventListener('change', reapply);
-  if (medSel) medSel.addEventListener('change', reapply);
-
-  // Initial state (No)
-  syncStep1Enable();
-}
-
-function syncModeVisibility(){
-  const key = currentClassKey();
-  const mode = document.getElementById('modeBlock');
-  if (!mode) return;
-  mode.style.display = (key === 'bzd') ? 'none' : '';
-}
-function wireCustomPanel(){
-  const clsSel = document.getElementById('classSelect');
-  const medSel = document.getElementById('medicineSelect');
-  const resetBtn = document.getElementById('resetPriority'); // if you still have it; otherwise ignore
-
-  const onChange = ()=>{ syncModeVisibility(); };
-  if (clsSel) clsSel.addEventListener('change', onChange);
-  if (medSel) medSel.addEventListener('change', onChange);
-
-  // Initial fill (if you still show Step-1 pills elsewhere, keep your old calls)
-  syncModeVisibility();
-}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -1345,6 +947,76 @@ function strengthsForSelectedSafe(cls, med, form){
     return [];
   }
 }
+function renderProductPicker(){
+  const clsEl  = document.getElementById("classSelect");
+  const medEl  = document.getElementById("medicineSelect");
+  const formEl = document.getElementById("formSelect");
+  const cls  = (clsEl && clsEl.value)  || "";
+  const med  = (medEl && medEl.value)  || "";
+  const form = (formEl && formEl.value) || "";
+
+  const card = document.getElementById("productPickerCard");
+  const host = document.getElementById("productPicker");
+  if (!card || !host) return;
+
+  // Show/hide picker based on allowed medicines/forms
+  if (typeof shouldShowProductPicker === "function" && !shouldShowProductPicker(cls, med, form)) {
+    card.style.display = "none";
+    if (window.SelectedFormulations && typeof SelectedFormulations.clear === "function") SelectedFormulations.clear();
+    host.innerHTML = "";
+    return;
+  }
+  card.style.display = "";
+
+  // Build checkbox list
+  host.innerHTML = "";
+  const strengths = (typeof strengthsForPicker === "function" ? strengthsForPicker() : []);
+  strengths.forEach(s => {
+    const mg = (typeof parseMgFromStrength === "function") ? parseMgFromStrength(s) : parseFloat(String(s).replace(/[^\d.]/g,"")) || 0;
+    if (!Number.isFinite(mg) || mg <= 0) return;
+
+    const id = `prod_${String(med).replace(/\W+/g,'_')}_${mg}`;
+    const wrap = document.createElement("label");
+    wrap.className = "checkbox";
+    wrap.setAttribute("for", id);
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = id;
+
+    // If user has made any selection, reflect it; otherwise show unchecked (using all products by default)
+    const isChecked = (window.SelectedFormulations && SelectedFormulations.size > 0) ? SelectedFormulations.has(mg) : false;
+    cb.checked = isChecked;
+
+    cb.addEventListener("change", () => {
+      if (!window.SelectedFormulations) window.SelectedFormulations = new Set();
+      if (cb.checked) SelectedFormulations.add(mg);
+      else SelectedFormulations.delete(mg);
+      if (typeof setDirty === "function") setDirty(true);
+    });
+
+    const span = document.createElement("span");
+    const title = (typeof strengthToProductLabel === "function")
+      ? strengthToProductLabel(cls, med, form, s)
+      : `${mg} mg`;
+    span.textContent = title; // e.g., "600 mg tablet" / "25 mg capsule"
+
+    wrap.appendChild(cb);
+    wrap.appendChild(span);
+    host.appendChild(wrap);
+  });
+
+  // Wire "Clear selection" button
+  const clearBtn = document.getElementById("clearProductSelection");
+  if (clearBtn && !clearBtn._wired) {
+    clearBtn._wired = true;
+    clearBtn.addEventListener("click", () => {
+      if (window.SelectedFormulations && typeof SelectedFormulations.clear === "function") SelectedFormulations.clear();
+      host.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+      if (typeof setDirty === "function") setDirty(true);
+    });
+  }
+}
 
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
 
@@ -1621,152 +1293,6 @@ function renderPrintHeader(container){
   // insert header at the very top of container
   container.prepend(hdr);
 }
-/* ------------------------------------------------------------------
-   Safety rules: spread check + friendly confirm
-   - Computes per-step slot totals (AM/MID/DIN/PM) in mg
-   - Warns if spread > medicine-specific limit
-   - One-time grace when a slot first retires to 0
------------------------------------------------------------------- */
-
-// 1) Medicine-specific spread limits (mg)
-const SPREAD_LIMITS = {
-  morphine: 30,
-  oxycodone: 20,
-  "oxycodone-naloxone": 20,
-  tapentadol: 100,
-  tramadol: 100,
-  gabapentin: 300,
-  pregabalin: 75,    // per your update
-};
-
-// 2) Recognise medicine from the strength label text
-function spreadKeyFromLabel(label) {
-  const s = String(label || "").toLowerCase();
-  if (s.includes("oxycodone") && s.includes("naloxone")) return "oxycodone-naloxone";
-  if (s.includes("oxycodone")) return "oxycodone";
-  if (s.includes("morphine")) return "morphine";
-  if (s.includes("tapentadol")) return "tapentadol";
-  if (s.includes("tramadol")) return "tramadol";
-  if (s.includes("gabapentin")) return "gabapentin";
-  if (s.includes("pregabalin")) return "pregabalin";
-  return null;
-}
-
-// 3) Extract the primary mg value for a line's strength label
-//    - For oxy/nal combos, returns the OXYCODONE mg (first number)
-function extractPrimaryMg(label) {
-  const raw = String(label || "");
-  // "Oxycodone ... 10 mg + Naloxone 5 mg ..."
-  let m = /Oxycodone[^0-9]*([\d.]+)\s*mg/i.exec(raw);
-  if (m) return parseFloat(m[1]);
-
-  // "Oxycodone/Naloxone 10/5 mg ..."
-  m = /Oxycodone\/Naloxone\s+([\d.]+)\s*\/\s*([\d.]+)\s*mg/i.exec(raw);
-  if (m) return parseFloat(m[1]);
-
-  // Generic "123 mg" (first number before mg)
-  m = /([\d.]+)\s*mg/i.exec(raw);
-  return m ? parseFloat(m[1]) : 0;
-}
-
-// 4) Compute per-slot totals (mg) for a single step
-function slotTotalsMg(step) {
-  const totals = { AM: 0, MID: 0, DIN: 0, PM: 0 };
-  const lines = step?.lines || step?.rows || []; // be tolerant to naming
-  for (const line of lines) {
-    const mg = extractPrimaryMg(line.strength || line.strengthLabel || "");
-    const am  = (line.morning ?? line.am  ?? 0) * mg;
-    const mid = (line.midday  ?? line.mid ?? 0) * mg;
-    const din = (line.dinner  ?? line.din ?? 0) * mg;
-    const pm  = (line.night   ?? line.pm  ?? line.nocte ?? 0) * mg;
-    totals.AM  += am; totals.MID += mid; totals.DIN += din; totals.PM  += pm;
-  }
-  return totals;
-}
-
-// 5) First non-null medicine key seen in a step (from its lines)
-function discoverSpreadKey(step) {
-  const lines = step?.lines || step?.rows || [];
-  for (const line of lines) {
-    const key = spreadKeyFromLabel(line.strength || line.strengthLabel || "");
-    if (key) return key;
-  }
-  return null;
-}
-
-// 6) Spread (max - min) among ACTIVE slots (dose > 0)
-function computeSpread(totals) {
-  const vals = [totals.AM, totals.MID, totals.DIN, totals.PM].filter(v => v > 0.0001);
-  if (vals.length <= 1) return 0; // one or zero active slots → spread is 0
-  const maxv = Math.max(...vals), minv = Math.min(...vals);
-  return maxv - minv;
-}
-
-// 7) Friendly summary for the confirm message
-function formatSlotSummary(t) {
-  const fmt = v => (Math.round(v*10)/10).toLocaleString();
-  return `AM ${fmt(t.AM)} mg • MID ${fmt(t.MID)} mg • DIN ${fmt(t.DIN)} mg • PM ${fmt(t.PM)} mg`;
-}
-
-// 8) The interactive pre-scan (returns pruned plan or null to abort)
-function applySpreadSafetyInteractive(stepRows) {
-  if (!Array.isArray(stepRows) || !stepRows.length) return stepRows;
-
-  let prevActiveCount = null;
-  let usedGraceOnRetire = false;  // allow grace once (when a slot first retires)
-  // Work out medicine key & limit from the first step that has a label
-  let spreadKey = null, limit = null;
-
-  for (let i = 0; i < stepRows.length; i++) {
-    const step = stepRows[i];
-    // Skip non-dose steps (STOP/REVIEW rows)
-    if (step?.kind && step.kind !== "DOSE") continue;
-
-    if (!spreadKey) {
-      spreadKey = discoverSpreadKey(step);
-      limit = spreadKey ? SPREAD_LIMITS[spreadKey] : null;
-    }
-    if (!limit) continue; // unknown class → no spread check
-
-    const totals = slotTotalsMg(step);
-    const activeCount = ["AM","MID","DIN","PM"].reduce((n,k)=> n + (totals[k] > 0.0001 ? 1 : 0), 0);
-
-    // Retirement grace: if a slot has just dropped to 0 for the first time, allow this step once
-    const justRetired = (prevActiveCount !== null && activeCount < prevActiveCount && !usedGraceOnRetire);
-    if (justRetired) {
-      usedGraceOnRetire = true;
-      prevActiveCount = activeCount;
-      continue; // allow without warning
-    }
-
-    const spread = computeSpread(totals);
-    if (spread > limit) {
-      const msg = [
-        `Heads-up: this step would produce an uneven split for ${spreadKey.replace("-"," / ")}.`,
-        `Allowed difference: ≤ ${limit} mg.`,
-        `This step: ${formatSlotSummary(totals)} (spread ${Math.round(spread)} mg).`,
-        ``,
-        `For safety and due to calculator limits, do you want to continue?`,
-      ].join("\n");
-
-      if (!window.confirm(msg)) {
-        // User chose "Stop for review": trim plan to previous steps and add a REVIEW row
-        const dateStr = step.dateStr || step.date || step.when || step.applyOn || "";
-        const reviewRow = { kind: "REVIEW", dateStr, message: "Review with your doctor the ongoing plan" };
-        // Keep steps BEFORE this one, then insert review
-        const pruned = stepRows.slice(0, i);
-        pruned.push(reviewRow);
-        return pruned;
-      }
-      // else: user chose Continue → permit this step and keep scanning
-    }
-
-    prevActiveCount = activeCount;
-  }
-
-  return stepRows;
-}
-
 /* ==========================================
    RENDER STANDARD (tablets/caps/ODT) TABLE
    - Merges date per step (rowspan)
@@ -1777,8 +1303,6 @@ function applySpreadSafetyInteractive(stepRows) {
 //#endregion
 //#region 5. Renderers (Standard & Patch)
 function renderStandardTable(stepRows){
-  stepRows = applySpreadSafetyInteractive(stepRows);
-  if (!stepRows) return;
   const scheduleHost = document.getElementById("scheduleBlock");
   const patchHost    = document.getElementById("patchBlock");
   if (!scheduleHost) return;
@@ -1893,11 +1417,11 @@ function renderStandardTable(stepRows){
       }
       tr.appendChild(tdDate);
 
-// [2] Strength — emphasise oxycodone over naloxone on ALL rows
-const tdStrength = document.createElement("td");
-tdStrength.className = "col-strength";
-tdStrength.innerHTML = formatOxyOnlyHTML(line.strength || "");
-tr.appendChild(tdStrength);
+      // [2] Strength
+      const tdStrength = document.createElement("td");
+      tdStrength.className = "col-strength";
+      tdStrength.textContent = line.strength || "";
+      tr.appendChild(tdStrength);
 
       // [3] Instructions — keep \n, print via textContent
       const tdInstr = document.createElement("td");
@@ -2177,7 +1701,7 @@ function oxyNxPairLabel(oxyMg){
   return `Oxycodone ${stripZeros(oxy)} mg + naloxone ${stripZeros(nx)} mg SR tablet`;
 }
 /* =================== Dropdowns & dose lines =================== */
-const ANTIPSYCHOTIC_MODE = "Show";
+const ANTIPSYCHOTIC_MODE = "hide";
 
 function populateClasses() {
   const el = $("classSelect");
@@ -2844,7 +2368,7 @@ function renderProductPicker(){
     const title = (typeof strengthToProductLabel === "function")
       ? strengthToProductLabel(cls, med, form, s)   // e.g., "600 mg tablet"
       : `${mg} mg`;
-    span.innerHTML = formatOxyOnlyHTML(title);
+    span.textContent = title;
 
     label.appendChild(cb);
     label.appendChild(span);
@@ -2889,20 +2413,6 @@ function renderProductPicker(){
   if (med  && !med._ppReset)  { med._ppReset  = true; med.addEventListener("change", reset); }
   if (form && !form._ppReset) { form._ppReset = true; form.addEventListener("change", reset); }
 })();
-
-function wireModeToggle(){
-  const modeDefault = document.getElementById("modeDefault");
-  const modeCustom  = document.getElementById("modeCustom");
-  const customPanel = document.getElementById("customPanel");
-  if (!modeDefault || !modeCustom || !customPanel) return; // elements not in DOM yet
-
-  const sync = () => { customPanel.style.display = modeCustom.checked ? "block" : "none"; };
-
-  modeDefault.addEventListener("change", sync);
-  modeCustom .addEventListener("change", sync);
-  // Initial state:
-  sync();
-}
 
 
 /* =================== Patches builder — date-based Phase-2; start at step 2 =================== */
@@ -3352,10 +2862,6 @@ document.getElementById("classSelect")?.addEventListener("change", () => {
 updateBestPracticeBox();
 updateClassFooter();
   renderProductPicker();
-  wireModeToggle();
-  wireCustomPanel();
-  wireCustomStepsLayout();
-   syncModeVisibility();
 
   
   // 7) Live gating + interval hints for patches
