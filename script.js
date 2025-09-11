@@ -239,62 +239,52 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   return { target, step };
 }
 // --- Emphasise Oxycodone vs Naloxone in strength labels (safe HTML) ---
+// --- Emphasise Oxycodone vs Naloxone in strength labels (safe HTML) ---
 function escapeHtml(s){
-  return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'"'}[m]));
+  return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 }
+
 // Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
-// Emphasise only Oxycodone (name + its mg). Naloxone stays normal.
-// Safe: we escape the original string, then replace exact escaped substrings once.
+// Safe: we escape the original string first, then replace exact escaped substrings once.
 function formatOxyOnlyHTML(label){
   if (!label) return "";
-  const escapeHtml = s => String(s)
-    .replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/"/g,""");
-  // Work from the raw then map replacements onto the escaped string
-  const raw = String(label);
-  let html = escapeHtml(raw);
-  // Helper: replace exactly one occurrence of 'needle' (escaped) with HTML
-  const replaceOnce = (escapedNeedle, htmlFrag) => {
-    const idx = html.indexOf(escapedNeedle);
-    if (idx >= 0) {
-      html = html.slice(0, idx) + htmlFrag + html.slice(idx + escapedNeedle.length);
+  const raw  = String(label);
+  let html   = escapeHtml(raw);
+
+  // Replace the first occurrence of an escaped substring, once
+  const replaceOnce = (needle, swap) => {
+    const idx = html.indexOf(needle);
+    if (idx !== -1) {
+      html = html.slice(0, idx) + swap + html.slice(idx + needle.length);
     }
   };
-  // Case 1: "Oxycodone 30 mg + Naloxone 15 mg ..."
-  const mPlus = /Oxycodone[^0-9]*\b(\d+(?:\.\d+)?)\s*mg\b/i.exec(raw);
-  if (mPlus) {
-    // Bold the *entire* "Oxycodone ... mg" phrase once
-    const oxyPhrase = raw.match(/Oxycodone[^0-9]*\d+(?:\.\d+)?\s*mg/i)[0];
-    const oxyEsc = escapeHtml(oxyPhrase);
-    replaceOnce(oxyEsc, `<strong class="oxy-strong">${oxyEsc}</strong>`);
-  }
-  // Case 2: "Oxycodone/Naloxone 10/5 mg ..." → bold the first (oxycodone) value
-  if (/Oxycodone/i.test(raw)) {
-    const slash1 = /(\d+(?:\.\d+)?)\s*mg\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
-    if (slash1) {
-      const firstEsc = escapeHtml(`${slash1[1]} mg`);
+
+  // Bold the oxycodone mg
+  // Pattern A: "Oxycodone 10 mg + Naloxone 5 mg SR tablet"
+  const plus = /Oxycodone[^0-9]*([\d.]+)\s*mg\s*\+\s*Nalo/i.exec(raw);
+  if (plus) {
+    const firstEsc = escapeHtml(`${plus[1]} mg`);
+    replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
+  } else {
+    // Pattern B: "Oxycodone/Naloxone 10/5 mg SR tablet"
+    const slash = /Oxycodone\/Naloxone[^0-9]*([\d.]+)\s*\/\s*([\d.]+)\s*mg/i.exec(raw);
+    if (slash) {
+      const firstEsc = escapeHtml(`${slash[1]} mg`);
       replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
-    } else {
-      const slash2 = /(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*mg/i.exec(raw);
-      if (slash2) {
-        const firstEsc = escapeHtml(`${slash2[1]}`);
-        replaceOnce(firstEsc, `<strong class="oxy-strong">${firstEsc}</strong>`);
-      }
     }
   }
-  // Always ensure the word "Oxycodone" itself (first occurrence) is bold,
-  // but only if it isn't already inside a <strong>.
-  if (/Oxycodone/i.test(raw)) {
-    // Do a light check on the escaped HTML to avoid inserting inside existing <strong>
-    const oxyWordEsc = escapeHtml("Oxycodone");
-    if (!/<strong[^>]*>\s*Oxycodone\s*<\/strong>/i.test(html)) {
-      replaceOnce(oxyWordEsc, `<strong class="oxy-strong">${oxyWordEsc}</strong>`);
-    }
+
+  // Bold the word "Oxycodone" itself (first occurrence) if not already inside <strong>
+  const oxyWordEsc = escapeHtml("Oxycodone");
+  if (!/<strong[^>]*>[^<]*Oxycodone/i.test(html)) {
+    replaceOnce(oxyWordEsc, `<strong class="oxy-strong">${oxyWordEsc}</strong>`);
   }
-  // Soften the form suffix "SR tablet|SR capsule"
-  html = html.replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
+
+  // Downplay the Naloxone segment and the SR form tag
+  html = html
+    .replace(/(Naloxone[^0-9]*\d+(?:\.\d+)?\s*mg)/i, '<span class="nalo-dim">$1</span>')
+    .replace(/\b(SR\s*(?:tablet|capsule))\b/ig, '<span class="form-dim">$1</span>');
+
   return html;
 }
 /* ===== Custom Mode: Step 1 UI (per-slot mg, 4 rows, reorder, unique slots) ===== */
