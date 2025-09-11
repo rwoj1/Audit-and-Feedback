@@ -192,7 +192,7 @@ function strengthToProductLabel(cls, med, form, strengthStr){
   return `${med} ${stripZeros(mg)} mg ${formSuffixWithSR(form)}`;
 }
 // Which strengths are available for the picker (we use whatever the current Form provides)
-// For Gabapentin you already expose both tablet & capsule strengths via “Tablet/Capsule”.
+// For Gabapentin you already expose both tablet & capsule strengths via "Tablet/Capsule".
 function strengthsForPicker(){
   return strengthsForSelected().slice().sort((a,b)=>parseMgFromStrength(a)-parseMgFromStrength(b));
 }
@@ -1421,7 +1421,7 @@ function saveOutputAsPdf() {
 //#endregion
 //#region 7. Suggested Practice & Footers
 const SUGGESTED_PRACTICE = {
-  opioids: `Tailor the deprescribing plan based on the person’s clinical characteristics, goals and preferences. Consider:
+  opioids: `Tailor the deprescribing plan based on the person's clinical characteristics, goals and preferences. Consider:
 • < 3 months use: reduce the dose by 10% to 25% every week
 • >3 months use: reduce the dose by 10% to 25% every 4 weeks
 • Long-term opioid use (e.g. 1> year) or on high doses: slower tapering and frequent monitoring
@@ -2853,7 +2853,7 @@ cand.sort((a, b) => {
     }
     return { total: pick, combo };
   }
-  // Non-fentanyl: keep your original “no-stagnation” guard
+  // Non-fentanyl: keep your original "no-stagnation" guard
   if (Math.abs(pick - prevTotal) < 1e-9) {
     const lower = cand.find(x => x < prevTotal - 1e-9);
     if (lower != null) { pick = lower; combo = sums.get(lower) || [lower]; }
@@ -3275,4 +3275,3 @@ if (document.readyState === 'loading') {
   }
 })();
 // End of script.js
-
