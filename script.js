@@ -21,88 +21,6 @@
 "use strict";
 
 /* ====================== Helpers ====================== */
-// ===== BID end-sequence diagnostics (safe: logs only) =====
-window.BID_DBG = false; // turn on in console:  BID_DBG = true
-
-function _toMgLoose(v){
-  // robust mg extractor: 5, "5", "Morphine 5 mg SR Tablet" -> 5
-  let n = Number(v);
-  if (!Number.isFinite(n)) {
-    if (typeof parseMgFromStrength === "function") {
-      n = Number(parseMgFromStrength(String(v)));
-    }
-    if (!Number.isFinite(n)) {
-      const m = String(v).match(/(\d+(\.\d+)?)/);
-      n = m ? Number(m[1]) : NaN;
-    }
-  }
-  return Number.isFinite(n) ? n : null;
-}
-
-function _selectedMgSet(cls, med, form){
-  const set = new Set();
-
-  // 1) Explicit mg list if available
-  try {
-    if (typeof selectedProductMgs === "function") {
-      for (const x of (selectedProductMgs() || [])) {
-        const mg = _toMgLoose(x);
-        if (mg != null) set.add(mg);
-      }
-    }
-  } catch(_){}
-
-  // 2) Picker-driven functions (often strings like "Morphine 5 mg SR Tablet")
-  try {
-    if (typeof strengthsForSelected === "function") {
-      for (const x of (strengthsForSelected() || [])) {
-        const mg = _toMgLoose(x);
-        if (mg != null) set.add(mg);
-      }
-    }
-    if (typeof allowedStrengthsFilteredBySelection === "function") {
-      for (const x of (allowedStrengthsFilteredBySelection() || [])) {
-        const mg = _toMgLoose(x);
-        if (mg != null) set.add(mg);
-      }
-    }
-  } catch(_){}
-
-  // 3) Live checkbox set (labels/ids)
-  try {
-    if (window.SelectedFormulations && SelectedFormulations.size > 0) {
-      for (const x of SelectedFormulations) {
-        const mg = _toMgLoose(x);
-        if (mg != null) set.add(mg);
-      }
-    }
-  } catch(_){}
-
-  return set;
-}
-
-function _catalogStrengthsMg(cls, med, form){
-  // All commercial strengths for this med+form
-  try {
-    if (typeof strengthsForPicker === "function") {
-      const arr = strengthsForPicker(cls, med, form) || [];
-      const mg = arr.map(_toMgLoose).filter(n => n!=null).sort((a,b)=>a-b);
-      if (mg.length) return Array.from(new Set(mg));
-    }
-  } catch(_){}
-  try {
-    const cat = (window.CATALOG?.[cls]?.[med]) || {};
-    const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
-    const mg = (pool || []).map(_toMgLoose).filter(n=>n!=null).sort((a,b)=>a-b);
-    return Array.from(new Set(mg));
-  } catch(_){}
-  return [];
-}
-
-function _logBID(label, obj){
-  if (!window.BID_DBG) return;
-  try { console.group(`[BID] ${label}`); console.log(obj); console.groupEnd(); } catch(_) {}
-}
 
 const $ = (id) => document.getElementById(id);
 //#region 1. Constants & Tiny Utilities
@@ -2125,25 +2043,6 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-// --- Diagnostics (no behaviour change) ---
-const selSet   = _selectedMgSet(cls, med, form);
-const catalog  = _catalogStrengthsMg(cls, med, form);
-const lcs      = catalog.length ? catalog[0] : null;
-const lss      = selSet.size ? Math.min(...selSet) : null;
-const lcsSel   = (lcs != null) ? selSet.has(lcs) : false;
-
-_logBID("pre-gate", {
-  cls, med, form,
-  tot,
-  step,
-  catalogAll: catalog,
-  selectedMg: Array.from(selSet),
-  lcs, lss, lcsSelected: lcsSel,
-  AM: slotTotalMg(packs,"AM"), MID: slotTotalMg(packs,"MID"),
-  DIN: slotTotalMg(packs,"DIN"), PM: slotTotalMg(packs,"PM")
-});
-
-  
   // Respect selected products for rounding granularity
   const step = lowestStepMg(cls, med, form) || 1;
 
@@ -2186,21 +2085,20 @@ _logBID("pre-gate", {
     } catch(_) {}
     return null;
   }
-function lcsIsSelectedLocal(lcs){
-  try{
-    if (!Number.isFinite(lcs)) return false;
-    const n = Number(lcs);
-    if (window.SelectedFormulations && SelectedFormulations.size > 0){
-      for (const v of SelectedFormulations) if (Number(v) === n) return true;
-    }
-    if (typeof selectedProductMgs === "function"){
-      const arr = selectedProductMgs() || [];
-      for (const v of arr) if (Number(v) === n) return true;
-    }
-    return false;
-  }catch(_){ return false; }
-}
-
+  function lcsIsSelectedLocal(lcs){
+    try{
+      if (!Number.isFinite(lcs)) return false;
+      const n = Number(lcs);
+      if (window.SelectedFormulations && SelectedFormulations.size > 0){
+        for (const v of SelectedFormulations) if (Number(v) === n) return true;
+      }
+      if (typeof selectedProductMgs === "function"){
+        const arr = selectedProductMgs() || [];
+        for (const v of arr) if (Number(v) === n) return true;
+      }
+      return false;
+    }catch(_){ return false; }
+  }
   function isExactBIDAtLocal(p, mg){
     const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
           DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
