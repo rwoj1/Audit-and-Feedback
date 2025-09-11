@@ -2085,48 +2085,18 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     } catch(_) {}
     return null;
   }
- function lcsIsSelectedLocal(lcs){
+function lcsIsSelectedLocal(lcs){
   try{
     if (!Number.isFinite(lcs)) return false;
     const n = Number(lcs);
-
-    // If user hasn’t ticked anything, we treat it as “all allowed” => LCS counts as selected.
-    if (!window.SelectedFormulations || SelectedFormulations.size === 0) {
-      return true;
-    }
-
-    const toMg = (v) => {
-      let x = Number(v);
-      if (!Number.isFinite(x) && typeof parseMgFromStrength === "function") {
-        x = Number(parseMgFromStrength(String(v)));
-      }
-      if (!Number.isFinite(x)) {
-        // very defensive: last-resort numeric scrape
-        const m = String(v).match(/(\d+(\.\d+)?)/);
-        x = m ? Number(m[1]) : NaN;
-      }
-      return Number.isFinite(x) ? x : null;
-    };
-
-    // Build a single set of selected mg from any source (checkbox set + helper)
-    const selectedSet = new Set();
-
     if (window.SelectedFormulations && SelectedFormulations.size > 0){
-      for (const v of SelectedFormulations) {
-        const mg = toMg(v);
-        if (mg != null) selectedSet.add(mg);
-      }
+      for (const v of SelectedFormulations) if (Number(v) === n) return true;
     }
-
     if (typeof selectedProductMgs === "function"){
       const arr = selectedProductMgs() || [];
-      for (const v of arr) {
-        const mg = toMg(v);
-        if (mg != null) selectedSet.add(mg);
-      }
+      for (const v of arr) if (Number(v) === n) return true;
     }
-
-    return selectedSet.has(n);
+    return false;
   }catch(_){ return false; }
 }
 
