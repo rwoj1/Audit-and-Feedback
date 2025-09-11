@@ -469,25 +469,49 @@ function updateClassSplitRules(){
 }
 
 function wireCustomPanel(){
-  // Reset when class/medicine changes
   const clsSel = document.getElementById('classSelect');
   const medSel = document.getElementById('medicineSelect');
-  const resetBtn = document.getElementById('resetPriority');
+  const resetBtn = document.getElementById('resetPriority'); // if you still have it; otherwise ignore
 
-  if (clsSel) clsSel.addEventListener('change', ()=>{ resetPriorityToClassDefault(); updateClassSplitRules(); });
-  if (medSel) medSel.addEventListener('change', ()=>{ resetPriorityToClassDefault(); updateClassSplitRules(); });
-  if (resetBtn) resetBtn.addEventListener('click', resetPriorityToClassDefault);
+  const onChange = ()=>{ syncModeVisibility(); };
+  if (clsSel) clsSel.addEventListener('change', onChange);
+  if (medSel) medSel.addEventListener('change', onChange);
 
-  // Initial fill
-  resetPriorityToClassDefault();
-  updateClassSplitRules();
+  // Initial fill (if you still show Step-1 pills elsewhere, keep your old calls)
+  syncModeVisibility();
 }
 
-/* ===== Custom Mode: Step 1 UI (layout only, with single enable + unique slots) ===== */
+/* ===== Custom Mode: Step 1 UI (per-slot mg, 4 rows, reorder, unique slots) ===== */
 
 const MAX_REDUCTION_LINES = 4;
 
-// Build a single reduction row: THEN Reduce [slot] until [mg] mg/day
+// Class defaults for Step 1 ordering (UI only)
+const CLASS_DEFAULT_PRIORITY = {
+  opioids:        ['DIN','MID','AM','PM'],
+  ppi:            ['MID','PM','AM','DIN'],
+  bzd:            null, // hide Mode entirely for BZD
+  antipsychotic:  ['MID','DIN','AM','PM'],
+  gabapentinoid:  ['DIN','MID','AM','PM'],
+};
+
+// Map class from selects
+function currentClassKey(){
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const clsVal = (clsSel?.value || '').toLowerCase();
+  const medVal = (medSel?.value || '').toLowerCase();
+
+  if (clsVal.includes('benz') || clsVal.includes('bzd')) return 'bzd';
+  if (clsVal.includes('ppi'))    return 'ppi';
+  if (clsVal.includes('antipsych')) return 'antipsychotic';
+  if (clsVal.includes('gabapentin') || clsVal.includes('pregabalin')
+      || medVal.includes('gabapentin') || medVal.includes('pregabalin')
+      || clsVal.includes('gabapentinoid')) return 'gabapentinoid';
+  if (clsVal.includes('opioid')) return 'opioids';
+  return 'opioids';
+}
+
+// Build one reduction row: THEN Reduce [slot] until [mg] mg
 function buildReductionRow(idx){
   const row = document.createElement('div');
   row.className = 'reduction-row';
@@ -503,7 +527,7 @@ function buildReductionRow(idx){
     left.appendChild(thenTag);
   }
 
-  // main: "Reduce [slot] until [mg] mg/day"
+  // main: "Reduce [slot] until [mg] mg"
   const main = document.createElement('div');
   main.className = 'row-main';
 
@@ -528,7 +552,7 @@ function buildReductionRow(idx){
   const mg = document.createElement('input');
   mg.type = 'number'; mg.min = '0'; mg.placeholder = 'e.g., 50';
   mg.id = `redMg${idx}`;
-  const suf = document.createElement('span'); suf.className='suffix'; suf.textContent = 'mg/day';
+  const suf = document.createElement('span'); suf.className='suffix'; suf.textContent = 'mg';
   mgWrap.appendChild(mg); mgWrap.appendChild(suf);
 
   main.appendChild(w1);
@@ -536,7 +560,7 @@ function buildReductionRow(idx){
   main.appendChild(w2);
   main.appendChild(mgWrap);
 
-  // actions: Up / Down / Remove
+  // actions: Up / Down (no Remove)
   const actions = document.createElement('div');
   actions.className = 'row-actions';
 
@@ -550,84 +574,21 @@ function buildReductionRow(idx){
   down.textContent = '↓ Down';
   down.addEventListener('click', ()=> moveReductionRow(row, +1));
 
-  const remove = document.createElement('button');
-  remove.type = 'button'; remove.className = 'ghost small';
-  remove.textContent = 'Remove';
-  remove.addEventListener('click', ()=>{
-    row.remove();
-    refreshThenTags();
-    enforceUniqueTimeSelections();
-    updateRowIndices();
-    updateReductionButtonsState();
-    disableUpDownButtons();
-  });
-
   actions.appendChild(up);
   actions.appendChild(down);
-  actions.appendChild(remove);
 
   row.appendChild(left);
   row.appendChild(main);
   row.appendChild(actions);
 
-  // When the slot changes, re-enforce uniqueness across rows
+  // keep uniqueness across rows
   slot.addEventListener('change', enforceUniqueTimeSelections);
 
   return row;
 }
-function moveReductionRow(row, dir){
-  const list = document.getElementById('step1List');
-  if (!list) return;
-  const rows = Array.from(list.querySelectorAll('.reduction-row'));
-  const i = rows.indexOf(row);
-  if (i < 0) return;
-
-  const j = i + dir;
-  if (j < 0 || j >= rows.length) return; // already at edge
-
-  // Reinsert DOM node in new position
-  if (dir < 0) list.insertBefore(row, rows[j]);            // move up before the row above
-  else          list.insertBefore(row, rows[j].nextSibling); // move down after the row below
-
-  refreshThenTags();
-  updateRowIndices();
-  enforceUniqueTimeSelections();
-  disableUpDownButtons();
-}
-
-function updateRowIndices(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((r, idx) => {
-    r.dataset.index = String(idx);
-    // keep IDs tidy (not strictly required, but nice)
-    const sel = r.querySelector('select[id^="redSlot"]');
-    const mg  = r.querySelector('input[id^="redMg"]');
-    if (sel) sel.id = `redSlot${idx}`;
-    if (mg)  mg.id  = `redMg${idx}`;
-  });
-}
-
-function disableUpDownButtons(){
-  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
-  rows.forEach((r, idx) => {
-    const up   = r.querySelector('.btn-up');
-    const down = r.querySelector('.btn-down');
-    if (up)   up.disabled   = (idx === 0);
-    if (down) down.disabled = (idx === rows.length - 1);
-  });
-}
-
 
 function currentReductionCount(){
   return document.querySelectorAll('#step1List .reduction-row').length;
-}
-
-function updateReductionButtonsState(){
-  const addBtn   = document.getElementById('addReduction');
-  const clearBtn = document.getElementById('clearReductions');
-  const n = currentReductionCount();
-  if (addBtn)   addBtn.disabled   = (n >= MAX_REDUCTION_LINES);
-  if (clearBtn) clearBtn.disabled = (n === 0);
 }
 
 function refreshThenTags(){
@@ -645,29 +606,25 @@ function refreshThenTags(){
   });
 }
 
-function addReductionRow(){
-  const list = document.getElementById('step1List');
-  if (!list) return;
-  const idx = currentReductionCount();
-  if (idx >= MAX_REDUCTION_LINES) return;
-
-  const row = buildReductionRow(idx);
-  list.appendChild(row);
-
-  // Default the new row to the first available slot not already used
-  pickFirstAvailableSlot(row);
-  enforceUniqueTimeSelections();
-  refreshThenTags();
-  updateReductionButtonsState();
-  disableUpDownButtons(); // <-- add this line
+function updateRowIndices(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    r.dataset.index = String(idx);
+    const sel = r.querySelector('select[id^="redSlot"]');
+    const mg  = r.querySelector('input[id^="redMg"]');
+    if (sel) sel.id = `redSlot${idx}`;
+    if (mg)  mg.id  = `redMg${idx}`;
+  });
 }
 
-
-function clearReductionRows(){
-  const list = document.getElementById('step1List');
-  if (!list) return;
-  list.innerHTML = '';
-  updateReductionButtonsState();
+function disableUpDownButtons(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    const up   = r.querySelector('.btn-up');
+    const down = r.querySelector('.btn-down');
+    if (up)   up.disabled   = (idx === 0);
+    if (down) down.disabled = (idx === rows.length - 1);
+  });
 }
 
 function pickFirstAvailableSlot(row){
@@ -686,55 +643,120 @@ function enforceUniqueTimeSelections(){
   const used = new Map(); // value -> count
   selects.forEach(sel => used.set(sel.value, (used.get(sel.value)||0)+1));
 
-  // disable options that are already chosen in another select
   selects.forEach(owner => {
     const ownerVal = owner.value;
     Array.from(owner.options).forEach(opt => {
       const val = opt.value;
       const count = used.get(val)||0;
-      // allow the owner to keep its own choice; disable only if chosen elsewhere
       const chosenElsewhere = (val !== ownerVal && count > 0);
       opt.disabled = chosenElsewhere;
     });
   });
 }
 
-// Show/hide the whole Step-1 block based on the single enable Yes/No
+function moveReductionRow(row, dir){
+  const list = document.getElementById('step1List');
+  if (!list) return;
+  const rows = Array.from(list.querySelectorAll('.reduction-row'));
+  const i = rows.indexOf(row);
+  if (i < 0) return;
+
+  const j = i + dir;
+  if (j < 0 || j >= rows.length) return;
+
+  if (dir < 0) list.insertBefore(row, rows[j]);
+  else         list.insertBefore(row, rows[j].nextSibling);
+
+  refreshThenTags();
+  updateRowIndices();
+  enforceUniqueTimeSelections();
+  disableUpDownButtons();
+}
+
+// Build 4 rows and set class default order
+function ensureFourRows(){
+  const list = document.getElementById('step1List');
+  if (!list) return;
+  list.innerHTML = '';
+  for (let i=0;i<4;i++){
+    const row = buildReductionRow(i);
+    list.appendChild(row);
+  }
+  applyClassDefaultToRows();
+  enforceUniqueTimeSelections();
+  refreshThenTags();
+  disableUpDownButtons();
+}
+
+function applyClassDefaultToRows(){
+  const key = currentClassKey();
+  const def = CLASS_DEFAULT_PRIORITY[key] || ['DIN','MID','AM','PM'];
+  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
+  // Assign in order; any extras keep first available slot
+  selects.forEach((sel, idx) => {
+    const target = def[idx] || null;
+    if (target){
+      sel.value = target;
+    } else {
+      // fall back to first available
+      const used = new Set(selects.filter(s => s !== sel).map(s => s.value));
+      const opt = Array.from(sel.options).find(o => !used.has(o.value));
+      if (opt) sel.value = opt.value;
+    }
+    enforceUniqueTimeSelections();
+  });
+}
+
+// Show/hide Step 1 container and build rows when enabled
 function syncStep1Enable(){
   const yes = document.getElementById('enableStep1Yes')?.checked;
   const help = document.getElementById('step1Help');
   const list = document.getElementById('step1List');
-  const btns = document.getElementById('step1Btns');
 
   const on = !!yes;
   if (help) help.style.display = on ? '' : 'none';
   if (list) list.style.display = on ? '' : 'none';
-  if (btns) btns.style.display = on ? '' : 'none';
 
   if (on && currentReductionCount() === 0){
-    addReductionRow(); // start with one line when turned on
+    ensureFourRows();
+  } else if (on){
+    // if class changed while on, re-apply class default order
+    applyClassDefaultToRows();
+    enforceUniqueTimeSelections();
+    refreshThenTags();
+    disableUpDownButtons();
   }
-  updateReductionButtonsState();
 }
 
-// Wire Step 1/2 layout (no logic changes)
+// Wire Step 1 layout
 function wireCustomStepsLayout(){
-  const addBtn   = document.getElementById('addReduction');
-  const clearBtn = document.getElementById('clearReductions');
-
-  if (addBtn)   addBtn.addEventListener('click', addReductionRow);
-  if (clearBtn) clearBtn.addEventListener('click', clearReductionRows);
-
   // Enable Step 1 toggle
   const enNo  = document.getElementById('enableStep1No');
   const enYes = document.getElementById('enableStep1Yes');
   if (enNo)  enNo.addEventListener('change', syncStep1Enable);
   if (enYes) enYes.addEventListener('change', syncStep1Enable);
 
-  // initial state: Step 1 disabled (No checked), keep list hidden
+  // React to class/medicine changes: keep 4 rows & class defaults in sync
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const reapply = () => {
+    if (document.getElementById('enableStep1Yes')?.checked){
+      ensureFourRows();
+    }
+  };
+  if (clsSel) clsSel.addEventListener('change', reapply);
+  if (medSel) medSel.addEventListener('change', reapply);
+
+  // Initial state (No)
   syncStep1Enable();
-  disableUpDownButtons(); // <-- add this
 }
+function syncModeVisibility(){
+  const key = currentClassKey();
+  const mode = document.getElementById('modeBlock');
+  if (!mode) return;
+  mode.style.display = (key === 'bzd') ? 'none' : '';
+}
+
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -3424,6 +3446,7 @@ updateClassFooter();
   wireModeToggle();
   wireCustomPanel();
   wireCustomStepsLayout();
+  syncModeVisibility();
 
   
   // 7) Live gating + interval hints for patches
