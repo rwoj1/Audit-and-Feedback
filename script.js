@@ -209,7 +209,7 @@ function stepBaseStrengthsMg(cls, med, form){
   let mgList = picked && picked.length
     ? picked.slice()
     : strengthsForSelectedSafe(cls, med, form);
-  mgList = [...new Set(mgList)].filter(v => v > 0).sort((a,b)=>a-b);
+  mgList = [new Set(mgList)].filter(v => v > 0).sort((a,b)=>a-b);
   if (mgList.length) return mgList;
   // Last-ditch fallbacks per medicine (keeps the app moving)
   if (/^Gabapentin$/i.test(med)) return [100];
@@ -846,7 +846,7 @@ function distributePregabalinBID(unitsArr, perSlotCap) {
   // Final gentle balance: only move if it improves |AM-PM| and capacity allows.
   const smallestKey = (dict) => {
     const ks = Object.keys(dict); if (!ks.length) return NaN;
-    return Math.min(...ks.map(Number));
+    return Math.min(ks.map(Number));
   };
   while (mgAM > mgPM && nPM < perSlotCap) {
     const mg = smallestKey(out.AM);
@@ -919,8 +919,8 @@ function cmpByDosePref(target, A, B) {
   if (A.units !== B.units) return A.units - B.units; // 2) fewer units per day
   const upA = A.total >= target, upB = B.total >= target;
   if (upA !== upB) return upA ? -1 : 1;         // 3) prefer rounding up (avoid underdose)
-  const maxA = A.strengths.length ? Math.max(...A.strengths) : 0;
-  const maxB = B.strengths.length ? Math.max(...B.strengths) : 0;
+  const maxA = A.strengths.length ? Math.max(A.strengths) : 0;
+  const maxB = B.strengths.length ? Math.max(B.strengths) : 0;
   if (maxA !== maxB) return maxB - maxA;        // 4) prefer higher single strengths
   return 0;
 }
@@ -966,7 +966,7 @@ function distributeEvenQID(unitsArr, perSlotCap) {
     slots[slot][mg] = cur + 1;
     return true;
   };
-  // Expand units into a flat array like [300,300,75,25,...] (higher first)
+  // Expand units into a flat array like [300,300,75,25] (higher first)
   const flat = [];
   unitsArr.sort((a,b)=>b.mg - a.mg).forEach(({mg,q})=>{ for(let i=0;i<q;i++) flat.push(mg); });
   // Round-robin distribute with priority order AM -> MID -> DIN -> PM
@@ -994,7 +994,7 @@ function distributeGabapentinTDS(unitsArr, perSlotCap) {
   const out = { AM: {}, MID: {}, DIN: {}, PM: {} };
   let mgAM = 0, mgMID = 0, mgPM = 0;
   let nAM  = 0, nMID  = 0, nPM  = 0;
-  // Flatten unit list high→low mg (e.g., [800, 600, 400, 400, ...])
+  // Flatten unit list high→low mg (e.g., [800, 600, 400, 400])
   const flat = [];
   unitsArr.slice().sort((a,b)=>b.mg - a.mg).forEach(({mg,q}) => { for (let i=0;i<q;i++) flat.push(mg); });
   // Compute daily target and ideal slot targets (PM gets the remainder)
@@ -1046,7 +1046,7 @@ function distributeGabapentinTDS(unitsArr, perSlotCap) {
   // ---- Gentle balancing nudges ----
   const smallestKey = (dict) => {
     const ks = Object.keys(dict);
-    return ks.length ? Math.min(...ks.map(Number)) : NaN;
+    return ks.length ? Math.min(ks.map(Number)) : NaN;
   };
   function moveOne(from, to) {
     const k = smallestKey(out[from]); if (!isFinite(k)) return false;
@@ -1119,7 +1119,7 @@ function allCommercialProductsForSelected(){
   const cls = document.getElementById("classSelect")?.value || "";
   const med = document.getElementById("medicineSelect")?.value || "";
   const allow = PRODUCT_PICKER_ALLOW[med] || [];
-  const cat = (window.CATALOG?.[cls]?.[med]) || {}; // { form: [mg,...] }
+  const cat = (window.CATALOG?.[cls]?.[med]) || {}; // { form: [mg,] }
   const list = [];
   for (const [formLabel, strengths] of Object.entries(cat)){
     // allow only specific forms per medicine
@@ -1238,7 +1238,7 @@ function slotTotalsMg(step){
 function spreadOfTotals(t){
   const vals = [t.AM,t.MID,t.DIN,t.PM].filter(v => v>0.0001);
   if (vals.length<=1) return 0;
-  return Math.max(...vals) - Math.min(...vals);
+  return Math.max(vals) - Math.min(vals);
 }
 function opioidKeyForStep(step){
   const lines = step?.lines || step?.rows || [];
@@ -1270,7 +1270,7 @@ function lowestStrengthSelectedFromPicker(){
     return { mg, checked: input.checked };
   }).filter(x=>x.mg>0);
   if (!items.length) return true;
-  const minMg = Math.min(...items.map(x=>x.mg));
+  const minMg = Math.min(items.map(x=>x.mg));
   const anyLowestChecked = items.some(x=>x.mg===minMg && x.checked);
   return anyLowestChecked;
 }
@@ -1525,7 +1525,7 @@ function setGenerateEnabled(){
   const ready = Number.isFinite(pct) && pct > 0 && Number.isFinite(intv) && intv > 0;
   if (gen) gen.disabled = !ready;
   // IMPORTANT: Do NOT touch Print/Save here.
-  // setDirty(...) already disables/enables them using _dirtySinceGenerate.
+  // setDirty() already disables/enables them using _dirtySinceGenerate.
   // (This removes the old window.dirty override.)
   
   // Keep the patch-interval extra rule if you had it:
@@ -1657,10 +1657,10 @@ function spreadKeyFromLabel(label) {
 //    - For oxy/nal combos, returns the OXYCODONE mg (first number)
 function extractPrimaryMg(label) {
   const raw = String(label || "");
-  // "Oxycodone ... 10 mg + Naloxone 5 mg ..."
+  // "Oxycodone 10 mg + Naloxone 5 mg"
   let m = /Oxycodone[^0-9]*([\d.]+)\s*mg/i.exec(raw);
   if (m) return parseFloat(m[1]);
-  // "Oxycodone/Naloxone 10/5 mg ..."
+  // "Oxycodone/Naloxone 10/5 mg"
   m = /Oxycodone\/Naloxone\s+([\d.]+)\s*\/\s*([\d.]+)\s*mg/i.exec(raw);
   if (m) return parseFloat(m[1]);
   // Generic "123 mg" (first number before mg)
@@ -1694,7 +1694,7 @@ function discoverSpreadKey(step) {
 function computeSpread(totals) {
   const vals = [totals.AM, totals.MID, totals.DIN, totals.PM].filter(v => v > 0.0001);
   if (vals.length <= 1) return 0; // one or zero active slots → spread is 0
-  const maxv = Math.max(...vals), minv = Math.min(...vals);
+  const maxv = Math.max(vals), minv = Math.min(vals);
   return maxv - minv;
 }
 // 7) Friendly summary for the confirm message
@@ -1938,8 +1938,8 @@ function cmpByDosePref(target, A, B) {
   if (A.units !== B.units) return A.units - B.units; // 2) fewer units per day
   const upA = A.total >= target, upB = B.total >= target;
   if (upA !== upB) return upA ? -1 : 1;           // 3) prefer rounding up
-  const maxA = A.strengths.length ? Math.max(...A.strengths) : 0;
-  const maxB = B.strengths.length ? Math.max(...B.strengths) : 0;
+  const maxA = A.strengths.length ? Math.max(A.strengths) : 0;
+  const maxB = B.strengths.length ? Math.max(B.strengths) : 0;
   if (maxA !== maxB) return maxB - maxA;          // 4) prefer higher single strengths
   return 0;
 }
@@ -2322,12 +2322,12 @@ function allowedPiecesMg(cls, med, form){
   // 1) Start from filtered base strengths
   const base = allowedStrengthsFilteredBySelection().filter(v=>v>0);
   // 2) Build piece sizes with splitting rules (unchanged)
-  const uniq=[...new Set(base)].sort((a,b)=>a-b);
+  const uniq=[new Set(base)].sort((a,b)=>a-b);
   let pieces = uniq.slice();
   const split = canSplitTablets(cls,form,med);
   if(split.half)   uniq.forEach(v=>pieces.push(+(v/2).toFixed(3)));
   if(split.quarter)uniq.forEach(v=>pieces.push(+(v/4).toFixed(3)));
-  return [...new Set(pieces)].sort((a,b)=>a-b);
+  return [new Set(pieces)].sort((a,b)=>a-b);
 }
 function lowestStepMg(cls, med, form){
   if(cls==="Benzodiazepines / Z-Drug (BZRA)" && /Zolpidem/i.test(med) && isMR(form)) return 6.25;
@@ -2795,7 +2795,7 @@ function choosePatchTotal(prevTotal, target, med){
   // Desired grid for fentanyl (12.5 grid with your 12.5→12 display convention)
   const desired = (med === "Fentanyl") ? fentanylDesiredGrid(target) : target;
   // Totals we can make without increasing from previous
-  const cand = [...sums.keys()].filter(t => t <= prevTotal + 1e-9);
+  const cand = [sums.keys()].filter(t => t <= prevTotal + 1e-9);
   if (cand.length === 0) return { total: prevTotal, combo: [prevTotal] };
 cand.sort((a, b) => {
   const da = Math.abs(a - desired), db = Math.abs(b - desired);
