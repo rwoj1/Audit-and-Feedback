@@ -336,37 +336,105 @@ function formatOxyOnlyHTML(label){
 
   return html;
 }
-/* ===== Custom Mode: Step 1 UI (layout only) ===== */
+function moveReductionRow(row, dir){
+  const list = document.getElementById('step1List');
+  if (!list) return;
+  const rows = Array.from(list.querySelectorAll('.reduction-row'));
+  const i = rows.indexOf(row);
+  if (i < 0) return;
+
+  const j = i + dir;
+  if (j < 0 || j >= rows.length) return; // already at edge
+
+  // Reinsert DOM node in new position
+  if (dir < 0) list.insertBefore(row, rows[j]);            // move up before the row above
+  else          list.insertBefore(row, rows[j].nextSibling); // move down after the row below
+
+  refreshThenTags();
+  updateRowIndices();
+  enforceUniqueTimeSelections();
+  disableUpDownButtons();
+}
+
+function updateRowIndices(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    r.dataset.index = String(idx);
+    // keep IDs tidy (not strictly required, but nice)
+    const sel = r.querySelector('select[id^="redSlot"]');
+    const mg  = r.querySelector('input[id^="redMg"]');
+    if (sel) sel.id = `redSlot${idx}`;
+    if (mg)  mg.id  = `redMg${idx}`;
+  });
+}
+
+function disableUpDownButtons(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    const up   = r.querySelector('.btn-up');
+    const down = r.querySelector('.btn-down');
+    if (up)   up.disabled   = (idx === 0);
+    if (down) down.disabled = (idx === rows.length - 1);
+  });
+}
+
+
+/* ===== Custom Mode: Step 1 UI (layout only, with single enable + unique slots) ===== */
+
+/* ===== Custom Mode: Step 1 UI (per-slot mg, 4 rows, reorder, unique slots) ===== */
 
 const MAX_REDUCTION_LINES = 4;
 
-// returns a reduction row element
+// Class defaults for Step 1 ordering (UI only)
+const CLASS_DEFAULT_PRIORITY = {
+  opioids:        ['DIN','MID','AM','PM'],
+  ppi:            ['MID','PM','AM','DIN'],
+  bzd:            null, // hide Mode entirely for BZD
+  antipsychotic:  ['MID','DIN','AM','PM'],
+  gabapentinoid:  ['DIN','MID','AM','PM'],
+};
+
+// Map class from selects
+function currentClassKey(){
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const clsVal = (clsSel?.value || '').toLowerCase();
+  const medVal = (medSel?.value || '').toLowerCase();
+
+  if (clsVal.includes('benz') || clsVal.includes('bzd')) return 'bzd';
+  if (clsVal.includes('ppi'))    return 'ppi';
+  if (clsVal.includes('antipsych')) return 'antipsychotic';
+  if (clsVal.includes('gabapentin') || clsVal.includes('pregabalin')
+      || medVal.includes('gabapentin') || medVal.includes('pregabalin')
+      || clsVal.includes('gabapentinoid')) return 'gabapentinoid';
+  if (clsVal.includes('opioid')) return 'opioids';
+  return 'opioids';
+}
+
+// Build one reduction row: THEN Reduce [slot] until [mg] mg
 function buildReductionRow(idx){
   const row = document.createElement('div');
   row.className = 'reduction-row';
   row.dataset.index = String(idx);
 
-  // left: enable checkbox
+  // left: THEN (only after the first row)
   const left = document.createElement('div');
   left.className = 'row-left';
-  const enable = document.createElement('input');
-  enable.type = 'checkbox';
-  enable.checked = true;
-  enable.id = `redEnable${idx}`;
-  const enableLbl = document.createElement('label');
-  enableLbl.htmlFor = enable.id;
-  enableLbl.textContent = 'Enable';
-  left.appendChild(enable);
-  left.appendChild(enableLbl);
+  if (idx > 0){
+    const thenTag = document.createElement('span');
+    thenTag.className = 'then-tag';
+    thenTag.textContent = 'THEN';
+    left.appendChild(thenTag);
+  }
 
-  // main: "Reduce [slot] until [mg] mg/day"
+  // main: "Reduce [slot] until [mg] mg"
   const main = document.createElement('div');
   main.className = 'row-main';
 
   const w1 = document.createElement('span'); w1.className='inline-word'; w1.textContent = 'Reduce';
+
   const slot = document.createElement('select');
   slot.id = `redSlot${idx}`;
-  // common phrases
   [
     {v:'AM',   label:'in the morning'},
     {v:'MID',  label:'at midday'},
@@ -384,7 +452,7 @@ function buildReductionRow(idx){
   const mg = document.createElement('input');
   mg.type = 'number'; mg.min = '0'; mg.placeholder = 'e.g., 50';
   mg.id = `redMg${idx}`;
-  const suf = document.createElement('span'); suf.className='suffix'; suf.textContent = 'mg/day';
+  const suf = document.createElement('span'); suf.className='suffix'; suf.textContent = 'mg';
   mgWrap.appendChild(mg); mgWrap.appendChild(suf);
 
   main.appendChild(w1);
@@ -392,59 +460,214 @@ function buildReductionRow(idx){
   main.appendChild(w2);
   main.appendChild(mgWrap);
 
-  // actions: remove
+  // actions: Up / Down (no Remove)
   const actions = document.createElement('div');
   actions.className = 'row-actions';
-  const remove = document.createElement('button');
-  remove.type = 'button'; remove.className = 'ghost small';
-  remove.textContent = 'Remove';
-  remove.addEventListener('click', ()=>{
-    row.remove();
-    updateReductionButtonsState();
-  });
-  actions.appendChild(remove);
+
+  const up = document.createElement('button');
+  up.type = 'button'; up.className = 'secondary small btn-up';
+  up.textContent = '↑ Up';
+  up.addEventListener('click', ()=> moveReductionRow(row, -1));
+
+  const down = document.createElement('button');
+  down.type = 'button'; down.className = 'secondary small btn-down';
+  down.textContent = '↓ Down';
+  down.addEventListener('click', ()=> moveReductionRow(row, +1));
+
+  actions.appendChild(up);
+  actions.appendChild(down);
 
   row.appendChild(left);
   row.appendChild(main);
   row.appendChild(actions);
+
+  // keep uniqueness across rows
+  slot.addEventListener('change', enforceUniqueTimeSelections);
+
   return row;
 }
 
 function currentReductionCount(){
   return document.querySelectorAll('#step1List .reduction-row').length;
 }
-function updateReductionButtonsState(){
-  const addBtn   = document.getElementById('addReduction');
-  const clearBtn = document.getElementById('clearReductions');
-  const n = currentReductionCount();
-  if (addBtn)   addBtn.disabled   = (n >= MAX_REDUCTION_LINES);
-  if (clearBtn) clearBtn.disabled = (n === 0);
+
+function refreshThenTags(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((row, i) => {
+    const left = row.querySelector('.row-left');
+    if (!left) return;
+    left.innerHTML = '';
+    if (i > 0){
+      const thenTag = document.createElement('span');
+      thenTag.className = 'then-tag';
+      thenTag.textContent = 'THEN';
+      left.appendChild(thenTag);
+    }
+  });
 }
-function addReductionRow(){
+
+function updateRowIndices(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    r.dataset.index = String(idx);
+    const sel = r.querySelector('select[id^="redSlot"]');
+    const mg  = r.querySelector('input[id^="redMg"]');
+    if (sel) sel.id = `redSlot${idx}`;
+    if (mg)  mg.id  = `redMg${idx}`;
+  });
+}
+
+function disableUpDownButtons(){
+  const rows = Array.from(document.querySelectorAll('#step1List .reduction-row'));
+  rows.forEach((r, idx) => {
+    const up   = r.querySelector('.btn-up');
+    const down = r.querySelector('.btn-down');
+    if (up)   up.disabled   = (idx === 0);
+    if (down) down.disabled = (idx === rows.length - 1);
+  });
+}
+
+function pickFirstAvailableSlot(row){
+  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
+  const used = new Set(selects.filter(s => s !== row.querySelector('select')).map(s => s.value));
+  const mySel = row.querySelector('select');
+  if (!mySel) return;
+
+  const options = Array.from(mySel.options);
+  const preferred = options.find(o => !used.has(o.value));
+  if (preferred) mySel.value = preferred.value;
+}
+
+function enforceUniqueTimeSelections(){
+  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
+  const used = new Map(); // value -> count
+  selects.forEach(sel => used.set(sel.value, (used.get(sel.value)||0)+1));
+
+  selects.forEach(owner => {
+    const ownerVal = owner.value;
+    Array.from(owner.options).forEach(opt => {
+      const val = opt.value;
+      const count = used.get(val)||0;
+      const chosenElsewhere = (val !== ownerVal && count > 0);
+      opt.disabled = chosenElsewhere;
+    });
+  });
+}
+
+function moveReductionRow(row, dir){
   const list = document.getElementById('step1List');
   if (!list) return;
-  const idx = currentReductionCount();
-  if (idx >= MAX_REDUCTION_LINES) return;
-  list.appendChild(buildReductionRow(idx));
-  updateReductionButtonsState();
+  const rows = Array.from(list.querySelectorAll('.reduction-row'));
+  const i = rows.indexOf(row);
+  if (i < 0) return;
+
+  const j = i + dir;
+  if (j < 0 || j >= rows.length) return;
+
+  if (dir < 0) list.insertBefore(row, rows[j]);
+  else         list.insertBefore(row, rows[j].nextSibling);
+
+  refreshThenTags();
+  updateRowIndices();
+  enforceUniqueTimeSelections();
+  disableUpDownButtons();
 }
-function clearReductionRows(){
+
+// Build 4 rows and set class default order
+function ensureFourRows(){
   const list = document.getElementById('step1List');
   if (!list) return;
   list.innerHTML = '';
-  updateReductionButtonsState();
+  for (let i=0;i<4;i++){
+    const row = buildReductionRow(i);
+    list.appendChild(row);
+  }
+  applyClassDefaultToRows();
+  enforceUniqueTimeSelections();
+  refreshThenTags();
+  disableUpDownButtons();
 }
 
-// Wire Step 1 & Step 2 panel (layout only)
+function applyClassDefaultToRows(){
+  const key = currentClassKey();
+  const def = CLASS_DEFAULT_PRIORITY[key] || ['DIN','MID','AM','PM'];
+  const selects = Array.from(document.querySelectorAll('#step1List select[id^="redSlot"]'));
+  // Assign in order; any extras keep first available slot
+  selects.forEach((sel, idx) => {
+    const target = def[idx] || null;
+    if (target){
+      sel.value = target;
+    } else {
+      // fall back to first available
+      const used = new Set(selects.filter(s => s !== sel).map(s => s.value));
+      const opt = Array.from(sel.options).find(o => !used.has(o.value));
+      if (opt) sel.value = opt.value;
+    }
+    enforceUniqueTimeSelections();
+  });
+}
+
+// Show/hide Step 1 container and build rows when enabled
+function syncStep1Enable(){
+  const yes = document.getElementById('enableStep1Yes')?.checked;
+  const help = document.getElementById('step1Help');
+  const list = document.getElementById('step1List');
+
+  const on = !!yes;
+  if (help) help.style.display = on ? '' : 'none';
+  if (list) list.style.display = on ? '' : 'none';
+
+  if (on && currentReductionCount() === 0){
+    ensureFourRows();
+  } else if (on){
+    // if class changed while on, re-apply class default order
+    applyClassDefaultToRows();
+    enforceUniqueTimeSelections();
+    refreshThenTags();
+    disableUpDownButtons();
+  }
+}
+
+// Wire Step 1 layout
 function wireCustomStepsLayout(){
-  const addBtn   = document.getElementById('addReduction');
-  const clearBtn = document.getElementById('clearReductions');
+  // Enable Step 1 toggle
+  const enNo  = document.getElementById('enableStep1No');
+  const enYes = document.getElementById('enableStep1Yes');
+  if (enNo)  enNo.addEventListener('change', syncStep1Enable);
+  if (enYes) enYes.addEventListener('change', syncStep1Enable);
 
-  if (addBtn)   addBtn.addEventListener('click', addReductionRow);
-  if (clearBtn) clearBtn.addEventListener('click', clearReductionRows);
+  // React to class/medicine changes: keep 4 rows & class defaults in sync
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const reapply = () => {
+    if (document.getElementById('enableStep1Yes')?.checked){
+      ensureFourRows();
+    }
+  };
+  if (clsSel) clsSel.addEventListener('change', reapply);
+  if (medSel) medSel.addEventListener('change', reapply);
 
-  // start with zero lines
-  clearReductionRows();
+  // Initial state (No)
+  syncStep1Enable();
+}
+
+function syncModeVisibility(){
+  const key = currentClassKey();
+  const mode = document.getElementById('modeBlock');
+  if (!mode) return;
+  mode.style.display = (key === 'bzd') ? 'none' : '';
+}
+function wireCustomPanel(){
+  const clsSel = document.getElementById('classSelect');
+  const medSel = document.getElementById('medicineSelect');
+  const resetBtn = document.getElementById('resetPriority'); // if you still have it; otherwise ignore
+
+  const onChange = ()=>{ syncModeVisibility(); };
+  if (clsSel) clsSel.addEventListener('change', onChange);
+  if (medSel) medSel.addEventListener('change', onChange);
+
+  // Initial fill (if you still show Step-1 pills elsewhere, keep your old calls)
+  syncModeVisibility();
 }
 
 
@@ -3281,6 +3504,7 @@ updateClassFooter();
   wireModeToggle();
   wireCustomPanel();
   wireCustomStepsLayout();
+   syncModeVisibility();
 
   
   // 7) Live gating + interval hints for patches
