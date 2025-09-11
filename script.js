@@ -191,6 +191,23 @@ function isExactPMOnlyAt(packs, mg){
         DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
   return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
 }
+function lcsIsSelected(lcs){
+  try{
+    if (!Number.isFinite(lcs)) return false;
+    const n = Number(lcs);
+
+    // 1) Trust the live checkbox set if present
+    if (window.SelectedFormulations && SelectedFormulations.size > 0){
+      for (const v of SelectedFormulations) if (Number(v) === n) return true;
+    }
+    // 2) Fallback to product-MG list if available
+    if (typeof selectedProductMgs === "function"){
+      const arr = selectedProductMgs() || [];
+      for (const v of arr) if (Number(v) === n) return true;
+    }
+    return false;
+  }catch(_){ return false; }
+}
 
 
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
@@ -2074,10 +2091,8 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const step = lowestStepMg(cls, med, form) || 1;
 
   // --- BID end-sequence gate (improved) ---
-  const lcs = lowestCommercialStrengthMg(cls, med, form);
-  const lss = lowestSelectedStrengthMg();
-  const selected = (typeof selectedProductMgs === "function") ? (selectedProductMgs() || []).map(Number) : [];
-  const lcsSelected = (lcs != null) && selected.includes(Number(lcs));
+  const lcs = lowestCommercialStrengthMg(cls, med, form);       // e.g., 5
+  const lss = lowestSelectedStrengthMg();                       // e.g., 10
   const threshold = lcsSelected ? lcs : lss;
 
   // Safety: if we can’t determine LCS, don’t accidentally force Review
@@ -2365,6 +2380,15 @@ if (window._forceReviewNext) {
     const nowInP2 = p2Start && (+date >= +p2Start);
     doStep(nowInP2 ? p2Pct : p1Pct);
 
+    // Suppress duplicate row if a step forced review and did not change packs
+if (typeof window !== "undefined" && window._forceReviewNext){
+  // If step returned the same dose, show review now at this boundary and stop
+  // (prevents printing the same BID dose twice)
+  window._forceReviewNext = false;
+  rows.push({ week: week, date: fmtDate(date), packs:{}, med, form, cls, review:true });
+  break;
+}
+    
     if (packsTotalMg(packs) > EPS) rows.push({ week, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
     if (week > MAX_WEEKS) break;
   }
