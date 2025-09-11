@@ -9,25 +9,6 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" />
 </head>
 <body>
-  <!-- Safety confirm modal (screen-only) -->
-<div id="safetyModal" style="display:none">
-  <div class="safety-backdrop"></div>
-  <div class="safety-dialog" role="dialog" aria-modal="true" aria-labelledby="safetyTitle">
-    <h3 id="safetyTitle">Dose split is uneven for this medicine</h3>
-    <div id="safetyBody" class="safety-body"></div>
-
-    <label class="ack">
-      <input id="safetyAck" type="checkbox">
-      <span>I acknowledge the dose split exceeds the recommended difference and wish to proceed.</span>
-    </label>
-
-    <div class="actions" style="margin-top:10px">
-      <button id="safetyProceed" class="primary" disabled>Proceed anyway</button>
-      <button id="safetyStop" class="ghost">Insert Review & stop</button>
-    </div>
-  </div>
-</div>
-
   <main class="container">
     <h1>Medicine Tapering Calculator</h1>
 
@@ -142,39 +123,27 @@
 <div id="customPanel" style="display:none">
   <!-- STEP 1 -->
   <h4 class="subhead">Step 1 — Reduction order (optional)</h4>
+  <p class="hint">Define up to four reductions. Each line reads “Reduce [time of day] until [X] mg/day”, then flows to the next line.</p>
 
-  <!-- Single enable control for Step 1 -->
-  <div class="taper-row" role="radiogroup" aria-label="Enable Step 1">
-    <label class="radio">
-      <input type="radio" name="enableStep1" id="enableStep1No" checked>
-      <span>No</span>
-    </label>
-    <label class="radio">
-      <input type="radio" name="enableStep1" id="enableStep1Yes">
-      <span>Yes</span>
-    </label>
+  <div id="step1List" class="reduction-list"></div>
+
+  <div class="taper-row" style="gap:8px; margin-top:8px;">
+    <button id="addReduction" type="button" class="secondary">Add reduction</button>
+    <button id="clearReductions" type="button" class="ghost">Clear all</button>
+    <span class="hint">0–4 lines supported.</span>
   </div>
-
-  <p class="hint" id="step1Help" style="display:none">
-    Define up to four lines. Each line reads “Reduce [time of day] until [X] mg”, then flows to the next line.
-    <br><em>Note:</em> Values are <strong>slot</strong> dose targets, not daily totals.
-  </p>
-
-  <!-- Shows 4 rows when enabled -->
-  <div id="step1List" class="reduction-list" style="display:none"></div>
 
   <!-- STEP 2 -->
   <h4 class="subhead">Step 2 — Equalise after Step 1</h4>
   <p class="hint">After Step 1 is complete, reduce each dose time equally.</p>
   <div class="taper-row" role="radiogroup" aria-label="Equalise after Step 1">
-    <!-- No first, Yes second (Yes still default) -->
-    <label class="radio">
-      <input type="radio" name="equaliseAfter" id="equaliseNo">
-      <span>No</span>
-    </label>
     <label class="radio">
       <input type="radio" name="equaliseAfter" id="equaliseYes" checked>
       <span>Yes</span>
+    </label>
+    <label class="radio">
+      <input type="radio" name="equaliseAfter" id="equaliseNo">
+      <span>No</span>
     </label>
   </div>
 
@@ -187,12 +156,6 @@
       <span class="suffix">mg/day</span>
     </div>
   </div>
-
-  <div class="hint" style="margin-top:8px">
-    Tips: “time of day” accepts phrases like <em>in the morning</em>, <em>at midday</em>, <em>at dinner</em>, <em>at night</em>.
-    These settings don’t change calculations yet—layout only.
-  </div>
-</div>
 
   <div class="hint" style="margin-top:8px">
     Tips: “time of day” accepts common phrases (e.g., <em>in the morning</em>, <em>at midday</em>, <em>at dinner</em>, <em>at night</em>). You can leave Step 1 empty, or add 1–4 lines. These settings don’t change calculations yet—layout only.
