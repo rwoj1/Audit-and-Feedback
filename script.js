@@ -139,46 +139,59 @@ function ensureIntervalHints(){
 }
 
 // --- End-sequence helpers for BID classes (SR opioids & pregabalin) ---
-
 // Lowest commercial strength AVAILABLE in the catalogue for the CURRENT med/form (ignores user selection)
-function lowestCommercialStrengthMg(cls, med, form){
+// --- Commercial vs Selected strength helpers (robust) ---
+
+function allCommercialStrengthsMg(cls, med, form){
   try {
+    // Prefer a picker-aware source if available
+    if (typeof strengthsForPicker === "function") {
+      const arr = strengthsForPicker(cls, med, form);
+      const mg = (arr || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
+      if (mg.length) return Array.from(new Set(mg)).sort((a,b)=>a-b);
+    }
+  } catch(_) {}
+  try {
+    // Fallback: catalogue scan
     const cat = (window.CATALOG?.[cls]?.[med]) || {};
-    const list = (cat[form] || Object.values(cat).flat() || []);
-    const mg = list.map(v => (typeof v === 'number' ? v : parseMgFromStrength(v)))
-                   .filter(n => Number.isFinite(n) && n > 0)
-                   .sort((a,b)=>a-b);
-    return mg.length ? mg[0] : null;
-  } catch(_) { return null; }
+    const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
+    const mg = (pool || [])
+      .map(v => (typeof v === 'number' ? v : parseMgFromStrength(v)))
+      .filter(n => Number.isFinite(n) && n > 0)
+      .sort((a,b)=>a-b);
+    if (mg.length) return Array.from(new Set(mg));
+  } catch(_) {}
+  return [];
 }
 
-// Lowest strength the USER actually selected (LSS)
+function lowestCommercialStrengthMg(cls, med, form){
+  const all = allCommercialStrengthsMg(cls, med, form);
+  return all.length ? all[0] : null;
+}
+
 function lowestSelectedStrengthMg(){
   try {
     if (typeof selectedProductMgs === "function") {
       const picked = selectedProductMgs();
-      if (Array.isArray(picked) && picked.length) {
-        return Math.min(...picked.map(Number).filter(n=>Number.isFinite(n) && n>0));
-      }
+      const mg = (picked || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
+      if (mg.length) return Math.min(...mg);
     }
   } catch(_) {}
   return null;
 }
 
-// True if packs are exactly BID of `mg` (AM = mg, PM = mg; MID & DIN ≈ 0)
+// Exact-shape checks
 function isExactBIDAt(packs, mg){
   const AM = slotTotalMg(packs,"AM"), MID = slotTotalMg(packs,"MID"),
         DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
-  return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS
-      && MID < EPS && DIN < EPS;
+  return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
 }
-
-// True if packs are exactly PM-only of `mg` (AM, MID, DIN ≈ 0; PM = mg)
 function isExactPMOnlyAt(packs, mg){
   const AM = slotTotalMg(packs,"AM"), MID = slotTotalMg(packs,"MID"),
         DIN = slotTotalMg(packs,"DIN"), PM = slotTotalMg(packs,"PM");
   return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
 }
+
 
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
@@ -2060,71 +2073,40 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   // Respect selected products for rounding granularity
   const step = lowestStepMg(cls, med, form) || 1;
 
-  // --- BID end-sequence gate (applies to SR opioids and pregabalin via this stepper) ---
-  // Threshold: LCS if it is selected, else LSS
+  // --- BID end-sequence gate (improved) ---
   const lcs = lowestCommercialStrengthMg(cls, med, form);
   const lss = lowestSelectedStrengthMg();
-  const picked = (typeof selectedProductMgs === "function") ? (selectedProductMgs() || []) : [];
-  const lcsSelected = (picked.length === 0) ? true : picked.some(m => +m === +lcs);
-  const threshold = lcsSelected ? (lcs ?? lss) : (lss ?? lcs);
+  const selected = (typeof selectedProductMgs === "function") ? (selectedProductMgs() || []).map(Number) : [];
+  const lcsSelected = (lcs != null) && selected.includes(Number(lcs));
+  const threshold = lcsSelected ? lcs : lss;
 
-  if (threshold && Number.isFinite(threshold)) {
-    // If we are already at PM-only (threshold), next step is STOP.
+  // Safety: if we can’t determine LCS, don’t accidentally force Review
+  if (threshold != null && Number.isFinite(threshold)) {
+    // If we are already at PM-only(threshold), next row is STOP.
     if (isExactPMOnlyAt(packs, threshold)) {
-      return {}; // empty packs => STOP row will be emitted by the caller
+      // clear any stale flag; then STOP
+      if (window._forceReviewNext) window._forceReviewNext = false;
+      return {}; // empty packs => Stop row
     }
-    // If we are at BID(threshold), next step is either PM-only (Case A) or REVIEW (Case B).
+
+    // If we are at BID(threshold), decide next step:
     if (isExactBIDAt(packs, threshold)) {
       if (lcsSelected) {
-        // Case A: LCS selected => produce PM-only at threshold
-        const cur = { AM:0, MID:0, DIN:0, PM: threshold };
-        return recomposeSlots(cur, cls, med, form);
+        // Case A: LCS selected → PM-only at threshold (explicit, no rebalancing)
+        if (window._forceReviewNext) window._forceReviewNext = false; // ensure no stray review
+        const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+        // Since threshold == LCS, it's an exact 1-unit tablet/capsule
+        out.PM[Number(threshold)] = 1;
+        return out;
       } else {
-        // Case B: LCS not selected => force a REVIEW on the next boundary
-        window._forceReviewNext = true;  // handled in buildPlanTablets (see patch below)
-        return packs; // no dose change here; loop will add a Review row next and end
+        // Case B: LCS not selected → Review at next boundary
+        window._forceReviewNext = true;
+        return packs; // leave current BID row; loop will emit Review next
       }
     }
   }
-  
-  let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) {
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
-  }
 
-  let cur = {
-    AM:  slotTotalMg(packs, "AM"),
-    MID: slotTotalMg(packs, "MID"),
-    DIN: slotTotalMg(packs, "DIN"),
-    PM:  slotTotalMg(packs, "PM")
-  };
 
-  let reduce = +(tot - target).toFixed(3);
-
-  const shave = (slot) => {
-    if (reduce <= EPS || cur[slot] <= EPS) return;
-    const can = cur[slot];
-    const dec = Math.min(can, roundTo(reduce, step));
-    cur[slot] = +(cur[slot] - dec).toFixed(3);
-    reduce    = +(reduce    - dec).toFixed(3);
-  };
-
-  // Same path you already use elsewhere for SR-style classes:
-  if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
-  else               { shave("MID"); }
-
-  if (reduce > EPS) {
-    const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
-    const bid = preferredBidTargets(bidTarget, cls, med, form);
-    cur.AM = bid.AM; cur.PM = bid.PM;
-    reduce = 0;
-  }
-
-  for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
-
-  return recomposeSlots(cur, cls, med, form);
-}
 
 /* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN ===== */
 function stepPPI(packs, percent, cls, med, form){
