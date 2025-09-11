@@ -1446,11 +1446,13 @@ function renderStandardTable(stepRows){
       tdStrength.textContent = line.strength || "";
       tr.appendChild(tdStrength);
 
-      // [3] Instructions — keep \n, print via textContent
+       // [3] Instructions — put each "Take ..." on its own line
       const tdInstr = document.createElement("td");
       tdInstr.className = "col-instr instructions-pre";
-      tdInstr.textContent = (line.instr || "");
+      const instrText = String(line.instr || "").replace(/\s+(?=Take\b)/g, '\n');
+      tdInstr.textContent = instrText;
       tr.appendChild(tdInstr);
+
 
       // helper for dose cells
       const doseCell = (val, cls) => {
