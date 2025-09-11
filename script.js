@@ -2117,51 +2117,48 @@ function stepGabapentinoid(packs, percent, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  const isGaba = /gabapentin/i.test(med);
-  const isPreg = /pregabalin/i.test(med);
-  const freq   = isGaba ? "TID" : "BID";
-
-  // Only the products the user actually selected
-  const strengths = strengthsForSelected()
-    .map(parseMgFromStrength)
-    .filter(v => v > 0)
-    .sort((a,b) => a - b);
-  const step = strengths[0] || 1;
-
-  // Next daily target is based on the PREVIOUS ACHIEVED total (not baseline), respecting step
-  let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) {               // ensure forward progress
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
+  // --- Pregabalin: identical to Opioid SR model (your gold standard) ---
+  if (/pregabalin/i.test(med)) {
+    return stepOpioid_Shave(packs, percent, cls, med, form);
   }
 
-  // Pick the best daily total globally (nearest → fewest items → round up),
-  // under per-slot cap = 4. This prevents per-slot rounding from dragging the total down.
-  const unitCapPerSlot = 4;
-  let best = selectBestOralTotal(target, strengths, freq, unitCapPerSlot);
+  // --- Gabapentin (TID): compute from previous step, pick best daily total, then TID centre-light ---
+  // Respect only the products the user actually selected
+  const strengths = allowedStrengthsFilteredBySelection()
+    .filter(v => v > 0)
+    .sort((a,b) => a - b);
 
-  // If the exact tie-break result isn’t constructible with selected products,
-  // nudge the target down by one step until feasible (rare).
+  const step = strengths[0] || 1;
+
+  // Target based on PREVIOUS ACHIEVED total (not the original baseline)
+  let target = roundTo(tot * (1 - percent/100), step);
+  if (target === tot && tot > 0) {
+    target = roundTo(Math.max(0, tot - step), step); // ensure forward progress
+  }
+
+  // Choose best per-day combination under TID with per-slot cap 4
+  const unitCapPerSlot = 4;
+  let best = selectBestOralTotal(target, strengths, "TID", unitCapPerSlot);
+
+  // If the exact tie-break result isn’t constructible, nudge down by one step until feasible
   if (!best) {
     let t2 = target;
     while (!best && t2 > 0) {
       t2 = Math.max(0, +(t2 - step).toFixed(3));
-      best = selectBestOralTotal(t2, strengths, freq, unitCapPerSlot);
+      best = selectBestOralTotal(t2, strengths, "TID", unitCapPerSlot);
     }
-    if (!best) return packs; // nothing feasible; keep prior packs
+    if (!best) return packs; // keep prior packs if nothing feasible
   }
 
-  // Convert daily selection into units for distribution
-  const unitsArr = Array.from(best.byStrength.entries())
-    .filter(([,q]) => (q || 0) > 0)
-    .map(([mg, q]) => ({ mg: Number(mg), q }));
+  // Convert best daily selection into {mg,q} array
+  const counts = {};
+  best.strengths.forEach(mg => { counts[mg] = (counts[mg] || 0) + 1; });
+  const unitsArr = Object.entries(counts).map(([mg,q]) => ({ mg: Number(mg), q }));
 
-  // Distribute by class-specific rules
-  const out = isGaba
-    ? distributeGabapentinTDS(unitsArr, unitCapPerSlot)  // centre-light TID; PM can carry remainder
-    : distributePregabalinBID(unitsArr, unitCapPerSlot); // BID; PM ≥ AM
+  // Distribute across TID (centre-light; PM can carry remainder); caps enforced internally
+  const out = distributeGabapentinTDS(unitsArr, unitCapPerSlot);
 
-  // Normalise: remove zero/NaN keys so downstream renderers stay clean
+  // Normalise slots
   for (const slot of ["AM","MID","DIN","PM"]) {
     if (!out[slot]) out[slot] = {};
     for (const k of Object.keys(out[slot])) {
@@ -2169,7 +2166,7 @@ function stepGabapentinoid(packs, percent, med, form){
       if (!Number.isFinite(v) || v <= 0) delete out[slot][k];
     }
   }
-  return out; // NOTE: we return exact by-strength packs; do NOT recompose by mg totals
+  return out;
 }
 
 /* ===== BZRA ===== */
