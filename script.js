@@ -2094,6 +2094,7 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const lcs = lowestCommercialStrengthMg(cls, med, form);       // e.g., 5
   const lss = lowestSelectedStrengthMg();                       // e.g., 10
   const threshold = lcsSelected ? lcs : lss;
+}
 
   // Safety: if we can’t determine LCS, don’t accidentally force Review
   if (threshold != null && Number.isFinite(threshold)) {
