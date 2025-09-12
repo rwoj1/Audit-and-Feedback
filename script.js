@@ -340,6 +340,113 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   return { target, step };
 }
 
+/* ===== Antipsychotic UI wiring (layout only) ===== */
+;(() => {
+  const $id = (s) => document.getElementById(s);
+
+  // Caps (mg/day)
+  const AP_MAX = {
+    Quetiapine: 150,
+    Risperidone: 2,
+    Olanzapine: 10,
+  };
+
+  // Human label for the brief line
+  const DRUG_LABEL = {
+    Quetiapine: "Quetiapine — maximum 150 mg/day",
+    Risperidone: "Risperidone — maximum 2 mg/day",
+    Olanzapine: "Olanzapine — maximum 10 mg/day",
+  };
+
+  // Show/hide panel & order row; fill the brief; update total
+  function apVisibilityTick() {
+    const cls = $id("classSelect")?.value || "";
+    const med = $id("medicineSelect")?.value || "";
+    const isAP = (cls === "Antipsychotic") && (med in AP_MAX);
+
+    const panel = $id("apControls");
+    const order = $id("apOrderRow");
+
+    if (!panel || !order) return;
+
+    panel.style.display = isAP ? "" : "none";
+    order.style.display = isAP ? "" : "none";
+
+    if (!isAP) return;
+
+    // Fill brief
+    const brief = $id("apBriefDrug");
+    if (brief) brief.textContent = DRUG_LABEL[med] || "the maximum for this medicine";
+
+    // Show “X mg / Y mg max” and color
+    apUpdateTotal();
+  }
+
+  // Read the four inputs (mg; numbers)
+  function apReadInputs() {
+    const get = (id) => {
+      const v = parseFloat($id(id)?.value || "0");
+      return Number.isFinite(v) ? Math.max(0, v) : 0;
+    };
+    return {
+      AM:  get("apDoseAM"),
+      MID: get("apDoseMID"),
+      DIN: get("apDoseDIN"),
+      PM:  get("apDosePM"),
+    };
+  }
+
+  function apUpdateTotal() {
+    const box = $id("apTotalBox");
+    if (!box) return;
+
+    const med = $id("medicineSelect")?.value || "";
+    const cap = AP_MAX[med] || 0;
+
+    const { AM, MID, DIN, PM } = apReadInputs();
+    const total = AM + MID + DIN + PM;
+
+    // Text: “X mg / Y mg max”
+    const fmt = (x) => (Math.round(x*100)/100).toString();
+    box.textContent = `${fmt(total)} mg / ${fmt(cap)} mg max`;
+
+    // Color: green when <= cap, red when over
+    box.classList.remove("ap-ok","ap-err");
+    if (cap > 0) {
+      if (total <= cap) box.classList.add("ap-ok");
+      else box.classList.add("ap-err");
+    }
+  }
+
+  // (Optional) simple badge refresh for the chips — keeps 1..4 visible
+  function apRefreshBadges() {
+    const chips = [...document.querySelectorAll("#apOrder .ap-chip")];
+    chips.forEach((chip, i) => {
+      const b = chip.querySelector(".ap-badge");
+      if (b) b.textContent = String(i + 1);
+    });
+  }
+
+  // Hook up events once
+  document.addEventListener("DOMContentLoaded", () => {
+    // Select changes → show/hide and recompute
+    ["classSelect","medicineSelect","formSelect"].forEach(id => {
+      const el = $id(id);
+      if (el) el.addEventListener("change", apVisibilityTick);
+    });
+
+    // Inputs → recompute total live
+    ["apDoseAM","apDoseMID","apDoseDIN","apDosePM"].forEach(id => {
+      const el = $id(id);
+      if (el) el.addEventListener("input", apUpdateTotal);
+    });
+
+    // First paint
+    apVisibilityTick();
+    apRefreshBadges();
+  });
+})();
+
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
 //#endregion
