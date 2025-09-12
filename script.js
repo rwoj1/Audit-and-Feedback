@@ -215,28 +215,27 @@ function shouldShowProductPicker(cls, med, form){
 
     // ===== Benzodiazepines / Z-drugs (under your BZRA umbrella) =====
     ["Benzodiazepines / Z-Drug (BZRA)","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)","Diazepam",/(Tablet|Tab|Capsule|Cap)/i],
     ["Benzodiazepines / Z-Drug (BZRA)","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
     ["Benzodiazepines / Z-Drug (BZRA)","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
     ["Benzodiazepines / Z-Drug (BZRA)","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    ["Benzodiazepines / Z-Drug (BZRA)","Zolpidem",/(SR.*Tablet|Tablet.*SR)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)", "Zolpidem", /^Slow Release Tablet$/i],
 
     // ===== Proton Pump Inhibitors (PPIs) =====
     ["Proton Pump Inhibitor","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
     ["Proton Pump Inhibitor","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
     ["Proton Pump Inhibitor","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
     ["Proton Pump Inhibitor","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Proton Pump Inhibitor","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitor", "Lansoprazole", /^Orally Dispersible Tablet$/i],
+    ["Proton Pump Inhibitor", "Lansoprazole", /^Tablet$/i],
 
     // ===== Antipsychotics =====
     // Some catalogues use "Antipsychotics", others "Antipsychotic".
     ["Antipsychotics","Risperidone",/(Tablet|Tab|ODT|Wafer)/i],
-    ["Antipsychotics","Quetiapine",/(Tablet|Tab)/i],
+    ["Antipsychotic", "Quetiapine", /^Immediate Release Tablet$/i],
+    ["Antipsychotic", "Quetiapine", /^Slow Release Tablet$/i],
     ["Antipsychotics","Olanzapine",/(Tablet|Tab|ODT|Wafer|Dispersible)/i],
     ["Antipsychotics","Haloperidol",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Antipsychotic","Risperidone",/(Tablet|Tab|ODT|Wafer)/i],
-    ["Antipsychotic","Quetiapine",/(Tablet|Tab)/i],
-    ["Antipsychotic","Olanzapine",/(Tablet|Tab|ODT|Wafer|Dispersible)/i],
-    ["Antipsychotic","Haloperidol",/(Tablet|Tab|Capsule|Cap)/i],
   ];
 
   return allowList.some(([c,m,formRe]) =>
