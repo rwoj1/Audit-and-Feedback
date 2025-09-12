@@ -214,40 +214,18 @@ function shouldShowProductPicker(cls, med, form){
     ["Gabapentinoids","Pregabalin",/Capsule/i],
 
     // ===== Benzodiazepines / Z-drugs (under your BZRA umbrella) =====
-    // Some catalogues use class "BZRA", others "Benzodiazepines" or "Z-drugs".
-    // Oxazepam
-    ["BZRA","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Benzodiazepines","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
-    // Alprazolam
-    ["BZRA","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Benzodiazepines","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
-    // Clonazepam
-    ["BZRA","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    ["Benzodiazepines","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    // Lorazepam
-    ["BZRA","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    ["Benzodiazepines","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    // Zolpidem — SR Tablet ONLY (not IR)
-    ["BZRA","Zolpidem",/(SR.*Tablet|Tablet.*SR)/i],
-    ["Z-drugs","Zolpidem",/(SR.*Tablet|Tablet.*SR)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    ["Benzodiazepines / Z-Drug (BZRA)","Zolpidem",/(SR.*Tablet|Tablet.*SR)/i],
 
     // ===== Proton Pump Inhibitors (PPIs) =====
-    ["Proton Pump Inhibitors","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Proton Pump Inhibitors","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Proton Pump Inhibitors","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Proton Pump Inhibitors","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Proton Pump Inhibitors","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    // If your class label is abbreviated:
-    ["PPI","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPI","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPI","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPI","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPI","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPIs","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPIs","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPIs","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPIs","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
-    ["PPIs","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitor","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitor","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitor","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitor","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitor","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
 
     // ===== Antipsychotics =====
     // Some catalogues use "Antipsychotics", others "Antipsychotic".
