@@ -339,6 +339,172 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
 
   return { target, step };
 }
+// === Antipsychotic UI wiring (layout only) ===
+(function(){
+  const $id = (x)=>document.getElementById(x);
+
+  const CAP_BY_MED = {
+    "Quetiapine": 150,      // mg/day
+    "Risperidone": 2,       // mg/day
+    "Olanzapine": 10        // mg/day
+  };
+
+  const GRID_BY_MED = {
+    "Quetiapine": 12.5,     // mg
+    "Risperidone": 0.25,    // mg
+    "Olanzapine": 1.25      // mg
+  };
+
+  function isAntipsychoticSelected(){
+    const cls = $id("classSelect")?.value || "";
+    return cls === "Antipsychotic";
+  }
+  function currentMed(){
+    return $id("medicineSelect")?.value || "";
+  }
+
+  function apCapForMed(med){
+    return CAP_BY_MED[med] ?? 0;
+  }
+  function apGridForMed(med){
+    return GRID_BY_MED[med] ?? 0;
+  }
+
+  function formatCapBrief(med){
+    const cap = apCapForMed(med);
+    const grid = apGridForMed(med);
+    const briefDrugEl = $id("apBriefDrug");
+    if (briefDrugEl) briefDrugEl.textContent = `${med} (${cap} mg/day max)`;
+    const note = $id("apNote");
+    if (note) {
+      note.textContent = `Rounding grid: ${grid} mg. Prefers whole tablets over halves when both reach the same target.`;
+    }
+  }
+
+  function apUpdateTotal(){
+    const am  = Number($id("apDoseAM")?.value || 0)  || 0;
+    const mid = Number($id("apDoseMID")?.value || 0) || 0;
+    const din = Number($id("apDoseDIN")?.value || 0) || 0;
+    const pm  = Number($id("apDosePM")?.value || 0)  || 0;
+    const tot = +(am + mid + din + pm).toFixed(2);
+    const med = currentMed();
+    const cap = apCapForMed(med);
+    const box = $id("apTotalBox");
+    if (box) {
+      box.textContent = `${tot} mg / ${cap || 0} mg max`;
+      box.classList.toggle("ap-ok", cap && tot <= cap);
+      box.classList.toggle("ap-err", !cap || tot > cap);
+    }
+    return {tot, cap};
+  }
+
+  function apAttachDoseListeners(){
+    ["apDoseAM","apDoseMID","apDoseDIN","apDosePM"].forEach(id=>{
+      $id(id)?.addEventListener("input", apUpdateTotal);
+    });
+  }
+
+  // Drag & drop order (chips)
+  function apRefreshBadges(){
+    const chips = [...($id("apOrder")?.querySelectorAll(".ap-chip") || [])];
+    chips.forEach((chip, i) => chip.querySelector(".ap-badge").textContent = String(i+1));
+  }
+  function apInitChips(){
+    const wrap = $id("apOrder"); if (!wrap) return;
+    let dragged = null;
+
+    wrap.addEventListener("dragstart", e=>{
+      const t = e.target.closest(".ap-chip"); if (!t) return;
+      dragged = t; t.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+    });
+    wrap.addEventListener("dragend", e=>{
+      dragged?.classList.remove("dragging"); dragged = null;
+      apRefreshBadges();
+    });
+    wrap.addEventListener("dragover", e=>{
+      e.preventDefault();
+      const after = getChipAfter(wrap, e.clientX);
+      if (!dragged) return;
+      if (after == null) wrap.appendChild(dragged);
+      else wrap.insertBefore(dragged, after);
+    });
+
+    function getChipAfter(container, x){
+      const chips = [...container.querySelectorAll(".ap-chip:not(.dragging)")];
+      let closest = null, closestOffset = Number.NEGATIVE_INFINITY;
+      for (const chip of chips){
+        const rect = chip.getBoundingClientRect();
+        const offset = x - rect.left - rect.width/2;
+        if (offset < 0 && offset > closestOffset){
+          closestOffset = offset;
+          closest = chip;
+        }
+      }
+      return closest;
+    }
+
+    // Keyboard: move with arrows when focused
+    wrap.addEventListener("keydown", e=>{
+      const t = e.target.closest(".ap-chip"); if (!t) return;
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight"){
+        e.preventDefault();
+        const chips = [...wrap.querySelectorAll(".ap-chip")];
+        const i = chips.indexOf(t);
+        const j = (e.key === "ArrowLeft") ? Math.max(0, i-1) : Math.min(chips.length-1, i+1);
+        if (i !== j) {
+          wrap.insertBefore(t, chips[j + (e.key === "ArrowRight" ? 1 : 0)] || null);
+          apRefreshBadges();
+          t.focus();
+        }
+      }
+    });
+
+    apRefreshBadges();
+  }
+
+  // Public getter for your stepper later
+  window.getAntipsychoticUserInput = function(){
+    const doses = {
+      AM:  Number($id("apDoseAM")?.value  || 0) || 0,
+      MID: Number($id("apDoseMID")?.value || 0) || 0,
+      DIN: Number($id("apDoseDIN")?.value || 0) || 0,
+      PM:  Number($id("apDosePM")?.value  || 0) || 0,
+    };
+    const order = [...($id("apOrder")?.querySelectorAll(".ap-chip") || [])]
+      .map(ch => ch.getAttribute("data-slot"));
+    const {tot, cap} = apUpdateTotal();
+    return { doses, order, total: tot, cap, med: currentMed() };
+  };
+
+  // Show/hide panel when Class/Medicine changes
+  function apVisibilityTick(){
+    const host = $id("apControls"); if (!host) return;
+    if (!isAntipsychoticSelected()) {
+      host.style.display = "none";
+      return;
+    }
+    const med = currentMed();
+    if (!/^(Quetiapine|Risperidone|Olanzapine)$/i.test(med)) {
+      host.style.display = "none"; // enforce your 3-medicine scope
+      return;
+    }
+    host.style.display = "";
+    formatCapBrief(med);
+    apUpdateTotal();
+  }
+
+  // Hook into your selects if present
+  $id("classSelect")?.addEventListener("change", apVisibilityTick);
+  $id("medicineSelect")?.addEventListener("change", apVisibilityTick);
+
+  // Init once DOM is ready
+  document.addEventListener("DOMContentLoaded", ()=>{
+    apAttachDoseListeners();
+    apInitChips();
+    apVisibilityTick();
+  });
+})();
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
