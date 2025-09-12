@@ -199,13 +199,71 @@ function nounForGabapentinByStrength(form, med, strengthStr){
 let SelectedFormulations = new Set();
 
 function shouldShowProductPicker(cls, med, form){
-  // Show the picker for ANY medicine/form that has 2+ commercial strengths.
-  try {
-    const mgList = allCommercialStrengthsMg(cls, med, form); // already in V6
-    return Array.isArray(mgList) && mgList.length >= 2;
-  } catch(_) {
-    return false;
-  }
+  // Limit to the medicines you specified
+  const isOpioidSR = cls === "Opioid" && /SR/i.test(form) && /Tablet/i.test(form);
+  const allowList = [
+    // ===== Opioids SR tablet (existing) =====
+    ["Opioid","Morphine",/SR/i],
+    ["Opioid","Oxycodone",/SR/i],
+    ["Opioid","Oxycodone \/ Naloxone",/SR/i],
+    ["Opioid","Tapentadol",/SR/i],
+    ["Opioid","Tramadol",/SR/i],
+
+    // ===== Gabapentinoids (existing) =====
+    ["Gabapentinoids","Gabapentin",/.*/],
+    ["Gabapentinoids","Pregabalin",/Capsule/i],
+
+    // ===== Benzodiazepines / Z-drugs (under your BZRA umbrella) =====
+    // Some catalogues use class "BZRA", others "Benzodiazepines" or "Z-drugs".
+    // Oxazepam
+    ["BZRA","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepines","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
+    // Alprazolam
+    ["BZRA","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepines","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
+    // Clonazepam
+    ["BZRA","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    ["Benzodiazepines","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    // Lorazepam
+    ["BZRA","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    ["Benzodiazepines","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    // Zolpidem — SR Tablet ONLY (not IR)
+    ["BZRA","Zolpidem",/(SR.*Tablet|Tablet.*SR)/i],
+    ["Z-drugs","Zolpidem",/(SR.*Tablet|Tablet.*SR)/i],
+
+    // ===== Proton Pump Inhibitors (PPIs) =====
+    ["Proton Pump Inhibitors","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitors","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitors","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitors","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Proton Pump Inhibitors","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    // If your class label is abbreviated:
+    ["PPI","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPI","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPI","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPI","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPI","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPIs","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPIs","Omeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPIs","Esomeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPIs","Rabeprazole",/(Tablet|Tab|Capsule|Cap)/i],
+    ["PPIs","Lansoprazole",/(Tablet|Tab|Capsule|Cap)/i],
+
+    // ===== Antipsychotics =====
+    // Some catalogues use "Antipsychotics", others "Antipsychotic".
+    ["Antipsychotics","Risperidone",/(Tablet|Tab|ODT|Wafer)/i],
+    ["Antipsychotics","Quetiapine",/(Tablet|Tab)/i],
+    ["Antipsychotics","Olanzapine",/(Tablet|Tab|ODT|Wafer|Dispersible)/i],
+    ["Antipsychotics","Haloperidol",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Antipsychotic","Risperidone",/(Tablet|Tab|ODT|Wafer)/i],
+    ["Antipsychotic","Quetiapine",/(Tablet|Tab)/i],
+    ["Antipsychotic","Olanzapine",/(Tablet|Tab|ODT|Wafer|Dispersible)/i],
+    ["Antipsychotic","Haloperidol",/(Tablet|Tab|Capsule|Cap)/i],
+  ];
+
+  return allowList.some(([c,m,formRe]) =>
+    c===cls && new RegExp(m,"i").test(med||"") && formRe.test(form||"")
+  );
 }
 
 // Build a nice per-product label
