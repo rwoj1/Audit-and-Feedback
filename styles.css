@@ -303,7 +303,11 @@ button.ghost{
 }
 .ap-row input { width: 140px; text-align: right; }
 .ap-row span:last-child { min-width: 2.2rem; }
-}
+
+/* Antipsychotic reduction-order chips: ensure text isn’t white */
+.ap-order-chips .ap-chip { color: var(--text); }   /* show labels */
+.ap-order-chips .ap-badge { color: var(--text); }  /* show 1..4 */
+
 /* Fallback: if the JS label span is missing, show a label via ::after */
 #apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="AM"]::after  { content: " Morning"; margin-left:.25rem; }
 #apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="MID"]::after { content: " Midday";  margin-left:.25rem; }
