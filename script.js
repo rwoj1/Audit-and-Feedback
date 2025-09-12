@@ -480,25 +480,6 @@ function apInitChips(){
   }
 }
 
-    // Keyboard: move with arrows when focused
-    wrap.addEventListener("keydown", e=>{
-      const t = e.target.closest(".ap-chip"); if (!t) return;
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight"){
-        e.preventDefault();
-        const chips = [...wrap.querySelectorAll(".ap-chip")];
-        const i = chips.indexOf(t);
-        const j = (e.key === "ArrowLeft") ? Math.max(0, i-1) : Math.min(chips.length-1, i+1);
-        if (i !== j) {
-          wrap.insertBefore(t, chips[j + (e.key === "ArrowRight" ? 1 : 0)] || null);
-          apRefreshBadges();
-          t.focus();
-        }
-      }
-    });
-
-    apRefreshBadges();
-  }
-
   // Public getter for your stepper later
   window.getAntipsychoticUserInput = function(){
     const doses = {
@@ -536,13 +517,6 @@ function apVisibilityTick(){
   $id("classSelect")?.addEventListener("change", apVisibilityTick);
   $id("medicineSelect")?.addEventListener("change", apVisibilityTick);
 
-  // Init once DOM is ready
-  document.addEventListener("DOMContentLoaded", ()=>{
-    apAttachDoseListeners();
-    apInitChips();
-    apVisibilityTick();
-  });
-})();
 // Hide general dose builder controls when antipsychotics is active
 function apToggleGlobalDoseUI(isAP){
   // Candidate selectors for your existing "Add dose line" button
