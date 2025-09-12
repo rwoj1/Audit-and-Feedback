@@ -164,6 +164,26 @@ function allCommercialStrengthsMg(cls, med, form){
   return [];
 }
 
+// Keep labels aligned with the user's selected formulations.
+// If the displayed label's mg is not one of the selected strengths,
+// but is exactly 1/2 or 1/4 of a selected tablet (and splitting is allowed),
+// rewrite the label to the selected base strength so we don't "invent" a lower strength.
+function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
+  try {
+    const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
+    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
+    const targetMg = parseMgFromStrength(rawStrengthLabel);
+    if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
+    if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
+    const split = (typeof canSplitTablets === "function") ? canSplitTablets(cls, form, med) : {half:false, quarter:false};
+    if (split.half && chosenMap.has(targetMg * 2)) return chosenMap.get(targetMg * 2);
+    if (split.quarter && chosenMap.has(targetMg * 4)) return chosenMap.get(targetMg * 4);
+    return rawStrengthLabel;
+  } catch {
+    return rawStrengthLabel;
+  }
+}
+
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
 // - 100, 300, 400 mg → Capsules
@@ -1465,11 +1485,16 @@ function renderStandardTable(stepRows){
       }
       tr.appendChild(tdDate);
 
-      // [2] Strength
+      // [2] Strength  — keep label tied to selected formulations (no phantom lower strengths)
       const tdStrength = document.createElement("td");
       tdStrength.className = "col-strength";
-      tdStrength.textContent = line.strength || "";
+      const cls  = $("classSelect")?.value || "";
+      const med  = $("medicineSelect")?.value || "";
+      const form = $("formSelect")?.value || "";
+      const rawLabel = line.strengthLabel || line.strength || "";
+      tdStrength.textContent = prettySelectedLabelOrSame(cls, med, form, rawLabel);
       tr.appendChild(tdStrength);
+
 
        // [3] Instructions — put each "Take ..." on its own line
       const tdInstr = document.createElement("td");
