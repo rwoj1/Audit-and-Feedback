@@ -479,7 +479,78 @@ function apEnsureChipLabels(){
     label.textContent = LABELS[slot] || slot || "";
   });
 }
+// --- Drag & drop chips + public getter ---
 
+function apInitChips(){
+  const wrap = document.getElementById("apOrder"); 
+  if (!wrap) return;
+
+  // Make chips draggable and ensure labels stay present
+  wrap.querySelectorAll(".ap-chip").forEach(chip=>{
+    chip.setAttribute("draggable", "true");
+    chip.setAttribute("tabindex", "0"); // keyboard focusable
+  });
+
+  let dragged = null;
+
+  wrap.addEventListener("dragstart", e=>{
+    const t = e.target.closest(".ap-chip"); if (!t) return;
+    dragged = t;
+    t.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+
+  wrap.addEventListener("dragend", ()=>{
+    dragged?.classList.remove("dragging");
+    dragged = null;
+    apRefreshBadges();
+  });
+
+  wrap.addEventListener("dragover", e=>{
+    e.preventDefault();
+    const after = getChipAfter(wrap, e.clientX);
+    if (!dragged) return;
+    if (after == null) wrap.appendChild(dragged);
+    else wrap.insertBefore(dragged, after);
+  });
+
+  // Keyboard support: ← / → to move focused chip
+  wrap.addEventListener("keydown", e=>{
+    const t = e.target.closest(".ap-chip"); if (!t) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight"){
+      e.preventDefault();
+      const chips = [...wrap.querySelectorAll(".ap-chip")];
+      const i = chips.indexOf(t);
+      const j = (e.key === "ArrowLeft") ? Math.max(0, i-1) : Math.min(chips.length-1, i+1);
+      if (i !== j) {
+        wrap.insertBefore(t, chips[j + (e.key === "ArrowRight" ? 1 : 0)] || null);
+        apRefreshBadges();
+        t.focus();
+      }
+    }
+  });
+
+  apRefreshBadges();
+
+  function getChipAfter(container, x){
+    const chips = [...container.querySelectorAll(".ap-chip:not(.dragging)")];
+    let closest = null, closestOffset = Number.NEGATIVE_INFINITY;
+    for (const chip of chips){
+      const rect = chip.getBoundingClientRect();
+      const offset = x - rect.left - rect.width/2;
+      if (offset < 0 && offset > closestOffset){
+        closestOffset = offset; closest = chip;
+      }
+    }
+    return closest;
+  }
+}
+
+// Public helper: read current order as ["AM","MID","DIN","PM"]
+function apGetReductionOrder(){
+  return [...(document.getElementById("apOrder")?.querySelectorAll(".ap-chip") || [])]
+    .map(ch => ch.getAttribute("data-slot"));
+}
 
   // Hook up events once
   document.addEventListener("DOMContentLoaded", () => {
@@ -499,6 +570,7 @@ function apEnsureChipLabels(){
     apVisibilityTick();
     apRefreshBadges();
     apEnsureChipLabels();
+    apInitChips();
   });
 })();
 
