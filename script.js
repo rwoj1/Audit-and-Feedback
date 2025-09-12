@@ -409,40 +409,76 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
     const chips = [...($id("apOrder")?.querySelectorAll(".ap-chip") || [])];
     chips.forEach((chip, i) => chip.querySelector(".ap-badge").textContent = String(i+1));
   }
-  function apInitChips(){
-    const wrap = $id("apOrder"); if (!wrap) return;
-    let dragged = null;
+// REPLACE your existing apInitChips with this version
+function apInitChips(){
+  const wrap = document.getElementById("apOrder"); if (!wrap) return;
+  let dragged = null;
 
-    wrap.addEventListener("dragstart", e=>{
-      const t = e.target.closest(".ap-chip"); if (!t) return;
-      dragged = t; t.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
-    });
-    wrap.addEventListener("dragend", e=>{
-      dragged?.classList.remove("dragging"); dragged = null;
-      apRefreshBadges();
-    });
-    wrap.addEventListener("dragover", e=>{
-      e.preventDefault();
-      const after = getChipAfter(wrap, e.clientX);
-      if (!dragged) return;
-      if (after == null) wrap.appendChild(dragged);
-      else wrap.insertBefore(dragged, after);
-    });
+  const LABELS = { AM:"Morning", MID:"Midday", DIN:"Dinner", PM:"Night" };
 
-    function getChipAfter(container, x){
-      const chips = [...container.querySelectorAll(".ap-chip:not(.dragging)")];
-      let closest = null, closestOffset = Number.NEGATIVE_INFINITY;
-      for (const chip of chips){
-        const rect = chip.getBoundingClientRect();
-        const offset = x - rect.left - rect.width/2;
-        if (offset < 0 && offset > closestOffset){
-          closestOffset = offset;
-          closest = chip;
-        }
-      }
-      return closest;
+  // ensure long labels are present on each chip
+  [...wrap.querySelectorAll(".ap-chip")].forEach(chip=>{
+    const slot = chip.getAttribute("data-slot");
+    const badge = chip.querySelector(".ap-badge");
+    let label = chip.querySelector(".ap-chip-label");
+    if (!label) {
+      label = document.createElement("span");
+      label.className = "ap-chip-label";
+      chip.appendChild(label);
     }
+    label.textContent = LABELS[slot] || slot;
+    // keep badge first
+    if (badge && badge.nextSibling !== label) chip.insertBefore(label, badge.nextSibling);
+  });
+
+  wrap.addEventListener("dragstart", e=>{
+    const t = e.target.closest(".ap-chip"); if (!t) return;
+    dragged = t; t.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+  });
+  wrap.addEventListener("dragend", ()=>{
+    dragged?.classList.remove("dragging"); dragged = null;
+    apRefreshBadges();
+  });
+  wrap.addEventListener("dragover", e=>{
+    e.preventDefault();
+    const after = getChipAfter(wrap, e.clientX);
+    if (!dragged) return;
+    if (after == null) wrap.appendChild(dragged);
+    else wrap.insertBefore(dragged, after);
+  });
+
+  wrap.addEventListener("keydown", e=>{
+    const t = e.target.closest(".ap-chip"); if (!t) return;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight"){
+      e.preventDefault();
+      const chips = [...wrap.querySelectorAll(".ap-chip")];
+      const i = chips.indexOf(t);
+      const j = (e.key === "ArrowLeft") ? Math.max(0, i-1) : Math.min(chips.length-1, i+1);
+      if (i !== j) {
+        wrap.insertBefore(t, chips[j + (e.key === "ArrowRight" ? 1 : 0)] || null);
+        apRefreshBadges();
+        t.focus();
+      }
+    }
+  });
+
+  apRefreshBadges();
+
+  function getChipAfter(container, x){
+    const chips = [...container.querySelectorAll(".ap-chip:not(.dragging)")];
+    let closest = null, closestOffset = Number.NEGATIVE_INFINITY;
+    for (const chip of chips){
+      const rect = chip.getBoundingClientRect();
+      const offset = x - rect.left - rect.width/2;
+      if (offset < 0 && offset > closestOffset){
+        closestOffset = offset;
+        closest = chip;
+      }
+    }
+    return closest;
+  }
+}
 
     // Keyboard: move with arrows when focused
     wrap.addEventListener("keydown", e=>{
