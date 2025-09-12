@@ -266,7 +266,30 @@ button.ghost{
     0 10px 22px rgba(17,139,213,0.06),
     0 2px 6px rgba(0,0,0,0.03);
 }
+/* ===== Antipsychotic panel (layout only) ===== */
+.ap-dose-grid { display: grid; gap: .5rem; grid-template-columns: 1fr; max-width: 440px; }
+.ap-row { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.ap-row input { width: 140px; text-align: right; }
 
+.ap-total-line { margin: .5rem 0; display: flex; align-items: center; gap: .5rem; }
+.ap-total-box { padding: .2rem .5rem; border-radius: .4rem; font-weight: 600; }
+.ap-ok  { background: #e9f7ef; color: #146c43; }
+.ap-err { background: #fdecea; color: #b02a37; }
+
+.ap-brief { font-size: .9rem; color: var(--muted); margin-bottom: .75rem; }
+
+.ap-order-label { font-size: .9rem; color: #333; margin-bottom: .25rem; }
+.ap-order-chips { display: flex; gap: .5rem; flex-wrap: wrap; }
+.ap-chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .35rem .6rem; border: 1px solid #ddd; background: #fff;
+  border-radius: 999px; cursor: default; user-select: none;
+}
+.ap-badge {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:1.2rem; height:1.2rem; border-radius:999px; background:#eee; font-size:.8rem;
+}
+.ap-chip .ap-chip-label { margin-left: .2rem; }
 
 /* ==============================
    PRINT / PDF rules
