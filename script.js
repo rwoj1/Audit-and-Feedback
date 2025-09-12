@@ -2514,12 +2514,12 @@ function stepGabapentinoid(packs, percent, med, form){
 
 /* ===== Benzodiazepines / Z-Drug (BZRA) — PM-only daily taper with selection-only & halving rules ===== */
 function stepBZRA(packs, percent, med, form){
-  const tot = packsTotalMg(packs); 
+  const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
   const CLS = "Benzodiazepines / Z-Drug (BZRA)";
 
-  // — Selected strengths (numeric mg), if any —
+  // Read currently selected strengths (numeric mg), if any; otherwise leave empty & let composer use full catalogue
   let selectedMg = [];
   try {
     if (typeof selectedProductMgs === "function") {
@@ -2527,43 +2527,128 @@ function stepBZRA(packs, percent, med, form){
         .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/) || [])[1]))
         .map(Number)
         .filter(n => Number.isFinite(n) && n > 0)
-        .sort((a,b) => a - b);
+        .sort((a,b)=>a-b);
     }
-  } catch(_) {}
+  } catch(_){}
 
-  // — Step size (rounding increment) —
-  // Keep your behaviour, but for Zolpidem SR respect the selected SR strength if provided.
-  let step;
-  if (/Zolpidem/i.test(med) && isMR(form)) {
-    // If user selected SR strengths, step = smallest selected SR (e.g., 6.25 or 12.5); else default 6.25
-    step = selectedMg.length ? selectedMg[0] : 6.25;
+  // Base step size — EXACTLY your original behaviour
+  // (Zolpidem SR uses 6.25; others use BZRA_MIN_STEP[med] || 0.5)
+  const zolpSR = /Zolpidem/i.test(med) && isMR(form);
+  let step = zolpSR ? 6.25 : ((BZRA_MIN_STEP && BZRA_MIN_STEP[med]) || 0.5);
+
+  // But: if Zolpidem SR has a selection, make step = smallest selected SR (e.g., 12.5 if 6.25 not ticked)
+  if (zolpSR && selectedMg.length) step = selectedMg[0];
+
+  // Compute target and quantise to step
+  const raw = tot * (1 - percent/100);
+  const down = floorTo(raw, step), up = ceilTo(raw, step);
+
+  // For exact ties, prefer FEWEST PIECES using ONLY the selected strengths (with halves of the selected tab),
+  // then round up if still tied.
+  let target;
+  const dUp = Math.abs(up - raw), dDown = Math.abs(raw - down);
+  if (dUp < dDown) {
+    target = up;
+  } else if (dDown < dUp) {
+    target = down;
   } else {
-    // Your existing base step (falls back to 0.5 if not mapped)
-    step = (BZRA_MIN_STEP && BZRA_MIN_STEP[med]) || 0.5;
-
-    // OPTIONAL: if you want rounding to also never go below the smallest selected whole tablet,
-    // uncomment the line below (keeps maths aligned to selection without changing output composer):
-    // if (selectedMg.length) step = Math.max(step, selectedMg[0]);
+    // tie → fewest pieces between 'down' and 'up'
+    const piecesDown = piecesNeeded(down, med, form, selectedMg);
+    const piecesUp   = piecesNeeded(up,   med, form, selectedMg);
+    if (piecesDown != null && piecesUp != null) {
+      if (piecesDown < piecesUp) target = down;
+      else if (piecesUp < piecesDown) target = up;
+      else target = up; // tie → round up
+    } else {
+      // Fallback if we couldn't estimate pieces cleanly
+      target = up;
+    }
   }
 
-  // — Compute next target and quantise (ties round up), ensure progress —
-  let target = tot * (1 - percent/100);
-  const down = floorTo(target, step), up = ceilTo(target, step);
-  target = (Math.abs(up - target) <= Math.abs(target - down)) ? up : down; // ties up
+  // Ensure progress if quantised to the same total
   if (Math.abs(target - tot) < EPS && tot > 0) {
     target = roundTo(Math.max(0, tot - step), step);
   }
 
-  // — Compose PM-only using your existing composer —
-  // If you have a compose that accepts a selected list, prefer it; otherwise fall back.
+  // Compose PM-only from the allowed set:
+  // - If you have composeForSlotSelected, prefer it (it should respect selection/halves already).
+  // - Otherwise, do a tiny internal packer that only uses selected strengths; halves count as 0.5 of that tablet.
   let pm;
   if (typeof composeForSlotSelected === "function") {
     pm = composeForSlotSelected(target, CLS, med, form, selectedMg);
   } else {
-    pm = composeForSlot(target, CLS, med, form);
+    pm = packPMOnly(target, med, form, selectedMg);
+    if (!pm) { // fallback to your original composer if packing failed (should be rare)
+      pm = composeForSlot(target, CLS, med, form);
+    }
   }
 
   return { AM:{}, MID:{}, DIN:{}, PM: pm };
+
+  // ---------- helpers (scoped) ----------
+
+  // Estimate total “pieces” needed to make 'amt' using only selected strengths (and halves of those tablets).
+  // 1 tablet = 1.0 piece; half = 0.5 piece. No 4-piece cap for BZRA PM.
+  function piecesNeeded(amt, med, form, sel){
+    if (!(amt >= 0)) return null;
+    // Build allowed unit sizes from selection:
+    const allowed = allowedUnits(med, form, sel); // [{unitMg, sourceMg, piece}]
+    if (!allowed.length) return null;
+    // Greedy largest-first: since 'amt' is a multiple of 'step', this should pack exactly
+    let r = +amt.toFixed(6), pieces = 0;
+    for (const u of allowed){
+      if (r <= EPS) break;
+      const q = Math.floor(r / u.unitMg + 1e-9);
+      if (q > 0) {
+        r -= q * u.unitMg;
+        pieces += q * u.piece;
+      }
+    }
+    if (r > EPS) return null;
+    return pieces;
+  }
+
+  function packPMOnly(amt, med, form, sel){
+    if (!(amt > EPS)) return {};
+    const allowed = allowedUnits(med, form, sel);
+    if (!allowed.length) return {};
+    let r = +amt.toFixed(6);
+    const PM = {};
+    for (const u of allowed){
+      if (r <= EPS) break;
+      let q = Math.floor(r / u.unitMg + 1e-9);
+      if (q > 0){
+        PM[u.sourceMg] = (PM[u.sourceMg] || 0) + q * u.piece; // halves add 0.5 to the SELECTED tab's count
+        r -= q * u.unitMg;
+      }
+    }
+    if (r > EPS) return null;
+    return PM;
+  }
+
+  // Build units from the selection: full selected tablets + single halving where permitted.
+  function allowedUnits(med, form, sel){
+
+    if (!Array.isArray(sel) || sel.length === 0) {
+      return [];
+    }
+    const name = String(med||"").toLowerCase();
+    const slow = /slow\s*release|sr|cr|er|mr/.test(String(form||"").toLowerCase());
+
+    const units = [];
+    for (const mg of sel){
+      units.push({ unitMg: mg, sourceMg: mg, piece: 1.0 });
+      const forbidHalf =
+        slow ||
+        (name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6) ||
+        (name.includes("zolpidem") && slow); // explicit SR block
+      if (!forbidHalf) {
+        units.push({ unitMg: mg/2, sourceMg: mg, piece: 0.5 });
+      }
+    }
+    units.sort((a,b)=> b.unitMg - a.unitMg);
+    return units;
+  }
 }
 
 
