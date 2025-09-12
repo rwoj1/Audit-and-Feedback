@@ -308,12 +308,6 @@ button.ghost{
 .ap-order-chips .ap-chip { color: var(--text); }   /* show labels */
 .ap-order-chips .ap-badge { color: var(--text); }  /* show 1..4 */
 
-/* Fallback: if the JS label span is missing, show a label via ::after */
-#apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="AM"]::after  { content: " Morning"; margin-left:.25rem; }
-#apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="MID"]::after { content: " Midday";  margin-left:.25rem; }
-#apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="DIN"]::after { content: " Dinner";  margin-left:.25rem; }
-#apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="PM"]::after  { content: " Night";   margin-left:.25rem; }
-
 /* DnD affordances for AP chips */
 #apOrder .ap-chip { cursor: grab; }
 #apOrder .ap-chip.dragging { opacity: .6; cursor: grabbing; }
