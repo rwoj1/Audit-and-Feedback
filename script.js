@@ -2608,29 +2608,37 @@ function stepBZRA(packs, percent, med, form){
   }
 
   // Prefer a selection-driven grid (GCD of selected units incl. halves); else fall back to baseStep
-  const gridStep = selectionGridStepBZRA(med, form, selectedMg) || 0;
+  const gridStep = (typeof selectionGridStepBZRA === "function")
+    ? (selectionGridStepBZRA(med, form, selectedMg) || 0)
+    : 0;
   const step = gridStep || baseStep;
 
-  // Quantise to nearest step (tie handled below)
+  // Quantise to nearest step
   const raw = tot * (1 - percent/100);
   const down = floorTo(raw, step), up = ceilTo(raw, step);
+  const dUp = Math.abs(up - raw), dDown = Math.abs(raw - down);
 
   let target;
-  const dUp = Math.abs(up - raw), dDown = Math.abs(raw - down);
   if (dUp < dDown) {
     target = up;
   } else if (dDown < dUp) {
     target = down;
   } else {
-    // Tie → choose FEWEST pieces using only selected strengths (+ allowed halves); if still tie, round up.
-    const piecesDown = selectedMg.length ? piecesNeededBZRA(down, med, form, selectedMg) : null;
-    const piecesUp   = selectedMg.length ? piecesNeededBZRA(up,   med, form, selectedMg) : null;
-    if (piecesDown != null && piecesUp != null) {
-      if (piecesDown < piecesUp) target = down;
-      else if (piecesUp < piecesDown) target = up;
-      else target = up;
+    // --- TIE ---
+    if (selectedMg.length > 0) {
+      // With a selection: choose FEWEST pieces; if still tie, round up
+      const piecesDown = piecesNeededBZRA(down, med, form, selectedMg);
+      const piecesUp   = piecesNeededBZRA(up,   med, form, selectedMg);
+      if (piecesDown != null && piecesUp != null) {
+        if (piecesDown < piecesUp)      target = down;
+        else if (piecesUp < piecesDown) target = up;
+        else                            target = up;   // tie → up
+      } else {
+        target = down; // conservative fallback
+      }
     } else {
-      target = up;
+      // No selection: prefer round DOWN on tie (fewest units before rounding up)
+      target = down;
     }
   }
 
@@ -2639,7 +2647,7 @@ function stepBZRA(packs, percent, med, form){
     target = roundTo(Math.max(0, tot - step), step);
   }
 
-  // Try selection-only composer first (keeps halves on the same selected product row); fallback to original
+  // Compose: try selection-aware first, then fallback to original composer
   let pm = null;
   if (typeof composeForSlot_BZRA_Selected === "function") {
     pm = composeForSlot_BZRA_Selected(target, "Benzodiazepines / Z-Drug (BZRA)", med, form, selectedMg);
@@ -2651,7 +2659,6 @@ function stepBZRA(packs, percent, med, form){
   return { AM:{}, MID:{}, DIN:{}, PM: pm };
 
   // ----- local helpers (scoped) -----
-
   function buildUnitsBZRA(med, form, selected){
     const name = String(med||"").toLowerCase();
     const fr   = String(form||"").toLowerCase();
@@ -2661,11 +2668,9 @@ function stepBZRA(packs, percent, med, form){
     for (const mgRaw of (selected || [])) {
       const mg = Number(mgRaw);
       if (!Number.isFinite(mg) || mg <= 0) continue;
-      // whole tablet from selection
-      units.push({ unit: mg, piece: 1.0 });
-      // allowed half
+      units.push({ unit: mg, piece: 1.0 }); // whole tablet
       const forbidHalf = nonSplit || (name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6);
-      if (!forbidHalf) units.push({ unit: mg/2, piece: 0.5 });
+      if (!forbidHalf) units.push({ unit: mg/2, piece: 0.5 }); // half tablet
     }
     units.sort((a,b)=> b.unit - a.unit);
     return units;
