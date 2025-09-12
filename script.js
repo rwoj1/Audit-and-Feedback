@@ -457,17 +457,29 @@ function apToggleCurrentDoseUI(isAP) {
 // Ensure chips show full labels (Morning/Midday/Dinner/Night)
 function apEnsureChipLabels(){
   const LABELS = { AM: "Morning", MID: "Midday", DIN: "Dinner", PM: "Night" };
-  document.querySelectorAll("#apOrder .ap-chip").forEach(chip=>{
-    const slot = chip.getAttribute("data-slot");
+
+  document.querySelectorAll("#apOrder .ap-chip").forEach((chip, i) => {
+    const slot = chip.getAttribute("data-slot") || "";
+    // Ensure badge exists and shows 1..4
+    let badge = chip.querySelector(".ap-badge");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "ap-badge";
+      chip.prepend(badge);
+    }
+    badge.textContent = String(i + 1);
+
+    // Ensure label node exists and has correct text
     let label = chip.querySelector(".ap-chip-label");
     if (!label) {
       label = document.createElement("span");
       label.className = "ap-chip-label";
       chip.appendChild(label);
     }
-    label.textContent = LABELS[slot] || slot;
+    label.textContent = LABELS[slot] || slot || "";
   });
 }
+
 
   // Hook up events once
   document.addEventListener("DOMContentLoaded", () => {
