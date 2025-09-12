@@ -2514,15 +2514,58 @@ function stepGabapentinoid(packs, percent, med, form){
 
 /* ===== Benzodiazepines / Z-Drug (BZRA) — PM-only daily taper with selection-only & halving rules ===== */
 function stepBZRA(packs, percent, med, form){
-  const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
-  const step = (!isMR(form) || !/Zolpidem/i.test(med)) ? (BZRA_MIN_STEP[med] || 0.5) : 6.25;
-  let target = tot*(1-percent/100);
+  const tot = packsTotalMg(packs); 
+  if (tot <= EPS) return packs;
+
+  const CLS = "Benzodiazepines / Z-Drug (BZRA)";
+
+  // — Selected strengths (numeric mg), if any —
+  let selectedMg = [];
+  try {
+    if (typeof selectedProductMgs === "function") {
+      selectedMg = (selectedProductMgs() || [])
+        .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/) || [])[1]))
+        .map(Number)
+        .filter(n => Number.isFinite(n) && n > 0)
+        .sort((a,b) => a - b);
+    }
+  } catch(_) {}
+
+  // — Step size (rounding increment) —
+  // Keep your behaviour, but for Zolpidem SR respect the selected SR strength if provided.
+  let step;
+  if (/Zolpidem/i.test(med) && isMR(form)) {
+    // If user selected SR strengths, step = smallest selected SR (e.g., 6.25 or 12.5); else default 6.25
+    step = selectedMg.length ? selectedMg[0] : 6.25;
+  } else {
+    // Your existing base step (falls back to 0.5 if not mapped)
+    step = (BZRA_MIN_STEP && BZRA_MIN_STEP[med]) || 0.5;
+
+    // OPTIONAL: if you want rounding to also never go below the smallest selected whole tablet,
+    // uncomment the line below (keeps maths aligned to selection without changing output composer):
+    // if (selectedMg.length) step = Math.max(step, selectedMg[0]);
+  }
+
+  // — Compute next target and quantise (ties round up), ensure progress —
+  let target = tot * (1 - percent/100);
   const down = floorTo(target, step), up = ceilTo(target, step);
-  target = (Math.abs(up-target) < Math.abs(target-down)) ? up : down; // ties up
-  if(target===tot && tot>0){ target=Math.max(0, tot-step); target=roundTo(target,step); }
-  const pm = composeForSlot(target, "Benzodiazepines / Z-Drug (BZRA)", med, form);
-  return { AM:{}, MID:{}, DIN:{}, PM:pm };
+  target = (Math.abs(up - target) <= Math.abs(target - down)) ? up : down; // ties up
+  if (Math.abs(target - tot) < EPS && tot > 0) {
+    target = roundTo(Math.max(0, tot - step), step);
+  }
+
+  // — Compose PM-only using your existing composer —
+  // If you have a compose that accepts a selected list, prefer it; otherwise fall back.
+  let pm;
+  if (typeof composeForSlotSelected === "function") {
+    pm = composeForSlotSelected(target, CLS, med, form, selectedMg);
+  } else {
+    pm = composeForSlot(target, CLS, med, form);
+  }
+
+  return { AM:{}, MID:{}, DIN:{}, PM: pm };
 }
+
 
 /* =================== Plan builders (tablets) — date-based Phase-2 =================== */
 
