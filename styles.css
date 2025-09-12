@@ -290,7 +290,21 @@ button.ghost{
   width:1.2rem; height:1.2rem; border-radius:999px; background:#eee; font-size:.8rem;
 }
 .ap-chip .ap-chip-label { margin-left: .2rem; }
-
+.ap-dose-grid {
+  display: grid;
+  gap: .5rem;
+  max-width: 480px;
+}
+.ap-row {
+  display: grid;
+  grid-template-columns: 1fr auto; /* label on left, input on right */
+  align-items: center;
+  gap: .5rem;
+}
+.ap-row input {
+  width: 140px;
+  text-align: right;
+}
 /* ==============================
    PRINT / PDF rules
    ============================== */
