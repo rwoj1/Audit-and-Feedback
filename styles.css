@@ -314,6 +314,10 @@ button.ghost{
 #apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="DIN"]::after { content: " Dinner";  margin-left:.25rem; }
 #apOrder .ap-chip:not(:has(.ap-chip-label))[data-slot="PM"]::after  { content: " Night";   margin-left:.25rem; }
 
+/* DnD affordances for AP chips */
+#apOrder .ap-chip { cursor: grab; }
+#apOrder .ap-chip.dragging { opacity: .6; cursor: grabbing; }
+
 /* ==============================
    PRINT / PDF rules
    ============================== */
