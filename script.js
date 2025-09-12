@@ -573,6 +573,46 @@ function apGetReductionOrder(){
     apInitChips();
   });
 })();
+/* ===== Antipsychotics: seed packs from the four AM/MID/DIN/PM inputs ===== */
+function apSeedPacksFromFourInputs(){
+  // Prefer your existing reader if present
+  let doses = {};
+  if (typeof apReadInputs === "function") {
+    // Expected shape: { AM:number, MID:number, DIN:number, PM:number }
+    doses = apReadInputs() || {};
+  } else {
+    // Simple DOM fallback
+    const read = (id) => {
+      const raw = (document.getElementById(id)?.value || "0").toString().replace(/[, ]/g,"");
+      const n = parseFloat(raw);
+      return Number.isFinite(n) ? n : 0;
+    };
+    doses = {
+      AM:  read("apDoseAM"),
+      MID: read("apDoseMID"),
+      DIN: read("apDoseDIN"),
+      PM:  read("apDosePM"),
+    };
+  }
+
+  const cls  = $("classSelect")?.value || "Antipsychotic";
+  const med  = $("medicineSelect")?.value || "";
+  const form = $("formSelect")?.value || "Tablet";
+
+  // Build slot packs using your existing composer so it honours:
+  // - selected formulations (the product picker)
+  // - halves where allowed
+  // - your global tie-breakers
+  const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+  ["AM","MID","DIN","PM"].forEach(slot => {
+    const mg = +(doses[slot] || 0);
+    if (mg > 0) {
+      const pack = composeForSlot(mg, cls, med, form);
+      out[slot] = pack || {};
+    }
+  });
+  return out;
+}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
@@ -3067,7 +3107,10 @@ function buildPlanTablets(){
 
   if (!(p1Pct>0 && p1Int>0)) { showToast("Enter a percentage and an interval to generate a plan."); return []; }
 
-  let packs=buildPacksFromDoseLines();
+  // For Antipsychotic, seed from the four AP inputs; otherwise keep existing logic.
+  let packs = (cls === "Antipsychotic" && typeof apSeedPacksFromFourInputs === "function")
+  ? apSeedPacksFromFourInputs()
+  : buildPacksFromDoseLines();
   if (packsTotalMg(packs) === 0) return [];
 
   const rows=[]; let date=new Date(startDate); const capDate=new Date(+startDate + THREE_MONTHS_MS);
