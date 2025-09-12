@@ -359,29 +359,30 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   };
 
   // Show/hide panel & order row; fill the brief; update total
-  function apVisibilityTick() {
-    const cls = $id("classSelect")?.value || "";
-    const med = $id("medicineSelect")?.value || "";
-    const isAP = (cls === "Antipsychotic") && (med in AP_MAX);
+function apVisibilityTick() {
+  const cls = document.getElementById("classSelect")?.value || "";
+  const med = document.getElementById("medicineSelect")?.value || "";
+  const isAP = (cls === "Antipsychotic") && (med in AP_MAX);
 
-    const panel = $id("apControls");
-    const order = $id("apOrderRow");
+  const panel = document.getElementById("apControls");
+  const order = document.getElementById("apOrderRow");
+  if (!panel || !order) return;
 
-    if (!panel || !order) return;
+  panel.style.display = isAP ? "" : "none";
+  order.style.display = isAP ? "" : "none";
 
-    panel.style.display = isAP ? "" : "none";
-    order.style.display = isAP ? "" : "none";
+  // NEW: hide/show generic Current Dosage UI
+  apToggleCurrentDoseUI(isAP);
 
-    if (!isAP) return;
+  if (!isAP) return;
 
-    // Fill brief
-    const brief = $id("apBriefDrug");
-    if (brief) brief.textContent = DRUG_LABEL[med] || "the maximum for this medicine";
+  const brief = document.getElementById("apBriefDrug");
+  if (brief) brief.textContent = DRUG_LABEL[med] || "the maximum for this medicine";
 
-    // Show “X mg / Y mg max” and color
-    apUpdateTotal();
-  }
-
+  apUpdateTotal();
+  apEnsureChipLabels();
+}
+  
   // Read the four inputs (mg; numbers)
   function apReadInputs() {
     const get = (id) => {
@@ -426,6 +427,42 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
       if (b) b.textContent = String(i + 1);
     });
   }
+  // Hide/show the generic Current Dosage UI when Antipsychotic is active
+function apToggleCurrentDoseUI(isAP) {
+  // Hide the whole generic dose lines container
+  const lines = document.getElementById("doseLinesContainer")
+           || document.querySelector(".dose-lines");
+  if (lines) {
+    lines.style.display = isAP ? "none" : "";
+    // additionally disable inputs inside it so nothing interferes
+    [...lines.querySelectorAll("input, select, button")].forEach(el=>{
+      if (isAP) el.setAttribute("disabled","disabled");
+      else el.removeAttribute("disabled");
+    });
+  }
+
+  // Hide the "Add dose line" button (try a few common ids/classes)
+  const addBtn = document.getElementById("addDoseLineBtn")
+             || document.getElementById("addDoseLine")
+             || document.querySelector("[data-action='add-dose-line'], .btn-add-dose-line");
+  if (addBtn) addBtn.style.display = isAP ? "none" : "";
+
+  // Hide any "Remove" buttons in generic dose lines
+  const removeBtns = document.querySelectorAll(
+    ".dose-lines .btn-remove, .dose-lines [data-action='remove-dose-line'], .dose-line .remove-line"
+  );
+  removeBtns.forEach(btn => btn.style.display = isAP ? "none" : "");
+}
+
+// Ensure chips show full labels (Morning/Midday/Dinner/Night)
+function apEnsureChipLabels(){
+  const LABELS = { AM:"Morning", MID:"Midday", DIN:"Dinner", PM:"Night" };
+  document.querySelectorAll("#apOrder .ap-chip").forEach(chip=>{
+    const slot = chip.getAttribute("data-slot");
+    const label = chip.querySelector(".ap-chip-label");
+    if (label) label.textContent = LABELS[slot] || slot;
+  });
+}
 
   // Hook up events once
   document.addEventListener("DOMContentLoaded", () => {
@@ -444,6 +481,7 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
     // First paint
     apVisibilityTick();
     apRefreshBadges();
+    apEnsureChipLabels();
   });
 })();
 
