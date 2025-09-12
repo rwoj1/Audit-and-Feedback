@@ -514,7 +514,6 @@ function apInitChips(){
   };
 
   // Show/hide panel when Class/Medicine changes
-// REPLACE your existing apVisibilityTick with this version
 function apVisibilityTick(){
   const host = document.getElementById("apControls"); if (!host) return;
   const cls = document.getElementById("classSelect")?.value || "";
@@ -544,6 +543,64 @@ function apVisibilityTick(){
     apVisibilityTick();
   });
 })();
+// Hide general dose builder controls when antipsychotics is active
+function apToggleGlobalDoseUI(isAP){
+  // Candidate selectors for your existing "Add dose line" button
+  const addBtn = document.querySelector(
+    "#addDoseLine, [data-action='add-dose-line'], .dose-add-btn, .btn-add-dose-line"
+  );
+  if (addBtn) addBtn.style.display = isAP ? "none" : "";
+
+  // Candidate selectors for your "Line 1" generic row (adjust if needed)
+  const line1 = document.querySelector(
+    "#doseLine1, .dose-line[data-line='1'], .dose-row[data-index='0']"
+  );
+  if (line1) line1.style.display = isAP ? "none" : "";
+
+  // Optionally disable inputs in your generic dose-lines container (safer than hiding many things)
+  const generic = document.getElementById("doseLines") || document.querySelector(".dose-lines");
+  if (generic) {
+    [...generic.querySelectorAll("input, select, button")].forEach(el=>{
+      // don't disable anything inside our AP panel
+      if (el.closest("#apControls")) return;
+      if (isAP) el.setAttribute("disabled","disabled");
+      else el.removeAttribute("disabled");
+    });
+  }
+}
+
+// Try to move the AP order row just above "Phase 1" title; fallback: keep inside AP panel
+function relocateApOrder(isAP){
+  const wrap = document.querySelector("#apControls .ap-order-wrap") || document.querySelector(".ap-order-wrap");
+  const home = document.getElementById("apControls");
+  if (!wrap || !home) return;
+
+  if (isAP) {
+    const anchor = findPhase1Anchor();
+    if (anchor && anchor.parentElement) {
+      // insert the order row right before the Phase 1 heading
+      anchor.parentElement.insertBefore(wrap, anchor);
+    }
+  } else {
+    // return order row to the AP panel (end of panel)
+    if (wrap.parentElement !== home) home.appendChild(wrap);
+  }
+}
+
+// Heuristics to find your "Phase 1" title node in the other card. Adjust if you have an id.
+function findPhase1Anchor(){
+  // 1) Try explicit ids if you have them
+  let el = document.getElementById("phase1Title") || document.getElementById("phase1Card");
+  if (el) return el;
+
+  // 2) Try any headings that read "Phase 1"
+  const headings = document.querySelectorAll("h1,h2,h3,.card-title");
+  for (const h of headings) {
+    const t = (h.textContent || "").trim();
+    if (/^Phase\s*1\b/i.test(t)) return h;
+  }
+  return null;
+}
 
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
