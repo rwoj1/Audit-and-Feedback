@@ -1838,7 +1838,13 @@ let doseLines=[]; let nextLineId=1;
 function canSplitTablets(cls, form, med){
   if(/Patch|Capsule|Orally\s*Dispersible\s*Tablet/i.test(form) || isMR(form)) return {half:false, quarter:false};
   if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return {half:false, quarter:false};
-  if(cls==="Benzodiazepines / Z-Drug (BZRA)") return {half:true, quarter:false};
+  if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
+  const f = String(form || "").toLowerCase();
+  const nonSplittable =
+    /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(f);
+  return nonSplittable ? { half: false, quarter: false }
+                       : { half: true,  quarter: false };
+}
   if(cls==="Antipsychotic") return {half:true, quarter:false};
   if (cls === "Gabapentinoids") return { half:false, quarter:false };
   return {half:true, quarter:true};
