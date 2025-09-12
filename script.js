@@ -1965,9 +1965,8 @@ const CATALOG = {
     Zopiclone: { Tablet: ["7.5 mg"] },
   },
   Antipsychotic: {
-    Haloperidol: { Tablet: ["0.5 mg","1.5 mg","5 mg"] },
     Olanzapine: { Tablet: ["2.5 mg","5 mg","7.5 mg","10 mg","15 mg","20 mg"] },
-    Quetiapine: { "Immediate Release Tablet": ["25 mg","100 mg","200 mg","300 mg"], "Slow Release Tablet": ["50 mg","150 mg","200 mg","300 mg","400 mg"] },
+    Quetiapine: { "Immediate Release Tablet": ["25 mg","100 mg","200 mg","300 mg"],
     Risperidone: { Tablet: ["0.5 mg","1 mg","2 mg","3 mg","4 mg"] },
   },
   "Proton Pump Inhibitor": {
@@ -1991,7 +1990,7 @@ const BZRA_MIN_STEP = {
   Alprazolam: 0.25, Diazepam: 1.0, Flunitrazepam: 0.5, Lorazepam: 0.5,
   Nitrazepam: 2.5,  Oxazepam: 7.5, Temazepam: 5.0, Zolpidem: 5.0, Zopiclone: 3.75, Clonazepam: 0.25,
 };
-const AP_ROUND = { Haloperidol: 0.5, Risperidone: 0.5, Quetiapine: 12.5, Olanzapine: 1.25 };
+const AP_ROUND = { Haloperidol: 0.5, Risperidone: 0.25, Quetiapine: 12.5, Olanzapine: 1.25 };
 
 /* =================== Parsing/labels =================== */
 
@@ -2534,32 +2533,110 @@ function stepPPI(packs, percent, cls, med, form){
   return recomposeSlots(cur, cls, med, form);
 }
 
-/* ===== Antipsychotics ===== */
+/* ===== Antipsychotics (IR only): Olanzapine / Quetiapine (plain) / Risperidone =====
+   Rule set:
+   - Use fixed rounding grids (AP_ROUND).
+   - Compute next total from previous achieved: tot*(1 - %).
+   - Snap to nearest grid; on tie prefer fewer units (lower total), then round up.
+   - Shave the reduction across the user’s chosen order (if chips exist),
+     otherwise fall back to MID→DIN→AM→PM (if DIN present), or MID→AM, etc.
+   - Recompose per-slot using only selected formulations.
+*/
 function stepAP(packs, percent, med, form){
+  // Only treat IR/tablets with this logic; SR falls back to opioid-style (unchanged)
   const isIR = !isMR(form);
-  if(!isIR) return stepOpioid_Shave(packs, percent, "Antipsychotic", med, form); // SR like opioids
+  if (!isIR) return stepOpioid_Shave(packs, percent, "Antipsychotic", med, form);
 
-  const tot=packsTotalMg(packs); if(tot<=EPS) return packs;
-  const step=AP_ROUND[med] || 0.5;
-  let target=roundTo(tot*(1-percent/100), step);
-  if(target===tot && tot>0){ target=Math.max(0, tot-step); target=roundTo(target,step); }
+  // Enforce our three-medicine scope (quietly no-op if something else slips through)
+  const allowed = /^(Olanzapine|Quetiapine|Risperidone)$/i.test(String(med||""));
+  if (!allowed) return packs;
 
-  let cur = { AM: slotTotalMg(packs,"AM"), MID: slotTotalMg(packs,"MID"), DIN: slotTotalMg(packs,"DIN"), PM: slotTotalMg(packs,"PM") };
-  let reduce= +(tot - target).toFixed(3);
-  const shave = (slot)=>{
-    if(reduce<=EPS || cur[slot]<=EPS) return;
-    const can = cur[slot];
-    const dec = Math.min(can, roundTo(reduce, step));
-    cur[slot] = +(cur[slot] - dec).toFixed(3);
-    reduce = +(reduce - dec).toFixed(3);
+  const tot = packsTotalMg(packs);
+  if (tot <= EPS) return packs;
+
+  // Grid step (fallback keeps old behaviour if somehow missing)
+  const step = AP_ROUND[med] || lowestStepMg("Antipsychotic", med, form) || 0.5;
+
+  // Next total (nearest-to-grid; tie → fewer units, then round up)
+  const rawNext = tot * (1 - percent/100);
+  const down = Math.floor(rawNext/step)*step;
+  const up   = Math.ceil (rawNext/step)*step;
+
+  const chooseByFewestUnits = (a,b,target) => {
+    const da = Math.abs(target - a), db = Math.abs(b - target);
+    if (da < db) return a;
+    if (db < da) return b;
+    // tie on distance → fewer units → lower total wins; if equal, pick up
+    if (a !== b) return Math.min(a,b);
+    return b;
   };
-  const hasDIN = cur.DIN > EPS, hasPM = cur.PM > EPS;
-  let order;
-  if (hasDIN && hasPM) order = ["MID","DIN","AM","PM"];
-  else if (hasDIN || hasPM) order = ["MID","AM", hasDIN ? "DIN" : "PM"];
-  else order = ["MID","AM"];
-  order.forEach(shave);
+  let target = chooseByFewestUnits(down, up, rawNext);
+
+  // ensure progress (don’t stall if already on-grid)
+  if (target === tot && tot > 0) {
+    target = roundTo(Math.max(0, tot - step), step);
+  }
+
+  // Current per-slot mg
+  const cur = {
+    AM:  slotTotalMg(packs,"AM")  | 0,
+    MID: slotTotalMg(packs,"MID") | 0,
+    DIN: slotTotalMg(packs,"DIN") | 0,
+    PM:  slotTotalMg(packs,"PM")  | 0
+  };
+
+  // Read order from chips if present, else sensible default
+  const order = readApReductionOrder(cur);
+
+  // Amount to remove this step
+  let reduce = +(tot - target).toFixed(3);
+
+  const shave = (slot) => {
+    if (reduce <= EPS || cur[slot] <= EPS) return;
+    const can = Math.min(cur[slot], reduce);
+    const dec = roundTo(can, step);
+    cur[slot] = +(cur[slot] - dec).toFixed(3);
+    reduce    = +(reduce    - dec).toFixed(3);
+  };
+
+  // Walk the order until the reduction has been fully shaved
+  let guard = 64;
+  while (reduce > EPS && guard-- > 0) {
+    for (const s of order) shave(s);
+  }
+
+  // Snap every slot to the grid and clamp tiny negatives
+  for (const k of ["AM","MID","DIN","PM"]) {
+    cur[k] = Math.max(0, roundTo(cur[k], step));
+    if (cur[k] < EPS) cur[k] = 0;
+  }
+
+  // Recompose with the user’s selected formulations (no phantom strengths)
   return recomposeSlots(cur, "Antipsychotic", med, form);
+
+  // ---------- helpers (scoped) ----------
+  function readApReductionOrder(v){
+    // If chips exist, read them in left→right order; else fall back.
+    const pills = document.querySelectorAll('#apOrder .ap-pill');
+    if (pills && pills.length) {
+      const map = { "Morning":"AM", "Midday":"MID", "Dinner":"DIN", "Night":"PM" };
+      const arr = [];
+      pills.forEach(el => {
+        const lbl = (el.getAttribute('data-label') || el.textContent || '').trim();
+        if (map[lbl]) arr.push(map[lbl]);
+      });
+      if (arr.length) return arr;
+    }
+    // Fallback: mirror the older behaviour
+    const hasDIN = v.DIN > EPS, hasPM = v.PM > EPS, hasMID = v.MID > EPS;
+    if (hasMID && hasDIN)     return ["MID","DIN","AM","PM"];
+    if (hasMID && !hasDIN)    return ["MID","AM","PM"];
+    if (!hasMID && hasDIN)    return ["DIN","AM","PM"];
+    if (v.AM > EPS && hasPM)  return ["AM","PM"];
+    if (v.AM > EPS)           return ["AM"];
+    if (hasPM)                return ["PM"];
+    return ["AM","PM","MID","DIN"]; // harmless fallback
+  }
 }
 
 /* ===== Gabapentinoids
