@@ -357,30 +357,40 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
     Risperidone: "Risperidone — maximum 2 mg/day",
     Olanzapine: "Olanzapine — maximum 10 mg/day",
   };
-
+  // --- NEW: reset the four AP inputs to 0 ---
+  function apResetInputsToZero(andUpdate=true){
+  ["apDoseAM","apDoseMID","apDoseDIN","apDosePM"].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.value = "0";
+  });
+  if (andUpdate && typeof apUpdateTotal === "function") apUpdateTotal();
+  }
   // Show/hide panel & order row; fill the brief; update total
-function apVisibilityTick() {
+
+ function apVisibilityTick(){
   const cls = document.getElementById("classSelect")?.value || "";
   const med = document.getElementById("medicineSelect")?.value || "";
-  const isAP = (cls === "Antipsychotic") && (med in AP_MAX);
 
   const panel = document.getElementById("apControls");
   const order = document.getElementById("apOrderRow");
   if (!panel || !order) return;
 
+  const isAP = (cls === "Antipsychotic");           // <-- changed: class only
   panel.style.display = isAP ? "" : "none";
   order.style.display = isAP ? "" : "none";
 
-  // NEW: hide/show generic Current Dosage UI
-  apToggleCurrentDoseUI(isAP);
+  if (!isAP) { apMarkDirty(false); return; }
 
-  if (!isAP) return;
-
+  // brief text (shows cap if known, otherwise prompt)
+  const AP_MAX = { Quetiapine:150, Risperidone:2, Olanzapine:10 };
   const brief = document.getElementById("apBriefDrug");
-  if (brief) brief.textContent = DRUG_LABEL[med] || "the maximum for this medicine";
+  if (brief) {
+    if (AP_MAX[med]) brief.textContent = `${med} — maximum ${AP_MAX[med]} mg/day`;
+    else brief.textContent = "Select a medicine";
+  }
 
-  apUpdateTotal();
-  apEnsureChipLabels();
+  apEnsureChipLabels?.();
+  apUpdateTotal?.();
 }
   
   // Read the four inputs (mg; numbers)
@@ -553,12 +563,17 @@ function apGetReductionOrder(){
 }
 
   // Hook up events once
-  document.addEventListener("DOMContentLoaded", () => {
-    // Select changes → show/hide and recompute
-    ["classSelect","medicineSelect","formSelect"].forEach(id => {
-      const el = $id(id);
-      if (el) el.addEventListener("change", apVisibilityTick);
+document.addEventListener("DOMContentLoaded", () => {
+  ["classSelect","medicineSelect","formSelect"].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("change", () => {
+      const cls = document.getElementById("classSelect")?.value || "";
+      const isAP = (cls === "Antipsychotic");
+      if (id === "medicineSelect" && isAP) apResetInputsToZero(true);  // <-- reset to 0 on med change
+      apVisibilityTick();
     });
+  });
 
     // Inputs → recompute total live
     ["apDoseAM","apDoseMID","apDoseDIN","apDosePM"].forEach(id => {
@@ -573,6 +588,7 @@ function apGetReductionOrder(){
     apInitChips();
   });
 })();
+
 /* ===== Antipsychotics: seed packs from the four AM/MID/DIN/PM inputs ===== */
 function apSeedPacksFromFourInputs(){
   // Prefer your existing reader if present
@@ -613,7 +629,54 @@ function apSeedPacksFromFourInputs(){
   });
   return out;
 }
+// --- NEW: check if AP total exceeds cap ---
+function apIsOverCap(){
+  const cls = document.getElementById("classSelect")?.value || "";
+  if (cls !== "Antipsychotic") return false;
+  const med = document.getElementById("medicineSelect")?.value || "";
+  const AP_MAX = { Quetiapine:150, Risperidone:2, Olanzapine:10 };
 
+  // read inputs
+  const read = (id)=>parseFloat(document.getElementById(id)?.value || "0")||0;
+  const total = read("apDoseAM")+read("apDoseMID")+read("apDoseDIN")+read("apDosePM");
+  const cap = AP_MAX[med] || 0;
+  return cap>0 && total>cap;
+}
+
+// --- NEW: mark output dirty / clean & disable/enable print/download buttons ---
+function apMarkDirty(isDirty, message){
+  const scheduleHost = document.getElementById("scheduleBlock");
+  const warnId = "apCapWarn";
+  if (scheduleHost) {
+    if (isDirty){
+      scheduleHost.innerHTML = `<div id="${warnId}" class="alert alert-danger" role="alert">
+        ${message || "The total daily dose exceeds the maximum for this medicine. Adjust the Current Dosage to proceed."}
+      </div>`;
+    } else {
+      // do nothing here; your normal renderer will populate as usual
+    }
+  }
+  // disable/enable print/download
+  const disable = (sel)=>{
+    document.querySelectorAll(sel).forEach(btn=>{
+      btn.setAttribute("disabled","disabled");
+      btn.classList.add("is-disabled");
+      btn.title = "Printing disabled until dose is within maximum.";
+    });
+  };
+  const enable = (sel)=>{
+    document.querySelectorAll(sel).forEach(btn=>{
+      btn.removeAttribute("disabled");
+      btn.classList.remove("is-disabled");
+      btn.removeAttribute("title");
+    });
+  };
+  if (isDirty){
+    disable("#printBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
+  } else {
+    enable("#printBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
+  }
+}
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
 //#endregion
@@ -3108,11 +3171,18 @@ function buildPlanTablets(){
   if (!(p1Pct>0 && p1Int>0)) { showToast("Enter a percentage and an interval to generate a plan."); return []; }
 
   // For Antipsychotic, seed from the four AP inputs; otherwise keep existing logic.
+  
   let packs = (cls === "Antipsychotic" && typeof apSeedPacksFromFourInputs === "function")
   ? apSeedPacksFromFourInputs()
   : buildPacksFromDoseLines();
   if (packsTotalMg(packs) === 0) return [];
-
+if (cls === "Antipsychotic") {
+  if (typeof apIsOverCap === "function" && apIsOverCap()) {
+    apMarkDirty?.(true, "The total daily dose exceeds the maximum for this antipsychotic. Reduce the dose to continue.");
+    return []; // stop: no rows generated
+  }
+  apMarkDirty?.(false); // clean state before rendering
+}
   const rows=[]; let date=new Date(startDate); const capDate=new Date(+startDate + THREE_MONTHS_MS);
 
 const doStep = (phasePct) => {
