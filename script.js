@@ -199,23 +199,13 @@ function nounForGabapentinByStrength(form, med, strengthStr){
 let SelectedFormulations = new Set();
 
 function shouldShowProductPicker(cls, med, form){
-  // Limit to the medicines you specified
-  const isOpioidSR = cls === "Opioid" && /SR/i.test(form) && /Tablet/i.test(form);
-  const allowList = [
-    // Opioids SR tablet
-    ["Opioid","Morphine",/SR/i],
-    ["Opioid","Oxycodone",/SR/i],
-    ["Opioid","Oxycodone \/ Naloxone",/SR/i],
-    ["Opioid","Tapentadol",/SR/i],
-    ["Opioid","Tramadol",/SR/i],
-    // Gabapentinoids
-    ["Gabapentinoids","Gabapentin",/.*/],
-    ["Gabapentinoids","Pregabalin",/Capsule/i]
-  ];
-
-  return allowList.some(([c,m,formRe]) =>
-    c===cls && new RegExp(m,"i").test(med||"") && formRe.test(form||"")
-  );
+  // Show the picker for ANY medicine/form that has 2+ commercial strengths.
+  try {
+    const mgList = allCommercialStrengthsMg(cls, med, form); // already in V6
+    return Array.isArray(mgList) && mgList.length >= 2;
+  } catch(_) {
+    return false;
+  }
 }
 
 // Build a nice per-product label
