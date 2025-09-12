@@ -27,51 +27,6 @@
     
       <div class="card-head">
         <h2>Current Dosage</h2>
-        <!-- Antipsychotic: dose entry + order (shown only for Class = Antipsychotic) -->
-<div id="apControls" style="display:none; margin-top:1rem;">
-  <div class="ap-note" id="apNote">
-    <!-- filled by JS with the medicine-specific cap + grid -->
-  </div>
-
-  <div class="ap-dose-grid">
-    <label class="ap-row">
-      <span>In the morning</span>
-      <input id="apDoseAM"  type="number" min="0" step="0.01" value="0"> <span>mg</span>
-    </label>
-    <label class="ap-row">
-      <span>At midday</span>
-      <input id="apDoseMID" type="number" min="0" step="0.01" value="0"> <span>mg</span>
-    </label>
-    <label class="ap-row">
-      <span>At dinner</span>
-      <input id="apDoseDIN" type="number" min="0" step="0.01" value="0"> <span>mg</span>
-    </label>
-    <label class="ap-row">
-      <span>At night</span>
-      <input id="apDosePM"  type="number" min="0" step="0.01" value="0"> <span>mg</span>
-    </label>
-  </div>
-
-  <div class="ap-total-line">
-    <span>Total:</span>
-    <span id="apTotalBox" class="ap-total-box ap-ok">0 mg / 0 mg max</span>
-  </div>
-
-  <div class="ap-brief">
-    The total daily dose must be less than <strong id="apBriefDrug"></strong> to be able to proceed.
-  </div>
-
-  <div class="ap-order-wrap">
-    <div class="ap-order-label">Reduction order (drag to reorder):</div>
-    <div id="apOrder" class="ap-order-chips" aria-label="Reduction order">
-      <button class="ap-chip" data-slot="AM"  draggable="true"><span class="ap-badge">1</span> AM</button>
-      <button class="ap-chip" data-slot="MID" draggable="true"><span class="ap-badge">2</span> MID</button>
-      <button class="ap-chip" data-slot="DIN" draggable="true"><span class="ap-badge">3</span> DIN</button>
-      <button class="ap-chip" data-slot="PM"  draggable="true"><span class="ap-badge">4</span> PM</button>
-    </div>
-  </div>
-</div>
-
         <button id="addDoseLineBtn" type="button" class="secondary">Add Dose Line</button>
       </div>
       <div id="doseLinesContainer" class="dose-lines"></div>
@@ -253,4 +208,3 @@
 <script src="script.js?v=print10"></script>
 </body>
 </html>
-
