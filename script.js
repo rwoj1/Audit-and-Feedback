@@ -1965,9 +1965,9 @@ const CATALOG = {
     Zopiclone: { Tablet: ["7.5 mg"] },
   },
   Antipsychotic: {
-    Olanzapine: { Tablet: ["2.5 mg","5 mg","7.5 mg","10 mg","15 mg","20 mg"] },
-    Quetiapine: { "Immediate Release Tablet": ["25 mg","100 mg","200 mg","300 mg"]},
-    Risperidone: { Tablet: ["0.5 mg","1 mg","2 mg","3 mg","4 mg"] },
+    Olanzapine: { Tablet: ["2.5 mg","5 mg","7.5 mg","10 mg"] },
+    Quetiapine: { "Immediate Release Tablet": ["25 mg","100 mg"]},
+    Risperidone: { Tablet: ["0.5 mg","1 mg","2 mg"] },
   },
   "Proton Pump Inhibitor": {
     Esomeprazole: { Tablet: ["20 mg","40 mg"] },
