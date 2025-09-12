@@ -170,51 +170,14 @@ function allCommercialStrengthsMg(cls, med, form){
 // rewrite the label to the selected base strength so we don't "invent" a lower strength.
 function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
   try {
-    // Only adjust labels for BZRA
-    if (cls !== "Benzodiazepines / Z-Drug (BZRA)") return rawStrengthLabel;
-
-    // Robust mg parser (handles numbers or strings)
-    const toMg = (v) => {
-      if (typeof v === "number") return v;
-      if (typeof parseMgFromStrength === "function") {
-        const x = parseMgFromStrength(v);
-        if (Number.isFinite(x) && x > 0) return x;
-      }
-      const m = String(v || "").match(/(\d+(\.\d+)?)/);
-      return m ? Number(m[1]) : NaN;
-    };
-
-    // Stable key to avoid float mismatch (e.g., 7.5 vs 7.500000)
-    const key = (n) => Number.isFinite(n) ? n.toFixed(6) : "NaN";
-
     const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
-    if (!Array.isArray(chosen) || chosen.length === 0) return rawStrengthLabel;
-
-    // Map of selected mg -> original label
-    const chosenMap = new Map();
-    for (const s of chosen) {
-      const mg = toMg(s);
-      if (Number.isFinite(mg) && mg > 0) chosenMap.set(key(mg), s);
-    }
-
-    const targetMg = toMg(rawStrengthLabel);
+    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
+    const targetMg = parseMgFromStrength(rawStrengthLabel);
     if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
-
-    // If already one of the selected strengths, keep it
-    if (chosenMap.has(key(targetMg))) return chosenMap.get(key(targetMg));
-
-    // Respect tablet splitting policy
-    const split = (typeof canSplitTablets === "function")
-      ? canSplitTablets(cls, form, med)
-      : { half:false, quarter:false };
-
-    // If label is exactly a HALF of a selected tab, relabel to that selected base
-    if (split.half && chosenMap.has(key(targetMg * 2))) return chosenMap.get(key(targetMg * 2));
-
-    // If label is exactly a QUARTER of a selected tab, relabel to that selected base
-    if (split.quarter && chosenMap.has(key(targetMg * 4))) return chosenMap.get(key(targetMg * 4));
-
-    // Otherwise leave as-is
+    if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
+    const split = (typeof canSplitTablets === "function") ? canSplitTablets(cls, form, med) : {half:false, quarter:false};
+    if (split.half && chosenMap.has(targetMg * 2)) return chosenMap.get(targetMg * 2);
+    if (split.quarter && chosenMap.has(targetMg * 4)) return chosenMap.get(targetMg * 4);
     return rawStrengthLabel;
   } catch {
     return rawStrengthLabel;
@@ -1873,15 +1836,9 @@ let doseLines=[]; let nextLineId=1;
 
 /* splitting rules */
 function canSplitTablets(cls, form, med){
-   if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
-    const f = String(form || "").toLowerCase();
-    const isNonSplittable = /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(f);
-    if (!isNonSplittable) {
-      return { half: true, quarter: false };
-    }
-  }
   if(/Patch|Capsule|Orally\s*Dispersible\s*Tablet/i.test(form) || isMR(form)) return {half:false, quarter:false};
   if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return {half:false, quarter:false};
+  if(cls==="Benzodiazepines / Z-Drug (BZRA)") return {half:true, quarter:false};
   if(cls==="Antipsychotic") return {half:true, quarter:false};
   if (cls === "Gabapentinoids") return { half:false, quarter:false };
   return {half:true, quarter:true};
