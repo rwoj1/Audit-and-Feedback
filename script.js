@@ -514,21 +514,24 @@ function apInitChips(){
   };
 
   // Show/hide panel when Class/Medicine changes
-  function apVisibilityTick(){
-    const host = $id("apControls"); if (!host) return;
-    if (!isAntipsychoticSelected()) {
-      host.style.display = "none";
-      return;
-    }
-    const med = currentMed();
-    if (!/^(Quetiapine|Risperidone|Olanzapine)$/i.test(med)) {
-      host.style.display = "none"; // enforce your 3-medicine scope
-      return;
-    }
-    host.style.display = "";
+// REPLACE your existing apVisibilityTick with this version
+function apVisibilityTick(){
+  const host = document.getElementById("apControls"); if (!host) return;
+  const cls = document.getElementById("classSelect")?.value || "";
+  const med = document.getElementById("medicineSelect")?.value || "";
+  const isAP = (cls === "Antipsychotic") && /^(Quetiapine|Risperidone|Olanzapine)$/i.test(med);
+  // show/hide the antipsychotic panel
+  host.style.display = isAP ? "" : "none";
+  // Toggle generic dose UI (hide add button + first generic line while AP is active)
+  apToggleGlobalDoseUI(isAP);
+  if (isAP) {
     formatCapBrief(med);
     apUpdateTotal();
+    relocateApOrder(true);
+  } else {
+    relocateApOrder(false);
   }
+}
 
   // Hook into your selects if present
   $id("classSelect")?.addEventListener("change", apVisibilityTick);
