@@ -456,11 +456,16 @@ function apToggleCurrentDoseUI(isAP) {
 
 // Ensure chips show full labels (Morning/Midday/Dinner/Night)
 function apEnsureChipLabels(){
-  const LABELS = { AM:"Morning", MID:"Midday", DIN:"Dinner", PM:"Night" };
+  const LABELS = { AM: "Morning", MID: "Midday", DIN: "Dinner", PM: "Night" };
   document.querySelectorAll("#apOrder .ap-chip").forEach(chip=>{
     const slot = chip.getAttribute("data-slot");
-    const label = chip.querySelector(".ap-chip-label");
-    if (label) label.textContent = LABELS[slot] || slot;
+    let label = chip.querySelector(".ap-chip-label");
+    if (!label) {
+      label = document.createElement("span");
+      label.className = "ap-chip-label";
+      chip.appendChild(label);
+    }
+    label.textContent = LABELS[slot] || slot;
   });
 }
 
