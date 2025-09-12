@@ -297,13 +297,12 @@ button.ghost{
 }
 .ap-row {
   display: grid;
-  grid-template-columns: 1fr auto; /* label on left, input on right */
+  grid-template-columns: 1fr auto auto; /* label | input | mg */
   align-items: center;
   gap: .5rem;
 }
-.ap-row input {
-  width: 140px;
-  text-align: right;
+.ap-row input { width: 140px; text-align: right; }
+.ap-row span:last-child { min-width: 2.2rem; }
 }
 /* ==============================
    PRINT / PDF rules
