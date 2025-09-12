@@ -163,27 +163,6 @@ function allCommercialStrengthsMg(cls, med, form){
   } catch(_) {}
   return [];
 }
-/* === BZRA split override: allow halves for plain tablets (not SR/ODT/etc) === */
-(function(){
-  if (window.__bzraSplitPatched) return;
-  window.__bzraSplitPatched = true;
-
-  const _origCanSplit = (typeof canSplitTablets === "function") ? canSplitTablets : null;
-
-  window.canSplitTablets = function(cls, form, med){
-    const c = String(cls || "");
-    const f = String(form || "").toLowerCase();
-
-    // BZRA plain tablet → halves allowed; quarters off
-    const isBZRA = (c === "Benzodiazepines / Z-Drug (BZRA)") || /bzra|benzodiazepines/i.test(c);
-    const nonSplittableForm = /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(f);
-
-    if (isBZRA && !nonSplittableForm) {
-      return { half: true, quarter: false };
-    }
-    return _origCanSplit ? _origCanSplit(cls, form, med) : { half: false, quarter: false };
-  };
-})();
 
 // Keep labels aligned with the user's selected formulations.
 // If the displayed label's mg is not one of the selected strengths,
@@ -2095,39 +2074,46 @@ function recomposeSlots(targets, cls, med, form){
 }
 /* === BZRA selection-only composer (PM-only). Keeps halves on their source product. === */
 function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
+  // Use this ONLY when there really is a selection
   if (!Array.isArray(selectedMg) || selectedMg.length === 0) return null;
   if (!(targetMg > 0)) return {};
 
+  // Build allowed units from the selected list:
+  // - full tablet: unit = mg,   piece = 1.0, source = mg
+  // - half tablet: unit = mg/2, piece = 0.5, source = mg (only if halving allowed)
   const name = String(med||"").toLowerCase();
   const fr   = String(form||"").toLowerCase();
 
-  const nonSplit = /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(fr);
+  const isMR = /slow\s*release|sr|cr|er|mr/.test(fr);
+  const isNoSplitForm = isMR || /odt|wafer|dispers/i.test(fr);
+  const noSplitAlp025 = (mg) => (name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6);
 
-  // Build candidate units: full tabs + halves (if form splittable, alprazolam 0.25 exception handled by selection)
   const units = [];
-  for (const mgRaw of selectedMg){
-    const mg = Number(mgRaw);
-    if (!Number.isFinite(mg) || mg <= 0) continue;
-    units.push({ unit: mg,   source: mg, piece: 1.0 });
-    if (!nonSplit && !(name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6)) {
-      units.push({ unit: mg/2, source: mg, piece: 0.5 });
+  for (const mg of selectedMg){
+    const m = Number(mg);
+    if (!Number.isFinite(m) || m <= 0) continue;
+    // full
+    units.push({ unit:m, source:m, piece:1.0 });
+    // half (only when allowed)
+    if (!isNoSplitForm && !noSplitAlp025(m)) {
+      units.push({ unit:m/2, source:m, piece:0.5 });
     }
   }
   if (!units.length) return null;
 
+  // Greedy largest-first exact pack into PM, crediting pieces to the SOURCE mg
   units.sort((a,b)=> b.unit - a.unit);
-
   let r = +targetMg.toFixed(6);
   const PM = {};
   for (const u of units){
     if (r <= 1e-6) break;
     const q = Math.floor(r / u.unit + 1e-9);
-    if (q > 0) {
-      PM[u.source] = (PM[u.source] || 0) + q * u.piece; // halves stay on the same product label
+    if (q > 0){
+      PM[u.source] = (PM[u.source] || 0) + q * u.piece; // halves stay on the same product row
       r -= q * u.unit;
     }
   }
-  if (r > 1e-6) return null; // cannot represent exactly from selection → let fallback handle
+  if (r > 1e-6) return null; // cannot represent exactly with the selected set → caller will fallback
   return PM;
 }
 
@@ -2605,19 +2591,15 @@ function stepBZRA(packs, percent, med, form){
   if(target===tot && tot>0){ target=Math.max(0, tot-step); target=roundTo(target,step); }
   // Try selection-only composition first (keeps halves on the same product).
 let pm = null;
-// read selected strengths (numbers)
 let selectedMg = [];
 if (typeof selectedProductMgs === "function") {
   selectedMg = (selectedProductMgs() || [])
     .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/)||[])[1]))
-    .map(Number)
-    .filter(n => Number.isFinite(n) && n > 0)
-    .sort((a,b)=>a-b);
+    .map(Number).filter(n=>Number.isFinite(n) && n>0).sort((a,b)=>a-b);
 }
-// try selection-only composer first (so halves remain on the selected product)
-let pm = composeForSlot_BZRA_Selected(target, "Benzodiazepines / Z-Drug (BZRA)", med, form, selectedMg);
+pm = composeForSlot_BZRA_Selected(target, "Benzodiazepines / Z-Drug (BZRA)", med, form, selectedMg);
 
-// fallback to your original when no selection or not exactly representable
+// Fallback to your original composer if no selection or exact pack not possible
 if (!pm) {
   pm = composeForSlot(target, "Benzodiazepines / Z-Drug (BZRA)", med, form);
 }
