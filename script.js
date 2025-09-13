@@ -250,12 +250,9 @@ function shouldShowProductPicker(cls, med, form){
     ["Proton Pump Inhibitor", "Lansoprazole", /^Tablet$/i],
 
     // ===== Antipsychotics =====
-    // Some catalogues use "Antipsychotics", others "Antipsychotic".
-    ["Antipsychotics","Risperidone",/(Tablet|Tab|ODT|Wafer)/i],
-    ["Antipsychotic", "Quetiapine", /^Immediate Release Tablet$/i],
-    ["Antipsychotic", "Quetiapine", /^Slow Release Tablet$/i],
-    ["Antipsychotics","Olanzapine",/(Tablet|Tab|ODT|Wafer|Dispersible)/i],
-    ["Antipsychotics","Haloperidol",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Antipsychotic","Quetiapine",  /Immediate\s*Release\s*Tablet|^Tablet$/i],
+    ["Antipsychotic","Risperidone", /Tablet/i],
+    ["Antipsychotic","Olanzapine",  /Tablet/i],
   ];
 
   return allowList.some(([c,m,formRe]) =>
@@ -489,6 +486,30 @@ function apEnsureChipLabels(){
     label.textContent = LABELS[slot] || slot || "";
   });
 }
+  // Hide/show the generic Current Dosage UI when Antipsychotic is active
+function apToggleCurrentDoseUI(isAP){
+  // whole dose-lines block
+  const lines = document.getElementById("doseLinesContainer") || document.querySelector(".dose-lines");
+  if (lines) {
+    lines.style.display = isAP ? "none" : "";
+    // also disable its controls so nothing leaks into packs
+    [...lines.querySelectorAll("input, select, button")].forEach(el=>{
+      if (isAP) el.setAttribute("disabled","disabled");
+      else el.removeAttribute("disabled");
+    });
+  }
+
+  // Add dose line button (adjust selector if your id differs)
+  const addBtn = document.getElementById("addDoseLineBtn")
+            || document.querySelector("[data-action='add-dose-line'], .btn-add-dose-line");
+  if (addBtn) addBtn.style.display = isAP ? "none" : "";
+
+  // Any per-line remove buttons
+  document.querySelectorAll(
+    ".dose-lines .btn-remove, .dose-line .remove-line, .dose-lines [data-action='remove-dose-line']"
+  ).forEach(btn => btn.style.display = isAP ? "none" : "");
+}
+
 // --- Drag & drop chips + public getter ---
 
 function apInitChips(){
@@ -586,6 +607,7 @@ document.addEventListener("DOMContentLoaded", () => {
     apRefreshBadges();
     apEnsureChipLabels();
     apInitChips();
+  apToggleCurrentDoseUI(isAP);
   });
 })();
 
