@@ -171,7 +171,7 @@ function allCommercialStrengthsMg(cls, med, form){
 function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
   try {
     const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
-    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
+    const chosenMap = new Map((chosen||[]).map(s => [(typeof s === "number" ? s : parseMgFromStrength(s)),s]));
     const targetMg = parseMgFromStrength(rawStrengthLabel);
     if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
     if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
@@ -2427,8 +2427,24 @@ function composeForSlot(target, cls, med, form){
   return composeExactOrLower(target, pieces, step);
 }
 function recomposeSlots(targets, cls, med, form){
-  const out={AM:{},MID:{},DIN:{},PM:{}};
-  for(const slot of ["AM","MID","DIN","PM"]) out[slot] = composeForSlot(targets[slot]||0, cls, med, form);
+  const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+
+  for (const slot of ["AM","MID","DIN","PM"]) {
+    const mg = targets[slot] || 0;
+    if (mg <= 0) { out[slot] = {}; continue; }
+
+    if (cls === "Antipsychotic") {
+      // Try selection-only packer first (keeps halves on the same selected product).
+      const selPack = (typeof composeForSlot_AP_Selected === "function")
+        ? composeForSlot_AP_Selected(mg, cls, med, form)
+        : null;
+
+      // If no selection or exact pack not possible -> fall back to generic (“all” products).
+      out[slot] = selPack || composeForSlot(mg, cls, med, form) || {};
+    } else {
+      out[slot] = composeForSlot(mg, cls, med, form);
+    }
+  }
   return out;
 }
 /* === BZRA selection-only composer (PM-only). Keeps halves on their source product. === */
@@ -2477,22 +2493,28 @@ function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
 }
 // Selection-aware AP composer with safe fallback to "all"
 function composeForSlot_AP_Selected(targetMg, cls, med, form){
-  let sel = [];
   try {
+    // Pull the mg values from the product picker; parse strings like "5 mg" safely.
+    let sel = [];
     if (typeof selectedProductMgs === "function") {
       sel = (selectedProductMgs() || [])
-        .map(Number)
+        .map(v => (typeof v === "number" ? v : parseMgFromStrength(v)))
         .filter(n => Number.isFinite(n) && n > 0)
         .sort((a,b)=>a-b);
     }
-  } catch(_) {}
-  if (!sel.length) return composeForSlot(targetMg, cls, med, form);
-  const pack = (typeof composeForSlot_BZRA_Selected === "function")
-    ? composeForSlot_BZRA_Selected(targetMg, cls, med, form, sel)
-    : null;
-  return pack || composeForSlot(targetMg, cls, med, form);
-}
 
+    // If nothing explicitly selected, signal caller to fall back to generic (“all”).
+    if (!sel.length) return null;
+
+    // Reuse the BZRA selection-only packer so halves stay on the same product row.
+    if (typeof composeForSlot_BZRA_Selected === "function") {
+      return composeForSlot_BZRA_Selected(targetMg, cls, med, form, sel);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /* ===== Preferred BID split ===== */
 function preferredBidTargets(total, cls, med, form){
