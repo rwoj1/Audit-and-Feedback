@@ -170,19 +170,35 @@ function allCommercialStrengthsMg(cls, med, form){
 // rewrite the label to the selected base strength so we don't "invent" a lower strength.
 function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
   try {
-    const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
-    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
-    const targetMg = parseMgFromStrength(rawStrengthLabel);
-    if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
-    if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
-    const split = (typeof canSplitTablets === "function") ? canSplitTablets(cls, form, med) : {half:false, quarter:false};
-    if (split.half && chosenMap.has(targetMg * 2)) return chosenMap.get(targetMg * 2);
-    if (split.quarter && chosenMap.has(targetMg * 4)) return chosenMap.get(targetMg * 4);
+    // Only normalise for BZRA / Antipsychotic
+    const isAPorBZRA =
+      cls === "Antipsychotic" || cls === "Benzodiazepines / Z-Drug (BZRA)";
+    if (!isAPorBZRA) return rawStrengthLabel;
+    let selectedMg = [];
+    if (typeof strengthsForSelected === "function") {
+      selectedMg = (strengthsForSelected() || [])
+        .map(s => (typeof s === "number" ? s : parseMgFromStrength(s)))
+        .filter(n => Number.isFinite(n) && n > 0);
+    if (!selectedMg.length) return rawStrengthLabel;
+    selectedMg.sort((a,b)=>a-b);
+    const selSet = new Set(selectedMg.map(n=>+n.toFixed(3)));
+    const mg = parseMgFromStrength(rawStrengthLabel);
+    if (!Number.isFinite(mg) || mg <= 0) return rawStrengthLabel;
+    if (selSet.has(+mg.toFixed(3))) return rawStrengthLabel;
+    const doubled = +(mg * 2).toFixed(3);
+    if (selSet.has(doubled)) {
+      // Rebuild a canonical “selected” label so the brand/form matches the picker
+      if (typeof strengthToProductLabel === "function") {
+        return strengthToProductLabel(cls, med, form, `${doubled} mg`);
+      }
+      return `${doubled} mg`;
+    }
     return rawStrengthLabel;
   } catch {
     return rawStrengthLabel;
   }
 }
+
 
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
@@ -1827,19 +1843,15 @@ function renderStandardTable(stepRows){
       }
       tr.appendChild(tdDate);
 
-      // [2] Strength  — keep label tied to selected formulations (no phantom lower strengths)
+      // [2] Strength — normalise label back to selected base when halves used (AP/BZRA)
       const tdStrength = document.createElement("td");
       tdStrength.className = "col-strength";
       const cls  = $("classSelect")?.value || "";
       const med  = $("medicineSelect")?.value || "";
       const form = $("formSelect")?.value || "";
       const rawLabel = line.strengthLabel || line.strength || "";
-      const showLabel = (cls === "Benzodiazepines / Z-Drug (BZRA)" || cls === "Antipsychotic")
-      ? prettySelectedLabelOrSame(cls, med, form, rawLabel)
-      : rawLabel;
-      tdStrength.textContent = showLabel;
+      tdStrength.textContent = prettySelectedLabelOrSame(cls, med, form, rawLabel);
       tr.appendChild(tdStrength);
-
 
        // [3] Instructions — put each "Take ..." on its own line
       const tdInstr = document.createElement("td");
@@ -2191,6 +2203,7 @@ function canSplitTablets(cls, form, med){
 }
   if(cls==="Antipsychotic") return {half:true, quarter:false};
   if (cls === "Gabapentinoids") return { half:false, quarter:false };
+  if (cls === "Antipsychotic" && /Tablet/i.test(form)) return { half: true, quarter: false };
   return {half:true, quarter:true};
 }
 
