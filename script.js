@@ -2475,6 +2475,10 @@ function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
   if (r > 1e-6) return null; // cannot represent exactly with the selected set → caller will fallback
   return PM;
 }
+function composeForSlot_AP_Selected(targetMg, cls, med, form, selectedMg){
+  // Reuse the BZRA selection-only packer for AP
+  return composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg);
+}
 
 /* ===== Preferred BID split ===== */
 function preferredBidTargets(total, cls, med, form){
@@ -2773,9 +2777,31 @@ function stepAP(packs, percent, med, form){
     cur[last] = roundTo(Math.max(0, cur[last] + diff), step);
   }
 
-  // --- compose tablets from these per-slot mg, using your existing engine ---
-  // (honors selected strengths; no phantom products)
-  return recomposeSlots(cur, "Antipsychotic", med, form);
+  // --- compose tablets from these per-slot mg, using the selection-aware packer ---
+  // Build the list of selected base strengths (mg) to constrain packing
+  const selectedMg = (typeof selectedProductMgs === "function")
+    ? (selectedProductMgs() || [])
+        .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/)||[])[1]))
+        .map(Number)
+        .filter(n => Number.isFinite(n) && n > 0)
+        .sort((a,b)=>a-b)
+    : [];
+
+  // Recompose each slot strictly from the selected products (whole first, then halves if allowed)
+  return (function recomposeSlots_AP(slots){
+    const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+    for (const k of ["AM","MID","DIN","PM"]) {
+      const mg = +(slots[k] || 0);
+      out[k] = mg > 0
+        ? (typeof composeForSlot_BZRA_Selected === "function"
+            // reuse the BZRA selection-aware composer for Antipsychotics
+            ? composeForSlot_BZRA_Selected(mg, "Antipsychotic", med, form, selectedMg)
+            // fallback to generic if the selection-aware one isn’t present
+            : composeForSlot(mg, "Antipsychotic", med, form))
+        : {};
+    }
+    return out;
+  })(cur);
 }
 
 /* ===== Gabapentinoids
