@@ -364,20 +364,24 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   }
   // Show/hide panel & order row; fill the brief; update total
 
- function apVisibilityTick(){
+function apVisibilityTick(){
   const cls = document.getElementById("classSelect")?.value || "";
   const med = document.getElementById("medicineSelect")?.value || "";
-apToggleCurrentDoseUI(isAP);
-   
+
+  // compute first, then toggle UIs
+  const isAP = (cls === "Antipsychotic");
+
   const panel = document.getElementById("apControls");
   const order = document.getElementById("apOrderRow");
   if (!panel || !order) return;
 
-  const isAP = (cls === "Antipsychotic");           // <-- changed: class only
   panel.style.display = isAP ? "" : "none";
   order.style.display = isAP ? "" : "none";
 
-  if (!isAP) { apMarkDirty(false); return; }
+  // hide/show the legacy dose-lines UI only after we KNOW isAP
+  apToggleCurrentDoseUI(isAP);
+
+  if (!isAP) { apMarkDirty?.(false); return; }
 
   // brief text (shows cap if known, otherwise prompt)
   const AP_MAX = { Quetiapine:150, Risperidone:2, Olanzapine:10 };
