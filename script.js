@@ -2177,19 +2177,31 @@ let doseLines=[]; let nextLineId=1;
 
 /* splitting rules */
 function canSplitTablets(cls, form, med){
-  if(/Patch|Capsule|Orally\s*Dispersible\s*Tablet/i.test(form) || isMR(form)) return {half:false, quarter:false};
-  if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return {half:false, quarter:false};
+  const f = String(form || "");
+  const isModified =
+    (typeof isMR === "function" && isMR(form)) ||
+    /(?:^|\W)(sr|cr|er|mr)(?:\W|$)/i.test(f); // fallback MR detection
+  // Forms that must never be split
+  if (/Patch|Capsule|Orally\s*Dispersible\s*Tablet/i.test(f) || isModified) {
+    return { half:false, quarter:false };
+  }
+  // Classes that never split
+  if (cls === "Opioid" || cls === "Proton Pump Inhibitor" || cls === "Gabapentinoids") {
+    return { half:false, quarter:false };
+  }
+  // BZRA: plain tablets can be halved (no quarters)
   if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
-  const f = String(form || "").toLowerCase();
-  const nonSplittable =
-    /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(f);
-  return nonSplittable ? { half: false, quarter: false }
-                       : { half: true,  quarter: false };
+    const nonSplittable = /odt|wafer|dispers/i.test(f); // extra guard, though blocked above
+    return nonSplittable ? { half:false, quarter:false } : { half:true, quarter:false };
+  }
+  // Antipsychotics: plain IR tablets can be halved (no quarters)
+  if (cls === "Antipsychotic" && /Tablet/i.test(f)) {
+    return { half:true, quarter:false };
+  }
+  // Default (rare fallback)
+  return { half:true, quarter:true };
 }
-  if(cls==="Antipsychotic") return {half:true, quarter:false};
-  if (cls === "Gabapentinoids") return { half:false, quarter:false };
-  return {half:true, quarter:true};
-}
+
 
 /* default frequency */
 function defaultFreq(){
