@@ -2801,21 +2801,15 @@ function stepAP(packs, percent, med, form){
         .sort((a,b)=>a-b)
     : [];
 
-  // Recompose each slot strictly from the selected products (whole first, then halves if allowed)
-  return (function recomposeSlots_AP(slots){
-    const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
-    for (const k of ["AM","MID","DIN","PM"]) {
-      const mg = +(slots[k] || 0);
-      out[k] = mg > 0
-        ? (typeof composeForSlot_BZRA_Selected === "function"
-            // reuse the BZRA selection-aware composer for Antipsychotics
-            ? composeForSlot_BZRA_Selected(mg, "Antipsychotic", med, form, selectedMg)
-            // fallback to generic if the selection-aware one isn’t present
-            : composeForSlot(mg, "Antipsychotic", med, form))
-        : {};
-    }
-    return out;
-  })(cur);
+// --- recompose each slot using selection-aware wrapper with fallback ---
+return (function recomposeSlots_AP(slots){
+  const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+  for (const k of ["AM","MID","DIN","PM"]) {
+    const mg = +(slots[k] || 0);
+    out[k] = mg > 0 ? (composeForSlot_AP_Selected(mg, "Antipsychotic", med, form) || {}) : {};
+  }
+  return out;
+})(cur);
 }
 
 
