@@ -367,7 +367,8 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
  function apVisibilityTick(){
   const cls = document.getElementById("classSelect")?.value || "";
   const med = document.getElementById("medicineSelect")?.value || "";
-
+apToggleCurrentDoseUI(isAP);
+   
   const panel = document.getElementById("apControls");
   const order = document.getElementById("apOrderRow");
   if (!panel || !order) return;
@@ -435,30 +436,31 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
     });
   }
   // Hide/show the generic Current Dosage UI when Antipsychotic is active
-function apToggleCurrentDoseUI(isAP) {
-  // Hide the whole generic dose lines container
+// Hide/show the legacy dose-lines UI when Antipsychotic is active
+function apToggleCurrentDoseUI(isAP){
+  // Whole dose-lines block
   const lines = document.getElementById("doseLinesContainer")
-           || document.querySelector(".dose-lines");
+            || document.querySelector(".dose-lines");
   if (lines) {
     lines.style.display = isAP ? "none" : "";
-    // additionally disable inputs inside it so nothing interferes
+    // Also disable its controls so nothing leaks into packs
     [...lines.querySelectorAll("input, select, button")].forEach(el=>{
       if (isAP) el.setAttribute("disabled","disabled");
       else el.removeAttribute("disabled");
     });
   }
 
-  // Hide the "Add dose line" button (try a few common ids/classes)
-  const addBtn = document.getElementById("addDoseLineBtn")
-             || document.getElementById("addDoseLine")
-             || document.querySelector("[data-action='add-dose-line'], .btn-add-dose-line");
+  // “Add dose line” button (cover common ids/classes)
+  const addBtn =
+      document.getElementById("addDoseLineBtn")
+   || document.getElementById("addDoseLine")
+   || document.querySelector("[data-action='add-dose-line'], .btn-add-dose-line");
   if (addBtn) addBtn.style.display = isAP ? "none" : "";
 
-  // Hide any "Remove" buttons in generic dose lines
-  const removeBtns = document.querySelectorAll(
-    ".dose-lines .btn-remove, .dose-lines [data-action='remove-dose-line'], .dose-line .remove-line"
-  );
-  removeBtns.forEach(btn => btn.style.display = isAP ? "none" : "");
+  // Per-line “Remove” buttons
+  document.querySelectorAll(
+    ".dose-lines .btn-remove, .dose-line .remove-line, .dose-lines [data-action='remove-dose-line']"
+  ).forEach(btn => { btn.style.display = isAP ? "none" : ""; });
 }
 
 // Ensure chips show full labels (Morning/Midday/Dinner/Night)
@@ -486,30 +488,6 @@ function apEnsureChipLabels(){
     label.textContent = LABELS[slot] || slot || "";
   });
 }
-  // Hide/show the generic Current Dosage UI when Antipsychotic is active
-function apToggleCurrentDoseUI(isAP){
-  // whole dose-lines block
-  const lines = document.getElementById("doseLinesContainer") || document.querySelector(".dose-lines");
-  if (lines) {
-    lines.style.display = isAP ? "none" : "";
-    // also disable its controls so nothing leaks into packs
-    [...lines.querySelectorAll("input, select, button")].forEach(el=>{
-      if (isAP) el.setAttribute("disabled","disabled");
-      else el.removeAttribute("disabled");
-    });
-  }
-
-  // Add dose line button (adjust selector if your id differs)
-  const addBtn = document.getElementById("addDoseLineBtn")
-            || document.querySelector("[data-action='add-dose-line'], .btn-add-dose-line");
-  if (addBtn) addBtn.style.display = isAP ? "none" : "";
-
-  // Any per-line remove buttons
-  document.querySelectorAll(
-    ".dose-lines .btn-remove, .dose-line .remove-line, .dose-lines [data-action='remove-dose-line']"
-  ).forEach(btn => btn.style.display = isAP ? "none" : "");
-}
-
 // --- Drag & drop chips + public getter ---
 
 function apInitChips(){
@@ -607,7 +585,8 @@ document.addEventListener("DOMContentLoaded", () => {
     apRefreshBadges();
     apEnsureChipLabels();
     apInitChips();
-  apToggleCurrentDoseUI(isAP);
+    apToggleCurrentDoseUI((document.getElementById("classSelect")?.value || "") === "Antipsychotic");
+
   });
 })();
 
