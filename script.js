@@ -2676,39 +2676,9 @@ function stepAP(packs, percent, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-// --- dynamic grid from selected (or ALL) strengths ---
-// 1) build selectedMg from the picker; if none picked, use ALL available for this med/form
-let selectedMg = [];
-if (typeof selectedProductMgs === "function") {
-  selectedMg = (selectedProductMgs() || [])
-    .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/)||[])[1]))
-    .map(Number).filter(n => Number.isFinite(n) && n > 0)
-    .sort((a,b)=>a-b);
-}
-if (!selectedMg.length) {
-  // treat "none selected" as "all available" for this med/form
-  if (typeof strengthsForPicker === "function") {
-    selectedMg = (strengthsForPicker("Antipsychotic", med, form) || [])
-      .map(Number).filter(n => Number.isFinite(n) && n > 0)
-      .sort((a,b)=>a-b);
-  } else if (typeof strengthsForSelected === "function") {
-    const arr = strengthsForSelected() || [];
-    selectedMg = arr
-      .map(s => (typeof s === "number" ? s : (String(s).match(/(\d+(\.\d+)?)/)||[])[1]))
-      .map(Number).filter(n => Number.isFinite(n) && n > 0)
-      .sort((a,b)=>a-b);
-  }
-}
-if (!selectedMg.length) return packs; // safety: no strengths available
-
-// 2) compute grid step from the SMALLEST base, halved if splitting is allowed
-const split = (typeof canSplitTablets === "function")
-  ? canSplitTablets("Antipsychotic", form, med)
-  : { half:true, quarter:false };
-
-const minBase = selectedMg[0];
-const step = split.half ? (minBase/2) : minBase;
-
+  // --- fixed grids (halves only) ---
+  const GRID = { Quetiapine: 12.5, Risperidone: 0.25, Olanzapine: 1.25 };
+  const step = GRID[name] || 0.5;
 
   // --- read chip order (strict; no fallback) ---
   let order = [];
