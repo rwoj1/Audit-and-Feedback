@@ -170,25 +170,28 @@ function allCommercialStrengthsMg(cls, med, form){
 // rewrite the label to the selected base strength so we don't "invent" a lower strength.
 function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
   try {
+    // map selected mg → original label
     const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
-    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
-    const targetMg = parseMgFromStrength(rawStrengthLabel);
-    if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
-    if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
+    const entries = (chosen||[]).map(s => [parseFloat((String(s).match(/(\d+(\.\d+)?)/)||[])[1]||"0"), s])
+                                .filter(([mg,_])=>Number.isFinite(mg)&&mg>0);
+    const chosenMap = new Map(entries); // base mg → full label text (e.g., "Olanzapine 5 mg Tablet")
 
-    const split = (typeof canSplitTablets === "function")
-      ? canSplitTablets(cls, form, med)
-      : {half:false, quarter:false};
+    const rawMg = parseFloat((String(rawStrengthLabel).match(/(\d+(\.\d+)?)/)||[])[1]||"0");
+    if (!Number.isFinite(rawMg) || rawMg<=0) return rawStrengthLabel;
 
-    if (split.half && chosenMap.has(targetMg * 2)) return chosenMap.get(targetMg * 2);
-    if (split.quarter && chosenMap.has(targetMg * 4)) return chosenMap.get(targetMg * 4);
+    // if that exact base exists, show it
+    if (chosenMap.has(rawMg)) return chosenMap.get(rawMg);
+
+    // if we’re showing a half-unit (e.g., 2.5) but only 5 mg was selected → show the 5 mg label
+    const split = (typeof canSplitTablets==="function") ? canSplitTablets(cls, form, med) : {half:false,quarter:false};
+    if (split.half && chosenMap.has(rawMg*2)) return chosenMap.get(rawMg*2);
+    if (split.quarter && chosenMap.has(rawMg*4)) return chosenMap.get(rawMg*4);
 
     return rawStrengthLabel;
   } catch {
     return rawStrengthLabel;
   }
 }
-
 
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
 // - 600 & 800 mg → Tablets
@@ -2259,19 +2262,28 @@ let doseLines=[]; let nextLineId=1;
 
 /* splitting rules */
 function canSplitTablets(cls, form, med){
-  if(/Patch|Capsule|Orally\s*Dispersible\s*Tablet/i.test(form) || isMR(form)) return {half:false, quarter:false};
-  if(cls==="Opioid" || cls==="Proton Pump Inhibitor") return {half:false, quarter:false};
+  // never split these forms
+  if (/Patch|Capsule|Orally\s*Dispersible\s*Tablet/i.test(form) || (typeof isMR==="function" && isMR(form))) {
+    return { half:false, quarter:false };
+  }
+  // classes that never split
+  if (cls === "Opioid" || cls === "Proton Pump Inhibitor" || cls === "Gabapentinoids") {
+    return { half:false, quarter:false };
+  }
+  // Antipsychotics: plain tablets → halves allowed
+  if (cls === "Antipsychotic" && /Tablet/i.test(form)) {
+    return { half:true, quarter:false };
+  }
+  // BZRA: plain tablets can split; SR/ODT/wafer/dispersible cannot
   if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
-  if (cls === "Gabapentinoids") return { half:false, quarter:false };
-  if (cls === "Antipsychotic" && /Tablet/i.test(form)) return { half: true, quarter: false };
-  const f = String(form || "").toLowerCase();
-  const nonSplittable =
-    /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(f);
-  return nonSplittable ? { half: false, quarter: false }
-                       : { half: true,  quarter: false };
-}
+    const f = String(form||"").toLowerCase();
+    const nonSplittable = /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(f);
+    return nonSplittable ? { half:false, quarter:false } : { half:true, quarter:false };
+  }
 
-  return {half:true, quarter:true};
+  
+  // default (rare)
+  return { half:true, quarter:true };
 }
 
 /* default frequency */
@@ -2736,16 +2748,15 @@ function stepPPI(packs, percent, cls, med, form){
 */
 /* ===== Antipsychotics — shave by % in chip order; respect selection & halves ===== */
 function stepAP(packs, percent, med, form){
-  // Scope: only IR tablets of these three
-  const name = String(med || "");
+  // scope: only these three IR tablets
+  const name = String(med||"");
   if (!/^(Olanzapine|Quetiapine|Risperidone)$/i.test(name)) return packs;
-  if (typeof isMR === "function" && isMR(form)) return packs; // IR only
+  if (typeof isMR==="function" && isMR(form)) return packs;
 
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // ----- selected strengths & splitting policy -----
-  // Read the user's selected strengths (mg) for this med/form
+  // selected strengths (mg) for this med/form
   let mgList = [];
   if (typeof apSelectedMg === "function") mgList = apSelectedMg();
   if (!mgList || !mgList.length) {
@@ -2753,85 +2764,85 @@ function stepAP(packs, percent, med, form){
       mgList = strengthsForSelectedSafe("Antipsychotic", med, form);
     } else if (typeof strengthsForSelected === "function") {
       const arr = strengthsForSelected() || [];
-      mgList = arr.map(s => (typeof s === "number" ? s : (String(s).match(/(\d+(\.\d+)?)/)||[])[1]))
-                  .map(Number).filter(n=>Number.isFinite(n) && n>0);
+      mgList = arr.map(s => (typeof s==="number" ? s : (String(s).match(/(\d+(\.\d+)?)/)||[])[1]))
+                  .map(Number).filter(n=>Number.isFinite(n)&&n>0);
     }
   }
-  mgList = (mgList || []).map(Number).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
+  mgList = (mgList||[]).map(Number).filter(n=>n>0).sort((a,b)=>a-b);
   if (!mgList.length) return packs;
 
-  const split = (typeof canSplitTablets === "function")
-    ? canSplitTablets("Antipsychotic", form, med)
-    : { half: true, quarter: false };
+  // grid: halves allowed? → step = (min tab)/2 else min tab
+  const split = (typeof canSplitTablets==="function") ? canSplitTablets("Antipsychotic", form, med) : {half:true, quarter:false};
+  const minBase = mgList[0];
+  const step = split.half ? (minBase/2) : minBase;
 
-  // Effective grid step = half of the smallest selected tab if halves allowed; else smallest tab.
-  const minBase  = mgList[0];
-  const gridStep = split.half ? (minBase / 2) : minBase;
-
-  // ----- choose next total on that grid, tie-break: fewest units, then round-up -----
+  // target total snapped to step with our tie-break (fewest units, then round-up)
   const rawNext = tot * (1 - percent/100);
-  const down = floorTo(rawNext, gridStep);
-  const up   = ceilTo (rawNext, gridStep);
+  const down = Math.floor(rawNext/step)*step;
+  const up   = Math.ceil (rawNext/step)*step;
 
-  function unitCost(sum){
-    // Greedy pack using only selected tabs (whole first, then halves)
-    const pieces = [];
-    mgList.slice().sort((a,b)=>b-a).forEach(mg=>{
-      pieces.push(mg);
-      if (split.half) pieces.push(mg/2);
-    });
-    let remain = sum, units = 0;
-    for (const p of pieces){
-      if (p <= 0) continue;
-      if (remain <= EPS) break;
+  const piecesDesc = []; // whole first, then halves, biggest → smallest
+  mgList.slice().sort((a,b)=>b-a).forEach(mg => {
+    piecesDesc.push(mg);
+    if (split.half) piecesDesc.push(mg/2);
+  });
+
+  function unitsNeeded(sum){
+    let remain = +sum.toFixed(6), units = 0;
+    for (const p of piecesDesc){
+      if (p <= 0 || remain <= EPS) continue;
       const c = Math.floor((remain + 1e-9) / p);
-      if (c > 0){ units += c; remain -= c*p; }
+      units += c; remain = +(remain - c*p).toFixed(6);
     }
-    return { units, ok: remain <= 1e-6 };
+    return (remain <= EPS) ? units : Number.POSITIVE_INFINITY;
   }
 
-  const cDown = unitCost(down), cUp = unitCost(up);
-  let target;
-  const dDown = Math.abs(rawNext - down), dUp = Math.abs(up - rawNext);
-  if (dDown < dUp) target = down;
-  else if (dUp < dDown) target = up;
-  else {
-    target = (cDown.units < cUp.units) ? down : (cUp.units < cDown.units ? up : up); // ties → round up
+  function chooseByFewestUnits(a,b,target){
+    const da = Math.abs(target-a), db = Math.abs(b-target);
+    if (da < db) return a;
+    if (db < da) return b;
+    const ua = unitsNeeded(a), ub = unitsNeeded(b);
+    if (ua !== ub) return (ua < ub) ? a : b;
+    return b; // tie → up
   }
-  // Progress guard
+
+  let target = chooseByFewestUnits(down, up, rawNext);
   if (Math.abs(target - tot) <= EPS && tot > 0) {
-    target = roundTo(Math.max(0, tot - gridStep), gridStep);
+    target = Math.max(0, +(tot - step).toFixed(6));
   }
 
-  // ----- current per-slot mg snapshot -----
+  // read chip order (AM/MID/DIN/PM) strictly
+  let order = [];
+  if (typeof apGetReductionOrder === "function") {
+    order = apGetReductionOrder() || [];
+  } else {
+    order = [...document.querySelectorAll("#apOrder .ap-chip")].map(ch => ch.getAttribute("data-slot"));
+  }
+  if (!order.length) return packs;
+
+  // snapshot per-slot mg
   const cur = {
-    AM:  +(slotTotalMg(packs,"AM")  || 0),
-    MID: +(slotTotalMg(packs,"MID") || 0),
-    DIN: +(slotTotalMg(packs,"DIN") || 0),
-    PM:  +(slotTotalMg(packs,"PM")  || 0),
+    AM: +(slotTotalMg(packs,"AM")||0),
+    MID:+(slotTotalMg(packs,"MID")||0),
+    DIN:+(slotTotalMg(packs,"DIN")||0),
+    PM: +(slotTotalMg(packs,"PM")||0),
   };
 
-  // ----- shave strictly in chip order (AM/MID/DIN/PM as dragged) -----
-  const order = (typeof apGetReductionOrder === "function")
-    ? (apGetReductionOrder() || [])
-    : ["PM","DIN","MID","AM"]; // fallback
-
+  // shave strictly in chip order
   let reduce = +(tot - target).toFixed(6);
 
   function shaveOne(slot){
     if (reduce <= EPS) return;
     const avail = cur[slot];
     if (avail <= EPS) return;
-
+    // try to remove as much as possible from this slot (on grid)
     const want = Math.min(avail, reduce);
-    let dec = roundTo(want, gridStep);
+    let dec = Math.round(want/step)*step;
+    // ensure progress of at least one grid unit when possible
     if (dec < EPS) {
-      // ensure progress in this slot
-      dec = (avail >= gridStep) ? gridStep : avail;
+      if (avail >= step) dec = step; else dec = avail;
     }
     dec = Math.min(dec, avail, reduce);
-    dec = roundTo(dec, gridStep);
-
     cur[slot] = +(cur[slot] - dec).toFixed(6);
     reduce    = +(reduce    - dec).toFixed(6);
   }
@@ -2839,41 +2850,33 @@ function stepAP(packs, percent, med, form){
   let guard = 100;
   while (reduce > EPS && guard-- > 0) {
     for (const chip of order) {
-      const k = String(chip||"").toUpperCase();
-      if (k==="AM"||k==="MID"||k==="DIN"||k==="PM") shaveOne(k);
+      const s = String(chip||"").toUpperCase();
+      if (s==="AM"||s==="MID"||s==="DIN"||s==="PM") shaveOne(s);
       if (reduce <= EPS) break;
     }
   }
 
-  // Snap to grid and reconcile tiny drift
+  // snap each slot to grid & clean
   for (const k of ["AM","MID","DIN","PM"]) {
-    cur[k] = roundTo(Math.max(0, cur[k]), gridStep);
+    cur[k] = Math.max(0, Math.round(cur[k]/step)*step);
     if (cur[k] < EPS) cur[k] = 0;
   }
+
+  // reconcile tiny drift so sum == target (nudge last chip slot)
   const sum = +(cur.AM + cur.MID + cur.DIN + cur.PM).toFixed(6);
-  let diff = +(target - sum).toFixed(6);
+  const diff = +(target - sum).toFixed(6);
   if (Math.abs(diff) > EPS) {
-    const last = String(order[order.length - 1] || "PM").toUpperCase();
+    const last = String(order[order.length-1]||"PM").toUpperCase();
     if (last==="AM"||last==="MID"||last==="DIN"||last==="PM") {
-      cur[last] = roundTo(Math.max(0, cur[last] + diff), gridStep);
+      cur[last] = Math.max(0, Math.round((cur[last]+diff)/step)*step);
     }
   }
 
-  // ----- recompose each slot using ONLY selected strengths (whole > half) -----
+  // recompose per-slot using only selected strengths (+halves)
   const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
   for (const k of ["AM","MID","DIN","PM"]) {
-    const mg = Math.max(0, cur[k]);
-    if (mg > EPS) {
-      if (typeof composeForSlot_AP_Selected === "function") {
-        out[k] = composeForSlot_AP_Selected(mg, "Antipsychotic", med, form);
-      } else if (typeof composeForSlot === "function") {
-        out[k] = composeForSlot(mg, "Antipsychotic", med, form);
-      } else {
-        out[k] = {};
-      }
-    } else {
-      out[k] = {};
-    }
+    const mg = +(cur[k]||0);
+    out[k] = mg>0 ? composeForSlot_AP_Selected(mg, "Antipsychotic", med, form) : {};
   }
   return out;
 }
