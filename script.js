@@ -2476,73 +2476,22 @@ function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
   return PM;
 }
 // Selection-aware AP composer with safe fallback to "all"
-// Antipsychotics: selection-aware compose that rebases pieces onto the selected base
 function composeForSlot_AP_Selected(targetMg, cls, med, form){
+  let sel = [];
   try {
-    // 1) Read selected strengths (mg), parsing strings like "1 mg Tablet" safely
-    let selectedMg = [];
     if (typeof selectedProductMgs === "function") {
-      selectedMg = (selectedProductMgs() || [])
-        .map(v => (typeof v === "number" ? v : parseMgFromStrength(v)))
+      sel = (selectedProductMgs() || [])
+        .map(Number)
         .filter(n => Number.isFinite(n) && n > 0)
         .sort((a,b)=>a-b);
     }
-    // If nothing selected, tell caller to fall back to ALL
-    if (!selectedMg.length) return null;
-    // 2) Run the selection-aware packer (reuses your BZRA logic)
-    let pack = (typeof composeForSlot_BZRA_Selected === "function")
-      ? composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg)
-      : null;
-    if (!pack) return null;
-    // 3) Rebase halves (and quarters if enabled) onto the selected base strength
-    const split = (typeof canSplitTablets === "function")
-      ? canSplitTablets(cls, form, med)
-      : { half:true, quarter:false };
-    // Only normalize for AP plain tablets
-    const normalized = {};
-    const selSet = new Set(selectedMg.map(x => +x));
-    // helper: move count on 'pieceMg' into fractional count on 'baseMg'
-    function moveToBase(pieceMg, baseMg, qty){
-      if (!qty) return;
-      const frac =
-        (split.quarter && Math.abs(pieceMg - baseMg/4) < 1e-9) ? 0.25 :
-        (split.half    && Math.abs(pieceMg - baseMg/2) < 1e-9) ? 0.50 :
-        1.00;
-      normalized[baseMg] = (normalized[baseMg] || 0) + qty * frac;
-    }
-    // walk each piece in the pack
-    for (const k of Object.keys(pack)) {
-      const pieceMg = +k;                 // key is the mg printed by the composer
-      const qty     = +pack[k];           // may be integer (1 tab) or decimal
-      if (!Number.isFinite(pieceMg) || !Number.isFinite(qty)) continue;
-      // If the piece is exactly a selected base → keep as whole tablets on that base
-      if (selSet.has(pieceMg)) {
-        normalized[pieceMg] = (normalized[pieceMg] || 0) + qty;
-        continue;
-      }
-      // If the piece equals 1/2 (or 1/4) of a selected base → rebase onto that base as a fraction
-      let rebased = false;
-      for (const base of selectedMg) {
-        if (split.half && Math.abs(pieceMg - base/2) < 1e-9) { moveToBase(pieceMg, base, qty); rebased = true; break; }
-        if (split.quarter && Math.abs(pieceMg - base/4) < 1e-9) { moveToBase(pieceMg, base, qty); rebased = true; break; }
-      }
-      if (!rebased) {
-        // Fallback: keep as-is (shouldn’t happen for AP, but be safe)
-        normalized[pieceMg] = (normalized[pieceMg] || 0) + qty;
-      }
-    }
-    // Round tiny FP noise and drop zeros
-    const out = {};
-    for (const [mgStr, q] of Object.entries(normalized)) {
-      const qty = +(+q).toFixed(3);
-      if (qty > 0) out[mgStr] = qty;
-    }
-    return out;
-  } catch {
-    return null;
-  }
+  } catch(_) {}
+  if (!sel.length) return composeForSlot(targetMg, cls, med, form);
+  const pack = (typeof composeForSlot_BZRA_Selected === "function")
+    ? composeForSlot_BZRA_Selected(targetMg, cls, med, form, sel)
+    : null;
+  return pack || composeForSlot(targetMg, cls, med, form);
 }
-
 
 
 /* ===== Preferred BID split ===== */
