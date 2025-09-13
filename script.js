@@ -2475,10 +2475,24 @@ function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
   if (r > 1e-6) return null; // cannot represent exactly with the selected set → caller will fallback
   return PM;
 }
-function composeForSlot_AP_Selected(targetMg, cls, med, form, selectedMg){
-  // Reuse the BZRA selection-only packer for AP
-  return composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg);
+// Selection-aware AP composer with safe fallback to "all"
+function composeForSlot_AP_Selected(targetMg, cls, med, form){
+  let sel = [];
+  try {
+    if (typeof selectedProductMgs === "function") {
+      sel = (selectedProductMgs() || [])
+        .map(Number)
+        .filter(n => Number.isFinite(n) && n > 0)
+        .sort((a,b)=>a-b);
+    }
+  } catch(_) {}
+  if (!sel.length) return composeForSlot(targetMg, cls, med, form);
+  const pack = (typeof composeForSlot_BZRA_Selected === "function")
+    ? composeForSlot_BZRA_Selected(targetMg, cls, med, form, sel)
+    : null;
+  return pack || composeForSlot(targetMg, cls, med, form);
 }
+
 
 /* ===== Preferred BID split ===== */
 function preferredBidTargets(total, cls, med, form){
