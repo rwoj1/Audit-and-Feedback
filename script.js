@@ -2191,9 +2191,8 @@ function canSplitTablets(cls, form, med){
   return nonSplittable ? { half: false, quarter: false }
                        : { half: true,  quarter: false };
 }
-  if(cls==="Antipsychotic") return {half:true, quarter:false};
   if (cls === "Gabapentinoids") return { half:false, quarter:false };
-  if (cls === "Antipsychotic" && /Tablet/i.test(form)) return { half: true, quarter: false };
+  if (cls === "Antipsychotic" && /Tablet/i.test(form)) {  return { half: true, quarter: false };
   return {half:true, quarter:true};
 }
 
