@@ -634,7 +634,7 @@ function apSeedPacksFromFourInputs(){
   ["AM","MID","DIN","PM"].forEach(slot => {
     const mg = +(doses[slot] || 0);
     if (mg > 0) {
-      const pack = composeForSlot(mg, cls, med, form);
+      const pack = composeForSlot_AP_Selected(mg, cls, med, form);
       out[slot] = pack || {};
     }
   });
@@ -688,6 +688,83 @@ function apMarkDirty(isDirty, message){
     enable("#printBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
   }
 }
+function apSelectedMg(){
+  try {
+    const arr =
+      (typeof strengthsForSelected === "function" && strengthsForSelected()) ||
+      (typeof allowedStrengthsFilteredBySelection === "function" && allowedStrengthsFilteredBySelection()) ||
+      [];
+    const mg = arr.map(s => (typeof s === "number" ? s : parseMgFromStrength(s)))
+                  .filter(n => Number.isFinite(n) && n > 0)
+                  .sort((a,b)=>a-b);
+    return mg;
+  } catch {
+    return [];
+  }
+}
+// Compose a single slot using ONLY selected strengths (and halves of them)
+// - cls/med/form are passed only for instruction/label logic the renderer already handles
+function composeForSlot_AP_Selected(targetMg, cls, med, form){
+  const selected = apSelectedMg();                 // e.g., [1] for Risperidone 1 mg only
+  if (!selected.length) {
+    // If nothing explicitly selected, fall back to the normal composer
+    return (typeof composeForSlot === "function")
+      ? composeForSlot(targetMg, cls, med, form)
+      : {};
+  }
+
+  // Build the piece list: each selected strength (whole) and its half if splitting allowed.
+  const split = (typeof canSplitTablets === "function") ? canSplitTablets(cls, form, med) : {half:false,quarter:false};
+  const pieces = [];
+  for (const mg of selected) {
+    pieces.push({mg, label: `${mg} mg`, whole:true});
+    if (split.half) {
+      pieces.push({mg: mg/2, label: `${mg} mg (half)`, whole:false});
+    }
+  }
+  // Sort pieces by mg descending so we use bigger pieces first (fewer tablets)
+  pieces.sort((a,b)=>b.mg - a.mg);
+
+  let remain = +targetMg;
+  const out = {}; // mgLabel (base) -> count (we keep base label; renderer prints "half a tablet" in Instructions)
+  const EPSL = 1e-6;
+
+  for (const p of pieces){
+    if (remain <= EPSL) break;
+    if (p.mg <= 0) continue;
+
+    // how many pieces of p.mg fit?
+    const cnt = Math.floor((remain + EPSL) / p.mg);
+    if (cnt > 0){
+      const baseMg = parseFloat(p.label); // e.g., "1 mg (half)" -> 1
+      const keyMg  = baseMg;              // group by base strength (1 mg), not 0.5
+      out[keyMg] = (out[keyMg] || 0) + cnt;
+      remain -= cnt * p.mg;
+    }
+  }
+
+  // Clean small residue
+  if (remain > EPSL) {
+    // If a tiny remainder persists due to rounding, try to fill with smallest half if possible
+    const smallest = pieces[pieces.length - 1];
+    if (smallest && smallest.mg > 0) {
+      const cnt = Math.round(remain / smallest.mg);
+      if (cnt > 0) {
+        const baseMg = parseFloat(smallest.label);
+        out[baseMg] = (out[baseMg] || 0) + cnt;
+      }
+    }
+  }
+
+  // Convert to the pack object your renderer expects: { "1": count, "5": count, ... } as mg keys
+  const pack = {};
+  Object.keys(out).forEach(k=>{
+    const n = +k;
+    if (n > 0) pack[n] = out[k];
+  });
+  return pack;
+}
+
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
 
 //#endregion
@@ -2769,7 +2846,14 @@ function stepAP(packs, percent, med, form){
 
   // --- compose tablets from these per-slot mg, using your existing engine ---
   // (honors selected strengths; no phantom products)
-  return recomposeSlots(cur, "Antipsychotic", med, form);
+  return (function recomposeSlots_AP(slots){
+  const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+  for (const k of ["AM","MID","DIN","PM"]) {
+    const mg = +(slots[k] || 0);
+    out[k] = mg > 0 ? composeForSlot_AP_Selected(mg, "Antipsychotic", med, form) : {};
+  }
+  return out;
+})(cur);
 }
 
 /* ===== Gabapentinoids
