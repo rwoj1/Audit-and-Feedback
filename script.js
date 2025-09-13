@@ -2736,85 +2736,145 @@ function stepPPI(packs, percent, cls, med, form){
 */
 /* ===== Antipsychotics — shave by % in chip order; respect selection & halves ===== */
 function stepAP(packs, percent, med, form){
-  const cls = "Antipsychotic";
+  // Scope: only IR tablets of these three
+  const name = String(med || "");
+  if (!/^(Olanzapine|Quetiapine|Risperidone)$/i.test(name)) return packs;
+  if (typeof isMR === "function" && isMR(form)) return packs; // IR only
+
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // --- selection & splitting (only use what the user ticked) ---
-  const selected = (typeof apSelectedMg === "function") ? apSelectedMg() : [];
-  const baseList = (selected && selected.length)
-      ? selected.slice()
-      : (typeof strengthsForSelectedSafe === "function" ? strengthsForSelectedSafe(cls,med,form) : []);
-  const mgList = baseList.filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+  // ----- selected strengths & splitting policy -----
+  // Read the user's selected strengths (mg) for this med/form
+  let mgList = [];
+  if (typeof apSelectedMg === "function") mgList = apSelectedMg();
+  if (!mgList || !mgList.length) {
+    if (typeof strengthsForSelectedSafe === "function") {
+      mgList = strengthsForSelectedSafe("Antipsychotic", med, form);
+    } else if (typeof strengthsForSelected === "function") {
+      const arr = strengthsForSelected() || [];
+      mgList = arr.map(s => (typeof s === "number" ? s : (String(s).match(/(\d+(\.\d+)?)/)||[])[1]))
+                  .map(Number).filter(n=>Number.isFinite(n) && n>0);
+    }
+  }
+  mgList = (mgList || []).map(Number).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
   if (!mgList.length) return packs;
 
   const split = (typeof canSplitTablets === "function")
-      ? canSplitTablets(cls, form, med)
-      : {half:true, quarter:false};
+    ? canSplitTablets("Antipsychotic", form, med)
+    : { half: true, quarter: false };
 
-  // Effective grid step = half of the smallest selected tablet if halves allowed; else smallest tablet.
-  const minBase = mgList[0];
-  const gridStep = split.half ? (minBase/2) : minBase;
+  // Effective grid step = half of the smallest selected tab if halves allowed; else smallest tab.
+  const minBase  = mgList[0];
+  const gridStep = split.half ? (minBase / 2) : minBase;
 
-  // --- snap target to the grid, with "fewest units before round-up" tie-break ---
-  const raw = tot * (1 - percent/100);
-  const down = floorTo(raw, gridStep), up = ceilTo(raw, gridStep);
+  // ----- choose next total on that grid, tie-break: fewest units, then round-up -----
+  const rawNext = tot * (1 - percent/100);
+  const down = floorTo(rawNext, gridStep);
+  const up   = ceilTo (rawNext, gridStep);
 
   function unitCost(sum){
-    // Greedy: prefer whole tablets, then halves (never introduce unselected strengths)
+    // Greedy pack using only selected tabs (whole first, then halves)
     const pieces = [];
     mgList.slice().sort((a,b)=>b-a).forEach(mg=>{
-      pieces.push({mg, whole:true});
-      if (split.half) pieces.push({mg: mg/2, whole:false});
+      pieces.push(mg);
+      if (split.half) pieces.push(mg/2);
     });
     let remain = sum, units = 0;
     for (const p of pieces){
-      if (p.mg <= 0) continue;
-      const c = Math.floor((remain + 1e-9)/p.mg);
-      if (c>0){ units += c; remain -= c*p.mg; }
-      if (remain <= 1e-6) break;
+      if (p <= 0) continue;
+      if (remain <= EPS) break;
+      const c = Math.floor((remain + 1e-9) / p);
+      if (c > 0){ units += c; remain -= c*p; }
     }
-    return {units, ok: remain<=1e-6};
+    return { units, ok: remain <= 1e-6 };
   }
 
   const cDown = unitCost(down), cUp = unitCost(up);
   let target;
-  const dDown = Math.abs(raw - down), dUp = Math.abs(up - raw);
+  const dDown = Math.abs(rawNext - down), dUp = Math.abs(up - rawNext);
   if (dDown < dUp) target = down;
   else if (dUp < dDown) target = up;
   else {
-    // tie: prefer fewest units; if still tied, round UP
-    target = (cDown.units < cUp.units) ? down : (cUp.units < cDown.units ? up : up);
+    target = (cDown.units < cUp.units) ? down : (cUp.units < cDown.units ? up : up); // ties → round up
   }
-  if (target === tot && tot > 0) target = Math.max(0, tot - gridStep);
+  // Progress guard
+  if (Math.abs(target - tot) <= EPS && tot > 0) {
+    target = roundTo(Math.max(0, tot - gridStep), gridStep);
+  }
 
-  // --- shave along the chip order (AM/MID/DIN/PM as arranged) ---
-  const order = (typeof apGetReductionOrder === "function") ? apGetReductionOrder() : ["PM","DIN","MID","AM"];
+  // ----- current per-slot mg snapshot -----
   const cur = {
-    AM:  slotUnitsTotal(packs.AM||{}),
-    MID: slotUnitsTotal(packs.MID||{}),
-    DIN: slotUnitsTotal(packs.DIN||{}),
-    PM:  slotUnitsTotal(packs.PM||{})
+    AM:  +(slotTotalMg(packs,"AM")  || 0),
+    MID: +(slotTotalMg(packs,"MID") || 0),
+    DIN: +(slotTotalMg(packs,"DIN") || 0),
+    PM:  +(slotTotalMg(packs,"PM")  || 0),
   };
-  let need = Math.max(0, tot - target);
-  const nextMg = {...cur};
-  for (const slot of order){
-    if (need <= EPS) break;
-    const avail = Math.max(0, nextMg[slot] || 0);
-    const take  = Math.min(avail, need);
-    nextMg[slot] = avail - take;
-    need -= take;
+
+  // ----- shave strictly in chip order (AM/MID/DIN/PM as dragged) -----
+  const order = (typeof apGetReductionOrder === "function")
+    ? (apGetReductionOrder() || [])
+    : ["PM","DIN","MID","AM"]; // fallback
+
+  let reduce = +(tot - target).toFixed(6);
+
+  function shaveOne(slot){
+    if (reduce <= EPS) return;
+    const avail = cur[slot];
+    if (avail <= EPS) return;
+
+    const want = Math.min(avail, reduce);
+    let dec = roundTo(want, gridStep);
+    if (dec < EPS) {
+      // ensure progress in this slot
+      dec = (avail >= gridStep) ? gridStep : avail;
+    }
+    dec = Math.min(dec, avail, reduce);
+    dec = roundTo(dec, gridStep);
+
+    cur[slot] = +(cur[slot] - dec).toFixed(6);
+    reduce    = +(reduce    - dec).toFixed(6);
   }
 
-  // --- compose each slot using ONLY the selected strengths (whole > half) ---
+  let guard = 100;
+  while (reduce > EPS && guard-- > 0) {
+    for (const chip of order) {
+      const k = String(chip||"").toUpperCase();
+      if (k==="AM"||k==="MID"||k==="DIN"||k==="PM") shaveOne(k);
+      if (reduce <= EPS) break;
+    }
+  }
+
+  // Snap to grid and reconcile tiny drift
+  for (const k of ["AM","MID","DIN","PM"]) {
+    cur[k] = roundTo(Math.max(0, cur[k]), gridStep);
+    if (cur[k] < EPS) cur[k] = 0;
+  }
+  const sum = +(cur.AM + cur.MID + cur.DIN + cur.PM).toFixed(6);
+  let diff = +(target - sum).toFixed(6);
+  if (Math.abs(diff) > EPS) {
+    const last = String(order[order.length - 1] || "PM").toUpperCase();
+    if (last==="AM"||last==="MID"||last==="DIN"||last==="PM") {
+      cur[last] = roundTo(Math.max(0, cur[last] + diff), gridStep);
+    }
+  }
+
+  // ----- recompose each slot using ONLY selected strengths (whole > half) -----
   const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
-  for (const slot of ["AM","MID","DIN","PM"]){
-    const mg = Math.max(0, roundTo(nextMg[slot] || 0, gridStep));
-    out[slot] = (mg > 0 && typeof composeForSlot_AP_Selected === "function")
-      ? composeForSlot_AP_Selected(mg, cls, med, form)
-      : {};
+  for (const k of ["AM","MID","DIN","PM"]) {
+    const mg = Math.max(0, cur[k]);
+    if (mg > EPS) {
+      if (typeof composeForSlot_AP_Selected === "function") {
+        out[k] = composeForSlot_AP_Selected(mg, "Antipsychotic", med, form);
+      } else if (typeof composeForSlot === "function") {
+        out[k] = composeForSlot(mg, "Antipsychotic", med, form);
+      } else {
+        out[k] = {};
+      }
+    } else {
+      out[k] = {};
+    }
   }
-
   return out;
 }
 
