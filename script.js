@@ -170,18 +170,41 @@ function allCommercialStrengthsMg(cls, med, form){
 // rewrite the label to the selected base strength so we don't "invent" a lower strength.
 function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
   try {
-    const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
-    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
-    const targetMg = parseMgFromStrength(rawStrengthLabel);
-    if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
-    if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
-    const split = (typeof canSplitTablets === "function") ? canSplitTablets(cls, form, med) : {half:false, quarter:false};
-    if (split.half && chosenMap.has(targetMg * 2)) return chosenMap.get(targetMg * 2);
-    if (split.quarter && chosenMap.has(targetMg * 4)) return chosenMap.get(targetMg * 4);
-    return rawStrengthLabel;
-  } catch {
-    return rawStrengthLabel;
-  }
+    // Only normalise for BZRA / Antipsychotic
+    const isAPorBZRA =
+      cls === "Antipsychotic" || cls === "Benzodiazepines / Z-Drug (BZRA)";
+    if (!isAPorBZRA) return rawStrengthLabel;
+
+    // 1) Build the set of mg that are actually selected in the picker
+    let selectedMg = [];
+    if (typeof strengthsForSelected === "function") {
+      selectedMg = (strengthsForSelected() || [])
+        .map(s => (typeof s === "number" ? s : parseMgFromStrength(s)))
+        .filter(n => Number.isFinite(n) && n > 0);
+    }
+    // If the user hasn’t ticked any boxes, treat it as “use all” (no rewrite).
+    if (!selectedMg.length) return rawStrengthLabel;
+
+    selectedMg.sort((a,b)=>a-b);
+    const selSet = new Set(selectedMg.map(n=>+n.toFixed(3)));
+
+    // 2) Parse the mg value shown in the row (may be 0.5x of a selected tablet)
+    const mg = parseMgFromStrength(rawStrengthLabel);
+    if (!Number.isFinite(mg) || mg <= 0) return rawStrengthLabel;
+
+    // 3) If the row’s mg equals a selected mg → keep as-is
+    if (selSet.has(+mg.toFixed(3))) return rawStrengthLabel;
+
+    // 4) If the row’s mg is exactly a HALF of some selected mg,
+    //    rewrite the label to that selected product (e.g., 2.5 → map to 5 mg Tablet)
+    const doubled = +(mg * 2).toFixed(3);
+    if (selSet.has(doubled)) {
+      // Rebuild a canonical “selected” label so the brand/form matches the picker
+      if (typeof strengthToProductLabel === "function") {
+        return strengthToProductLabel(cls, med, form, `${doubled} mg`);
+      }
+      return `${doubled} mg`;
+    }
 }
 
 // Choose "Tablets" vs "Capsules" for Gabapentin based on strength.
