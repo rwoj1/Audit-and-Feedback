@@ -2807,7 +2807,7 @@ const step = split.half ? (minBase/2) : minBase;
     cur[last] = roundTo(Math.max(0, cur[last] + diff), step);
   }
 
-  // --- compose tablets from these per-slot mg, using the selection-aware packer ---
+    // --- compose tablets from these per-slot mg, using the selection-aware packer ---
   // Build the list of selected base strengths (mg) to constrain packing
   const selectedMg = (typeof selectedProductMgs === "function")
     ? (selectedProductMgs() || [])
@@ -2817,20 +2817,22 @@ const step = split.half ? (minBase/2) : minBase;
         .sort((a,b)=>a-b)
     : [];
 
-// --- compose per slot using ONLY the selected (or ALL) products; halves if allowed ---
-// Reuse the BZRA selection-aware composer so labels stay on the selected base product
-return (function recomposeSlots_AP(slots){
-  const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
-  for (const k of ["AM","MID","DIN","PM"]) {
-    const mg = +(slots[k] || 0);
-    out[k] = mg > 0
-      ? (typeof composeForSlot_BZRA_Selected === "function"
-          ? composeForSlot_BZRA_Selected(mg, "Antipsychotic", med, form, selectedMg)
-          : composeForSlot(mg, "Antipsychotic", med, form))
-      : {};
-  }
-  return out;
-})(cur);
+  // Recompose each slot strictly from the selected products (whole first, then halves if allowed)
+  return (function recomposeSlots_AP(slots){
+    const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
+    for (const k of ["AM","MID","DIN","PM"]) {
+      const mg = +(slots[k] || 0);
+      out[k] = mg > 0
+        ? (typeof composeForSlot_BZRA_Selected === "function"
+            // reuse the BZRA selection-aware composer for Antipsychotics
+            ? composeForSlot_BZRA_Selected(mg, "Antipsychotic", med, form, selectedMg)
+            // fallback to generic if the selection-aware one isn’t present
+            : composeForSlot(mg, "Antipsychotic", med, form))
+        : {};
+    }
+    return out;
+  })(cur);
+}
 
 
 /* ===== Gabapentinoids
