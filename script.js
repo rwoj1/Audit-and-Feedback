@@ -1834,7 +1834,10 @@ function renderStandardTable(stepRows){
       const med  = $("medicineSelect")?.value || "";
       const form = $("formSelect")?.value || "";
       const rawLabel = line.strengthLabel || line.strength || "";
-      tdStrength.textContent = prettySelectedLabelOrSame(cls, med, form, rawLabel);
+      const showLabel = (cls === "Benzodiazepines / Z-Drug (BZRA)" || cls === "Antipsychotic")
+      ? prettySelectedLabelOrSame(cls, med, form, rawLabel)
+      : rawLabel;
+      tdStrength.textContent = showLabel;
       tr.appendChild(tdStrength);
 
 
