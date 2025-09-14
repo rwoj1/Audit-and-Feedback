@@ -3641,10 +3641,7 @@ function td(text, cls){ const el=document.createElement("td"); if(cls) el.classN
 
 /* Fractional grouping for BZRA/AP-IR */
 function perStrengthRowsFractional(r){
-  const baseAsc  = strengthsForSelectedSafe(r.cls, r.med, r.form)
-  .map(v => +v)
-  .filter(v => v > 0)
-  .sort((a,b)=>a-b);
+  const baseAsc  = strengthsForSelected().map(parseMgFromStrength).filter(v=>v>0).sort((a,b)=>a-b);
   const baseDesc = baseAsc.slice().sort((a,b)=>b-a);
   const split = canSplitTablets(r.cls, r.form, r.med);
   const byBase = {}; 
