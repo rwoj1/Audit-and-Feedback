@@ -2539,150 +2539,107 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   // Respect selected products for rounding granularity
   const step = lowestStepMg(cls, med, form) || 1;
 
-  // ---------- local helpers (self-contained) ----------
-  function allCommercialStrengthsMg(cls, med, form){
+  // ----- tiny utilities (local, de-duplicated) -----
+  const toMg = (v) => {
+    if (typeof v === 'number') return v;
+    if (typeof parseMgFromStrength === 'function') {
+      const x = parseMgFromStrength(v);
+      if (Number.isFinite(x)) return x;
+    }
+    const m = String(v).match(/([\d.]+)\s*mg/i);
+    return m ? parseFloat(m[1]) : NaN;
+  };
+
+  function commercialStrengthsMg(){
     try {
       if (typeof strengthsForPicker === "function") {
-        const arr = strengthsForPicker(cls, med, form);
-        const mg = (arr || []).map(Number).filter(n => Number.isFinite(n) && n > 0);
-        if (mg.length) return Array.from(new Set(mg)).sort((a,b)=>a-b);
+        const arr = strengthsForPicker(cls, med, form) || [];
+        const mg = arr.map(toMg).filter(n => Number.isFinite(n) && n > 0)
+                     .sort((a,b)=>a-b);
+        return Array.from(new Set(mg));
       }
     } catch(_) {}
     try {
-      const cat = (window.CATALOG?.[cls]?.[med]) || {};
+      const cat  = (window.CATALOG?.[cls]?.[med]) || {};
       const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
-      const mg = (pool || [])
-        .map(v => (typeof v === 'number' ? v : parseMgFromStrength(v)))
-        .filter(n => Number.isFinite(n) && n > 0)
-        .sort((a,b)=>a-b);
-      if (mg.length) return Array.from(new Set(mg));
+      const mg   = (pool || []).map(toMg).filter(n => Number.isFinite(n) && n > 0)
+                         .sort((a,b)=>a-b);
+      return Array.from(new Set(mg));
     } catch(_) {}
     return [];
   }
-  function lowestCommercialStrengthMgLocal(cls, med, form){
-    const all = allCommercialStrengthsMg(cls, med, form);
-    return all.length ? all[0] : null;
-  }
-  function lowestSelectedStrengthMgLocal(){
+
+  function selectedStrengthsMg(){
     try {
-      if (typeof selectedProductMgs === "function") {
-        const picked = selectedProductMgs() || [];
-        const mg = picked.map(Number).filter(n => Number.isFinite(n) && n > 0);
-        if (mg.length) return Math.min(...mg);
-      }
-      // fallback to live SelectedFormulations set (if present)
+      // Prefer live UI selection set
       if (window.SelectedFormulations && SelectedFormulations.size > 0) {
-        const mg = Array.from(SelectedFormulations).map(Number).filter(n => Number.isFinite(n) && n > 0);
-        if (mg.length) return Math.min(...mg);
+        return Array.from(SelectedFormulations)
+          .map(toMg).filter(n => Number.isFinite(n) && n > 0)
+          .sort((a,b)=>a-b);
+      }
+      // Fallback to picker helper
+      if (typeof selectedProductMgs === "function") {
+        const arr = selectedProductMgs() || [];
+        return arr.map(toMg).filter(n => Number.isFinite(n) && n > 0)
+                  .sort((a,b)=>a-b);
       }
     } catch(_) {}
-    return null;
+    return [];
   }
-function lcsIsSelectedLocal(lcs){
-  try{
-    if (!Number.isFinite(lcs)) return false;
-    const n = Number(lcs);
 
-    // robust mg parser: numbers, "X mg", combos like "2.5/1.25 mg"
-    const toMg = (v) => {
-      if (typeof v === 'number') return v;
-      if (typeof parseMgFromStrength === 'function') {
-        const x = parseMgFromStrength(v);
-        if (Number.isFinite(x)) return x;
-      }
-      const m = String(v).match(/([\d.]+)\s*mg/i);
-      return m ? parseFloat(m[1]) : NaN;
-    };
+  const catalog = commercialStrengthsMg();
+  const lcs     = catalog.length ? catalog[0] : NaN;            // lowest commercial strength
+  const selList = selectedStrengthsMg();
+  const pickedAny      = selList.length > 0;
+  const lcsSelected    = pickedAny ? selList.some(mg => Math.abs(mg - lcs) < 1e-9) : true; // none selected ⇒ treat as all
+  const selectedMinMg  = pickedAny ? selList[0] : lcs;          // selected minimum (or lcs if none selected)
+  const thresholdMg    = lcsSelected ? lcs : selectedMinMg;     // endpoint threshold we test against
 
-    let anySelected = false;
+  const AM  = slotTotalMg(packs,"AM");
+  const MID = slotTotalMg(packs,"MID");
+  const DIN = slotTotalMg(packs,"DIN");
+  const PM  = slotTotalMg(packs,"PM");
 
-    // SelectedFormulations may contain strings (e.g., "1 mg", "2.5/1.25 mg")
-    if (window.SelectedFormulations && SelectedFormulations.size > 0){
-      anySelected = true;
-      for (const v of SelectedFormulations){
-        const mg = toMg(v);
-        if (Number.isFinite(mg) && Math.abs(mg - n) < 1e-9) return true;
-      }
-    }
+  const isExactBIDAt = (mg) =>
+    Number.isFinite(mg) &&
+    Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
 
-    // selectedProductMgs() may be numbers or strings
-    if (typeof selectedProductMgs === "function"){
-      const arr = selectedProductMgs() || [];
-      if (arr.length) anySelected = true;
-      for (const v of arr){
-        const mg = toMg(v);
-        if (Number.isFinite(mg) && Math.abs(mg - n) < 1e-9) return true;
-      }
-    }
+  const isExactPMOnlyAt = (mg) =>
+    Number.isFinite(mg) &&
+    AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
 
-    // If nothing explicitly selected, treat as "all selected"
-    if (!anySelected) return true;
-    return false;
-  } catch(_){
-    return false;
-  }
-}
-}  function isExactBIDAtLocal(p, mg){
-    const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
-          DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
-    return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
-  }
-  function isExactPMOnlyAtLocal(p, mg){
-    const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
-          DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
-    return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
-  }
-const __lcsMg   = lowestCommercialStrengthMgLocal(cls, med, form);
-const __pickedAny =
-  (typeof selectedProductMgs === "function" && (selectedProductMgs()||[]).length > 0) ||
-  (window.SelectedFormulations && SelectedFormulations.size > 0);
-const __hasLowestSelected = !__pickedAny ? true : lcsIsSelectedLocal(__lcsMg);
-const __selMinMg = lowestSelectedStrengthMgLocal() ?? __lcsMg;
-
-  // ----------------------------------------------------
-
-  // --- BID end-sequence gate (applies to SR opioids and pregabalin via this stepper) ---
-  const lcs = lowestCommercialStrengthMgLocal(cls, med, form);   // lowest commercial strength available
-  const lss = lowestSelectedStrengthMgLocal();                   // lowest strength selected by user
-  const lcsSelected = lcsIsSelectedLocal(lcs);
-  const threshold = (lcsSelected ? lcs : lss);
-
-  if (threshold != null && Number.isFinite(threshold)) {
-    // Already PM-only at threshold → next is STOP
-    if (isExactPMOnlyAtLocal(packs, threshold)) {
+  // ----- BID end-sequence gate -----
+  if (Number.isFinite(thresholdMg)) {
+    // Already PM-only at threshold => signal STOP
+    if (isExactPMOnlyAt(thresholdMg)) {
       if (window._forceReviewNext) window._forceReviewNext = false;
-      return {}; // empty packs => STOP row
+      return {}; // empty packs ⇒ buildPlanTablets() prints STOP row
     }
-    // First hit of BID(threshold)
-    if (isExactBIDAtLocal(packs, threshold)) {
+
+    // First time we hit exact BID at threshold:
+    if (isExactBIDAt(thresholdMg)) {
       if (lcsSelected) {
-        // Case A: LCS selected → PM-only at threshold (explicit, no rebalancing)
+        // LCS is among selected ⇒ emit PM-only at threshold (no rebalancing)
         if (window._forceReviewNext) window._forceReviewNext = false;
-        const out = { AM:{}, MID:{}, DIN:{}, PM:{} };
-        out.PM[Number(threshold)] = 1;
-        return out;
+        const cur = { AM:0, MID:0, DIN:0, PM:thresholdMg };
+        return recomposeSlots(cur, cls, med, form);
       } else {
-        // Case B: LCS NOT selected → Review on next boundary
+        // LCS not selected ⇒ Review next boundary
         window._forceReviewNext = true;
-        return packs; // return unchanged; plan loop will emit Review next
+        return packs; // unchanged; loop will schedule Review
       }
     }
   }
 
-  // --- continue with normal BID stepping (original V2 logic) ---
+  // ----- Normal SR-style reduction (as in your original logic) -----
   let target = roundTo(tot * (1 - percent/100), step);
   if (target === tot && tot > 0) {
+    // force progress if rounding would stall
     target = Math.max(0, tot - step);
     target = roundTo(target, step);
   }
 
-  let cur = {
-    AM:  slotTotalMg(packs, "AM"),
-    MID: slotTotalMg(packs, "MID"),
-    DIN: slotTotalMg(packs, "DIN"),
-    PM:  slotTotalMg(packs, "PM")
-  };
-
+  let cur = { AM, MID, DIN, PM };
   let reduce = +(tot - target).toFixed(3);
 
   const shave = (slot) => {
@@ -2697,6 +2654,7 @@ const __selMinMg = lowestSelectedStrengthMgLocal() ?? __lcsMg;
   if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
   else               { shave("MID"); }
 
+  // Rebalance across AM/PM if reduction remains
   if (reduce > EPS) {
     const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
     const bid = preferredBidTargets(bidTarget, cls, med, form);
@@ -2704,10 +2662,13 @@ const __selMinMg = lowestSelectedStrengthMgLocal() ?? __lcsMg;
     reduce = 0;
   }
 
+  // tidy negatives to zero
   for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
 
+  // Compose using selected products (keeps “fewest units” rules etc.)
   return recomposeSlots(cur, cls, med, form);
 }
+
 
 /* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN ===== */
 function stepPPI(packs, percent, cls, med, form){
