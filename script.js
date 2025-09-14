@@ -165,19 +165,52 @@ function allCommercialStrengthsMg(cls, med, form){
 }
 
 // Keep labels aligned with the user's selected formulations.
-// If the displayed label's mg is not one of the selected strengths,
-// but is exactly 1/2 or 1/4 of a selected tablet (and splitting is allowed),
 // rewrite the label to the selected base strength so we don't "invent" a lower strength.
-function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel){
+function prettySelectedLabelOrSame(cls, med, form, rawStrengthLabel) {
   try {
-    const chosen = (typeof strengthsForSelected === "function") ? strengthsForSelected() : [];
-    const chosenMap = new Map((chosen||[]).map(s => [parseMgFromStrength(s), s])); // mg -> original label
-    const targetMg = parseMgFromStrength(rawStrengthLabel);
+    const parseNum = (s) => {
+      if (typeof parseMgFromStrength === "function") {
+        return parseMgFromStrength(s);
+      }
+      const m = String(s).match(/([\d.]+)\s*mg/i);
+      return m ? parseFloat(m[1]) : NaN;
+    };
+    const targetMg = parseNum(rawStrengthLabel);
     if (!Number.isFinite(targetMg) || targetMg <= 0) return rawStrengthLabel;
-    if (chosenMap.has(targetMg)) return chosenMap.get(targetMg);
-    const split = (typeof canSplitTablets === "function") ? canSplitTablets(cls, form, med) : {half:false, quarter:false};
-    if (split.half && chosenMap.has(targetMg * 2)) return chosenMap.get(targetMg * 2);
-    if (split.quarter && chosenMap.has(targetMg * 4)) return chosenMap.get(targetMg * 4);
+    const selectedList = (typeof strengthsForSelectedSafe === "function")
+      ? (strengthsForSelectedSafe(cls, med, form) || [])
+      : [];
+    const selectedMg = selectedList
+      .map(parseNum)
+      .filter((x) => Number.isFinite(x) && x > 0);
+
+    if (selectedMg.includes(targetMg)) {
+      return rawStrengthLabel;
+    }
+    const splitInfo = (typeof canSplitTablets === "function")
+      ? canSplitTablets(cls, form, med)
+      : { half: false, quarter: false };
+    const halvesAllowed = !!(splitInfo && splitInfo.half === true);
+    if (halvesAllowed) {
+      const fullFromHalf = selectedMg.find((mg) => Math.abs(mg / 2 - targetMg) < 1e-9);
+      if (fullFromHalf) {
+        return String(rawStrengthLabel).replace(/([\d.]+)\s*mg/i, `${fullFromHalf} mg`);
+      }
+    }
+    if (selectedMg.length > 0) {
+      let nearest = selectedMg[0];
+      let best = Math.abs(nearest - targetMg);
+      for (let i = 1; i < selectedMg.length; i++) {
+        const mg = selectedMg[i];
+        const d = Math.abs(mg - targetMg);
+        if (d < best || (d === best && mg > nearest)) {
+          nearest = mg;
+          best = d;
+        }
+      }
+      return String(rawStrengthLabel).replace(/([\d.]+)\s*mg/i, `${nearest} mg`);
+    }
+    // Fallback
     return rawStrengthLabel;
   } catch {
     return rawStrengthLabel;
