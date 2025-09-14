@@ -322,27 +322,18 @@ button.ghost{
   min-width:1.15rem; height:1.15rem; padding:0 .2rem;
   border-radius:9999px; background:#eef2f7; color:inherit; font-size:.8rem; font-weight:700;
 }
-
 /* Ensure text is visible even on themed chips */
 .ap-order-chips .ap-chip { color: var(--text, #111827); }
 .ap-order-chips .ap-badge{ color: inherit; }
-
-/* Gentle per-chip theming by order (no HTML changes needed) */
-.ap-order-chips .ap-chip:nth-child(1){ /* Morning */
-  background:linear-gradient(180deg,#fff7ed,#fffbeb);
-  border-color:#fed7aa;
+/* Unified blue styling for all AP reduction-order pills */
+.ap-order-chips .ap-chip{
+  background: linear-gradient(180deg, #eef2ff, #e0e7ff);
+  border-color: #c7d2fe;
 }
-.ap-order-chips .ap-chip:nth-child(2){ /* Midday */
-  background:linear-gradient(180deg,#ecfeff,#f0f9ff);
-  border-color:#bae6fd;
-}
-.ap-order-chips .ap-chip:nth-child(3){ /* Dinner */
-  background:linear-gradient(180deg,#fefce8,#fef9c3);
-  border-color:#fde68a;
-}
-.ap-order-chips .ap-chip:nth-child(4){ /* Night */
-  background:linear-gradient(180deg,#eef2ff,#e9d5ff);
-  border-color:#c4b5fd;
+/* Optional: slightly darker on press */
+.ap-order-chips .ap-chip:active{
+  background: linear-gradient(180deg, #e0e7ff, #dbeafe);
+  border-color: #a5b4fc;
 }
 
 /* DnD affordances */
