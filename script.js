@@ -3516,16 +3516,38 @@ function renderProductPicker(){
 }
 // Auto-clear the selection whenever medicine or form changes, then re-render
 (function wireProductPickerResets(){
+  const cls  = document.getElementById("classSelect");
   const med  = document.getElementById("medicineSelect");
   const form = document.getElementById("formSelect");
+
   const reset = () => {
     if (!window.SelectedFormulations) window.SelectedFormulations = new Set();
     SelectedFormulations.clear();
-    renderProductPicker();
+    if (typeof renderProductPicker === "function") renderProductPicker();
     if (typeof setDirty === "function") setDirty(true);
   };
+
   if (med  && !med._ppReset)  { med._ppReset  = true; med.addEventListener("change", reset); }
   if (form && !form._ppReset) { form._ppReset = true; form.addEventListener("change", reset); }
+
+  // NEW: when switching to Antipsychotic, trigger the same downstream init
+  if (cls && !cls._apInit) {
+    cls._apInit = true;
+    cls.addEventListener("change", () => {
+      // Always clear picker state on class change
+      reset();
+
+      if (cls.value === "Antipsychotic") {
+        // Fire med/form change handlers so caps & totals populate immediately
+        if (med)  med.dispatchEvent(new Event("change"));
+        if (form) form.dispatchEvent(new Event("change"));
+
+        // Clear any prior AP warnings and force a totals refresh if available
+        if (typeof apMarkDirty === "function") apMarkDirty(false);
+        if (typeof apRefreshTotals === "function") apRefreshTotals();  // ok if it doesn't exist
+      }
+    });
+  }
 })();
 
 /* =================== Patches builder — date-based Phase-2; start at step 2 =================== */
