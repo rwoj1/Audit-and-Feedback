@@ -2578,21 +2578,45 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     } catch(_) {}
     return null;
   }
-  function lcsIsSelectedLocal(lcs){
-    try{
-      if (!Number.isFinite(lcs)) return false;
-      const n = Number(lcs);
-      if (window.SelectedFormulations && SelectedFormulations.size > 0){
-        for (const v of SelectedFormulations) if (Number(v) === n) return true;
+function lcsIsSelectedLocal(lcs){
+  try{
+    if (!Number.isFinite(lcs)) return false;
+    const n = Number(lcs);
+    // robust mg parser: numbers, "X mg", combos like "2.5/1.25 mg"
+    const toMg = (v) => {
+      if (typeof v === 'number') return v;
+      if (typeof parseMgFromStrength === 'function') {
+        const x = parseMgFromStrength(v);
+        if (Number.isFinite(x)) return x;
       }
-      if (typeof selectedProductMgs === "function"){
-        const arr = selectedProductMgs() || [];
-        for (const v of arr) if (Number(v) === n) return true;
+      const m = String(v).match(/([\d.]+)\s*mg/i);
+      return m ? parseFloat(m[1]) : NaN;
+    };
+    let anySelected = false;
+    // SelectedFormulations may contain strings (e.g., "1 mg", "2.5/1.25 mg")
+    if (window.SelectedFormulations && SelectedFormulations.size > 0){
+      anySelected = true;
+      for (const v of SelectedFormulations){
+        const mg = toMg(v);
+        if (Number.isFinite(mg) && Math.abs(mg - n) < 1e-9) return true;
       }
-      return false;
-    }catch(_){ return false; }
+    }
+    // selectedProductMgs() may be numbers or strings
+    if (typeof selectedProductMgs === "function"){
+      const arr = selectedProductMgs() || [];
+      if (arr.length) anySelected = true;
+      for (const v of arr){
+        const mg = toMg(v);
+        if (Number.isFinite(mg) && Math.abs(mg - n) < 1e-9) return true;
+      }
+    }
+    // If nothing explicitly selected, treat as "all selected"
+    if (!anySelected) return true;
+    return false;
+  } catch(_){
+    return false;
   }
-  function isExactBIDAtLocal(p, mg){
+}  function isExactBIDAtLocal(p, mg){
     const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
           DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
     return Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
