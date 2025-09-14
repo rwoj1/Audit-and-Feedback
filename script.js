@@ -2582,6 +2582,7 @@ function lcsIsSelectedLocal(lcs){
   try{
     if (!Number.isFinite(lcs)) return false;
     const n = Number(lcs);
+
     // robust mg parser: numbers, "X mg", combos like "2.5/1.25 mg"
     const toMg = (v) => {
       if (typeof v === 'number') return v;
@@ -2592,7 +2593,9 @@ function lcsIsSelectedLocal(lcs){
       const m = String(v).match(/([\d.]+)\s*mg/i);
       return m ? parseFloat(m[1]) : NaN;
     };
+
     let anySelected = false;
+
     // SelectedFormulations may contain strings (e.g., "1 mg", "2.5/1.25 mg")
     if (window.SelectedFormulations && SelectedFormulations.size > 0){
       anySelected = true;
@@ -2601,6 +2604,7 @@ function lcsIsSelectedLocal(lcs){
         if (Number.isFinite(mg) && Math.abs(mg - n) < 1e-9) return true;
       }
     }
+
     // selectedProductMgs() may be numbers or strings
     if (typeof selectedProductMgs === "function"){
       const arr = selectedProductMgs() || [];
@@ -2610,12 +2614,14 @@ function lcsIsSelectedLocal(lcs){
         if (Number.isFinite(mg) && Math.abs(mg - n) < 1e-9) return true;
       }
     }
+
     // If nothing explicitly selected, treat as "all selected"
     if (!anySelected) return true;
     return false;
   } catch(_){
     return false;
   }
+}
 }  function isExactBIDAtLocal(p, mg){
     const AM = slotTotalMg(p,"AM"), MID = slotTotalMg(p,"MID"),
           DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
