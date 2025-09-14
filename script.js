@@ -1348,7 +1348,6 @@ function strengthsForSelectedSafe(cls, med, form){
     if (typeof strengthsForSelected === "function") {
       return strengthsForSelected().map(parseMgFromStrength).filter(v => v > 0);
     }
-    // Fallback to CATALOG if needed
     const cat = (window.CATALOG?.[cls]?.[med]) || {};
     const arr = (cat && (cat[form] || Object.values(cat).flat())) || [];
     return arr.map(parseMgFromStrength).filter(v => v > 0);
@@ -1356,6 +1355,25 @@ function strengthsForSelectedSafe(cls, med, form){
     return [];
   }
 }
+function hasSelectedCommercialLowest(cls, med, form) {
+  const toMg = (s) => {
+    const m = String(s).match(/([\d.]+)\s*mg/i);
+    return m ? parseFloat(m[1]) : NaN;
+  const catalog = (typeof strengthsForSelected === "function")
+    ? (strengthsForSelected() || [])
+    : [];
+  const catalogMg = catalog.map(toMg).filter((x) => Number.isFinite(x));
+  if (catalogMg.length === 0) return false;
+  const lowestCommercial = Math.min.apply(null, catalogMg);
+  const selected = (typeof strengthsForSelectedSafe === "function")
+    ? (strengthsForSelectedSafe(cls, med, form) || [])
+    : catalog;
+  const selectedList = (selected.length === 0) ? catalog : selected;
+  const selectedMg = selectedList.map(toMg).filter((x) => Number.isFinite(x));
+  if (selectedMg.length === 0) return false;
+  return selectedMg.some((mg) => Math.abs(mg - lowestCommercial) < 1e-9);
+}
+
 function renderProductPicker(){
   const clsEl  = document.getElementById("classSelect");
   const medEl  = document.getElementById("medicineSelect");
@@ -2578,6 +2596,13 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
           DIN = slotTotalMg(p,"DIN"), PM = slotTotalMg(p,"PM");
     return AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
   }
+const __lcsMg   = lowestCommercialStrengthMgLocal(cls, med, form);
+const __pickedAny =
+  (typeof selectedProductMgs === "function" && (selectedProductMgs()||[]).length > 0) ||
+  (window.SelectedFormulations && SelectedFormulations.size > 0);
+const __hasLowestSelected = !__pickedAny ? true : lcsIsSelectedLocal(__lcsMg);
+const __selMinMg = lowestSelectedStrengthMgLocal() ?? __lcsMg;
+
   // ----------------------------------------------------
 
   // --- BID end-sequence gate (applies to SR opioids and pregabalin via this stepper) ---
