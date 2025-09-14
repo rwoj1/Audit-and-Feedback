@@ -2845,7 +2845,7 @@ function stepGabapentinoid(packs, percent, med, form){
   const stepMg = strengths[0];                              // quantisation step = smallest selected
   const has100 = (stepMg === 100);
   const lss    = strengths[0];                              // lowest selected strength
-  const cap    = 4;                                         // per-slot unit cap
+  const cap = Number.POSITIVE_INFINITY;
 
   // Detect mode based on achieved packs
   const AMmg = slotTotalMg(packs, "AM")  | 0;
