@@ -1359,18 +1359,24 @@ function hasSelectedCommercialLowest(cls, med, form) {
   const toMg = (s) => {
     const m = String(s).match(/([\d.]+)\s*mg/i);
     return m ? parseFloat(m[1]) : NaN;
+  };
+
   const catalog = (typeof strengthsForSelected === "function")
     ? (strengthsForSelected() || [])
     : [];
   const catalogMg = catalog.map(toMg).filter((x) => Number.isFinite(x));
   if (catalogMg.length === 0) return false;
+
   const lowestCommercial = Math.min.apply(null, catalogMg);
+
   const selected = (typeof strengthsForSelectedSafe === "function")
     ? (strengthsForSelectedSafe(cls, med, form) || [])
     : catalog;
+
   const selectedList = (selected.length === 0) ? catalog : selected;
   const selectedMg = selectedList.map(toMg).filter((x) => Number.isFinite(x));
   if (selectedMg.length === 0) return false;
+
   return selectedMg.some((mg) => Math.abs(mg - lowestCommercial) < 1e-9);
 }
 
