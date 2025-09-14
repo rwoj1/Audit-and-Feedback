@@ -3275,6 +3275,70 @@ function buildPlanTablets(){
 
   if (!(p1Pct>0 && p1Int>0)) { showToast("Enter a percentage and an interval to generate a plan."); return []; }
 
+  // --- local helpers for BID endpoint scheduling (selection-aware) ---
+const toMg = (v) => {
+  if (typeof v === 'number') return v;
+  if (typeof parseMgFromStrength === 'function') {
+    const x = parseMgFromStrength(v);
+    if (Number.isFinite(x)) return x;
+  }
+  const m = String(v).match(/([\d.]+)\s*mg/i);
+  return m ? parseFloat(m[1]) : NaN;
+};
+
+// Lowest *selected* mg (falls back to commercial lowest when none explicitly selected)
+function selectedMinMg(cls, med, form){
+  try{
+    let arr = [];
+    if (window.SelectedFormulations && SelectedFormulations.size > 0) {
+      arr = Array.from(SelectedFormulations);
+    } else if (typeof selectedProductMgs === "function") {
+      arr = selectedProductMgs() || [];
+    }
+    let mg = arr.map(toMg).filter(x => Number.isFinite(x) && x > 0);
+    if (mg.length) return Math.min.apply(null, mg);
+
+    // fallback to full catalog/picker list when "none selected" (treat as all)
+    const cat = (typeof strengthsForPicker === "function") ? (strengthsForPicker(cls, med, form) || []) : [];
+    mg = cat.map(toMg).filter(x => Number.isFinite(x) && x > 0);
+    return mg.length ? Math.min.apply(null, mg) : NaN;
+  }catch(_){ return NaN; }
+}
+
+// Are we exactly at BID for the selected-min mg (AM and PM equal; MID/DIN zero)?
+function isAtSelectedBID(packs, selMin){
+  if (!Number.isFinite(selMin) || selMin <= 0) return false;
+  const AM  = (typeof slotTotalMg === "function") ? slotTotalMg(packs,"AM")  : 0;
+  const MID = (typeof slotTotalMg === "function") ? slotTotalMg(packs,"MID") : 0;
+  const DIN = (typeof slotTotalMg === "function") ? slotTotalMg(packs,"DIN") : 0;
+  const PM  = (typeof slotTotalMg === "function") ? slotTotalMg(packs,"PM")  : 0;
+  return Math.abs(AM - selMin) < EPS && Math.abs(PM - selMin) < EPS && MID < EPS && DIN < EPS;
+}
+
+// Make a PM-only snapshot from current packs (drop AM/MID/DIN, keep PM composition)
+function pmOnlyFrom(packs){
+  const q = deepCopy(packs);
+  if (q.AM)  q.AM.length = 0;
+  if (q.MID) q.MID.length = 0;
+  if (q.DIN) q.DIN.length = 0;
+  return q;
+}
+
+// For detection: treat "none selected" as "all selected"
+function lowestSelectedForClassIsPresent(cls, med, form){
+  if (typeof hasSelectedCommercialLowest === "function") {
+    return hasSelectedCommercialLowest(cls, med, form);
+  }
+  // very defensive fallback if helper not present:
+  return true;
+}
+
+// flag + payload for scheduling PM-only at next boundary, then Stop
+if (typeof window !== "undefined") {
+  if (window._pmOnlySnapshot === undefined) window._pmOnlySnapshot = null;
+  if (window._forceStopNext === undefined)  window._forceStopNext  = false;
+}
+  
   // For Antipsychotic, seed from the four AP inputs; otherwise keep existing logic.
   
   let packs = (cls === "Antipsychotic" && typeof apSeedPacksFromFourInputs === "function")
@@ -3304,12 +3368,38 @@ const doStep = (phasePct) => {
   console.log("[DEBUG] Step1 packs:", JSON.stringify(packs));
   if (packsTotalMg(packs) > EPS) rows.push({ week: 1, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
 
+// If a BID class has reached selected-min BID and the class-lowest is among selections,
+// schedule PM-only at next boundary, then Stop at the following boundary.
+if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoids")) {
+  const selMin = selectedMinMg(cls, med, form);
+  if (isAtSelectedBID(packs, selMin) && lowestSelectedForClassIsPresent(cls, med, form)) {
+    window._pmOnlySnapshot = pmOnlyFrom(packs);
+  }
+}
+  
   let week=1;
   while (packsTotalMg(packs) > EPS) {
     const nextByP1 = addDays(date, p1Int);
     const nextByP2 = addDays(date, p2Int);
     let nextDate;
 
+// If a Stop was scheduled for this boundary (after PM-only), emit it now and finish
+if (window._forceStopNext) {
+  rows.push({ week: week+1, date: fmtDate(nextDate), packs:{}, med, form, cls, stop:true });
+  window._forceStopNext = false;
+  break;
+}
+
+// If a PM-only row was scheduled for this boundary, emit it now and prepare to Stop next
+if (window._pmOnlySnapshot) {
+  date = nextDate; week++;
+  packs = deepCopy(window._pmOnlySnapshot);
+  window._pmOnlySnapshot = null;
+  rows.push({ week, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
+  window._forceStopNext = true;   // Stop at the *following* boundary
+  continue; // skip normal stepping this iteration
+}
+    
    // Phase rule: Phase 2 begins only AFTER the current Phase 1 step completes
 if (p2Start && +date < +p2Start) {
   nextDate = nextByP1;
@@ -3346,6 +3436,14 @@ if (typeof window !== "undefined" && window._forceReviewNext){
     if (week > MAX_WEEKS) break;
   }
 
+  // Re-check: if we just landed at selected-min BID with lowest selected, schedule PM-only next
+if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoids")) {
+  const selMin = selectedMinMg(cls, med, form);
+  if (isAtSelectedBID(packs, selMin) && lowestSelectedForClassIsPresent(cls, med, form)) {
+    window._pmOnlySnapshot = pmOnlyFrom(packs);
+  }
+}
+ 
   if (packsTotalMg(packs) <= EPS) rows.push({ week: week+1, date: fmtDate(date), packs: {}, med, form, cls, stop:true });
 
   setDirty(false);
