@@ -311,6 +311,14 @@ function lowestStepMg(cls, med, form){
   const mgList = stepBaseStrengthsMg(cls, med, form);
   return (mgList && mgList.length) ? mgList[0] : 5;
 }
+// Round a TOTAL/DAY to the selected per-unit grid (no BID-doubling). Tie → UP.
+function roundTotalToSelectedGrid(rawTotal, cls, med, form) {
+  const step = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
+  const down = Math.floor(rawTotal / step) * step;
+  const up   = Math.ceil (rawTotal / step) * step;
+  if (Math.abs(rawTotal - down) === Math.abs(up - rawTotal)) return up; // tie → up
+  return (rawTotal - down < up - rawTotal) ? down : up;
+}
 
 // Snap a %-reduced target to the effective step size.
 // Policy: round UP to avoid under-dose; if unchanged, nudge down by one step for progress.
@@ -2517,18 +2525,28 @@ function composeForSlot_AP_Selected(targetMg, cls, med, form){
 
 
 /* ===== Preferred BID split ===== */
+// AM = PM when possible; otherwise AM = PM + one selected step (AM higher)
 function preferredBidTargets(total, cls, med, form){
-  const step = lowestStepMg(cls,med,form) || 1;
-  const half = roundTo(total/2, step);
-  let am = Math.min(half, total-half);
-  let pm = total - am;
-  am = roundTo(am, step); pm = roundTo(pm, step);
-  if(am+pm !== total){
-    const diff = total - (am+pm);
-    pm = roundTo(pm+diff, step);
-    if(am>pm){ const t=am; am=pm; pm=t; }
+  const step = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
+
+  // Snap to grid defensively (your stepper already does this)
+  total = Math.round(total / step) * step;
+
+  // Equal split if possible…
+  if (total % (2 * step) === 0) {
+    const half = total / 2;
+    return { AM: +half.toFixed(3), PM: +half.toFixed(3) };
   }
-  return {AM:am, PM:pm};
+
+  // …else make AM one step higher than PM
+  // total = PM + (PM + step)  => PM = (total - step)/2
+  let PM = Math.max(0, Math.floor(((total - step) / 2) / step) * step);
+  let AM = total - PM;
+
+  // Guard against negatives from flooring math
+  if (PM < 0) { PM = 0; AM = total; }
+
+  return { AM: +AM.toFixed(3), PM: +PM.toFixed(3) };
 }
 
 /* ===== Opioids (tablets/capsules) — shave DIN→MID, then rebalance BID ===== */
@@ -2536,7 +2554,7 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // Respect selected products for rounding granularity
+  // Respect selected products for rounding granularity (per-unit step; SR = whole tabs)
   const step = lowestStepMg(cls, med, form) || 1;
 
   // ----- tiny utilities (local, de-duplicated) -----
@@ -2631,12 +2649,19 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     }
   }
 
-  // ----- Normal SR-style reduction (as in your original logic) -----
-  let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) {
-    // force progress if rounding would stall
+  // ----- Normal SR-style reduction (calculate THEN round on selected per-unit grid) -----
+  const raw = tot * (1 - percent/100);
+
+  // Round total/day on per-unit selected step; tie → UP. (Do NOT multiply by BID.)
+  const down = Math.floor(raw / step) * step;
+  const up   = Math.ceil (raw / step) * step;
+  let target = (Math.abs(raw - down) === Math.abs(up - raw)) ? up
+             : (raw - down < up - raw) ? down : up;
+
+  // Ensure progress if rounding would stall at the same total
+  if (Math.abs(target - tot) < EPS && tot > 0) {
     target = Math.max(0, tot - step);
-    target = roundTo(target, step);
+    target = Math.round(target / step) * step;
   }
 
   let cur = { AM, MID, DIN, PM };
@@ -2657,7 +2682,7 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   // Rebalance across AM/PM if reduction remains
   if (reduce > EPS) {
     const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
-    const bid = preferredBidTargets(bidTarget, cls, med, form);
+    const bid = preferredBidTargets(bidTarget, cls, med, form); // equal if possible, else AM = PM + one step
     cur.AM = bid.AM; cur.PM = bid.PM;
     reduce = 0;
   }
@@ -2668,7 +2693,6 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   // Compose using selected products (keeps “fewest units” rules etc.)
   return recomposeSlots(cur, cls, med, form);
 }
-
 
 /* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN ===== */
 function stepPPI(packs, percent, cls, med, form){
