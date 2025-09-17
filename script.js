@@ -3835,6 +3835,77 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
   return rows;
 }
 
+/* =============================================================
+SHOW CALCULATIONS — logger + renderer (no recalculation)
+Hooks into renderStandardTable/renderPatchTable
+============================================================= */
+(function(){
+const EPS = 1e-6;
+
+// Short, controlled vocabulary for the tooltip column
+const ROUNDING_RATIONALE = {
+exact: "Target dose can be built exactly from available units.",
+nearest: "Chosen total is the closest makeable dose to the target.",
+fewest_units: "Among equals, uses fewer tablets/patches.",
+round_up: "Tie: selected the higher makeable total.",
+round_down: "Selected the lower total to avoid repeating the previous step."
+};
+
+// ---- Calc log (built from existing rows) ----
+const calcLogger = {
+rows: [],
+clear(){ this.rows = []; },
+
+buildFromRows(stepRows, mode){
+this.clear();
+const cls = document.getElementById("classSelect")?.value || "";
+const med = document.getElementById("medicineSelect")?.value || "";
+const form = document.getElementById("formSelect")?.value || "";
+
+// inputs to mimic phase switching (not recalculating steps)
+const p1Pct = Math.max(0, parseFloat(document.getElementById("p1Percent")?.value || ""));
+const p2Pct = Math.max(0, parseFloat(document.getElementById("p2Percent")?.value || ""));
+const p2Int = Math.max(0, parseInt(document.getElementById("p2Interval")?.value || "", 10));
+const p2StartVal = document.getElementById("p2StartDate")?._flatpickr?.selectedDates?.[0]
+|| (document.getElementById("p2StartDate")?.value ? new Date(document.getElementById("p2StartDate").value) : null);
+const p2Start = (p2Pct>0 && p2Int>0 && p2StartVal && !isNaN(+p2StartVal)) ? p2StartVal : null;
+
+const unit = (/Patch/i.test(form) ? "mcg/h" : "mg");
+const stepMg = (typeof lowestStepMg === "function") ? lowestStepMg(cls, med, form) || 1 : 1;
+
+// previous total before Step 1
+let prevPacks;
+if (cls === "Antipsychotic" && typeof apSeedPacksFromFourInputs === "function") {
+prevPacks = apSeedPacksFromFourInputs();
+} else if (/Patch/i.test(form)) {
+// compute start total from doseLines for patches
+let startTotal = 0;
+(window.doseLines || []).forEach(ln => {
+const rate = (typeof parsePatchRate === "function") ? parsePatchRate(ln.strengthStr) : 0;
+const qty = Math.max(0, Math.floor(ln.qty ?? 0));
+startTotal += rate * qty;
+});
+prevPacks = { AM:{}, MID:{}, DIN:{}, PM:{} }; // not used for patches; we track numeric
+prevPacks.__patchTotal = startTotal; // stash
+} else if (typeof buildPacksFromDoseLines === "function") {
+prevPacks = buildPacksFromDoseLines();
+} else {
+prevPacks = { AM:{}, MID:{}, DIN:{}, PM:{} };
+}
+
+let prevTotal = /Patch/i.test(form)
+? (prevPacks.__patchTotal || 0)
+: (typeof packsTotalMg === "function" ? packsTotalMg(prevPacks) : 0);
+
+(stepRows || []).forEach((row, idx)=>{
+if (row.stop || row.review) return; // only true dose steps
+
+const dateStr = row.dateStr || row.date || row.when || "";
+const cfgPct = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+
+const rawTarget = prevTotal * (1 - cfgPct/100);
+})();
+
 /* =================== Build & init =================== */
 
 function buildPlan(){
