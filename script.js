@@ -338,6 +338,24 @@ function selectionGridStep(cls, med, form){
 function lowestStepMg(cls, med, form){
   return selectionGridStep(cls, med, form) || 1;
 }
+// Total-grid step for rounding the day's TOTAL before we split across slots.
+// For BID classes (SR opioids, Pregabalin) the total must land on multiples
+// of 2 × (lowest selected mg), otherwise even halves (AM/PM) can't be built.
+function totalGridStepFromSelection(packs, cls, med, form){
+  const base = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
+
+  // Force BID grid for SR opioids and Pregabalin (even if only PM is non-zero now;
+  // the end-sequence logic handles PM-only afterwards).
+  const isOpioidSR = cls === "Opioid" && /SR/i.test(form) && /Tablet/i.test(form);
+  const isPregab   = /pregabalin/i.test(med);
+
+  if (isOpioidSR || isPregab) return base * 2;
+
+  // Fallback (rare for this fix): multiply by #active slots if you ever need it.
+  const slots = ["AM","MID","DIN","PM"];
+  const n = slots.reduce((acc, s) => acc + ((typeof slotTotalMg === "function" ? slotTotalMg(packs, s) : 0) > 0 ? 1 : 0), 0);
+  return base * Math.max(1, n || 1);
+}
 
 // Snap %-reduced target to the selection-aware grid.
 // Tie → round UP (avoid under-dose). If unchanged, nudge down one step to ensure progress.
@@ -2657,13 +2675,21 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     }
   }
 
-  // ----- Normal SR-style reduction (as in your original logic) -----
-  let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) {
-    // force progress if rounding would stall
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
-  }
+// ----- Normal SR-style reduction (as in your original logic) -----
+// Tie-UP rounding on the per-unit grid (no *2 for BID)
+const raw = tot * (1 - percent/100);
+const down = Math.floor(raw / step) * step;
+const up   = Math.ceil (raw / step) * step;
+
+// pick nearest; on a true tie, choose UP (e.g., 225 on 10 mg grid → 230)
+let target = (raw - down < up - raw) ? down : up;
+if (Math.abs(raw - down) === Math.abs(up - raw)) target = up;
+
+// ensure progress if rounding would stall
+if (Math.abs(target - tot) < EPS && tot > 0) {
+  target = Math.max(0, tot - step);
+  target = Math.round(target / step) * step;
+}
 
   let cur = { AM, MID, DIN, PM };
   let reduce = +(tot - target).toFixed(3);
@@ -3956,11 +3982,11 @@ Hooks into renderStandardTable/renderPatchTable
 
   // Short, controlled vocabulary printed inline (no tooltips)
   const ROUNDING_RATIONALE = {
-    exact:        "Can be built exactly from available units.",
-    nearest:      "Closest makeable dose to the target.",
-    fewest_units: "Tie: uses fewer tablets/patches.",
-    round_up:     "Tie: selected the higher makeable dose.",
-    round_down:   "Lower total selected to avoid repeating the prior step."
+    exact:        " ",
+    nearest:      " ",
+    fewest_units: " ",
+    round_up:     " ",
+    round_down:   " "
   };
 
   const calcLogger = {
