@@ -4045,7 +4045,52 @@ Hooks into renderStandardTable/renderPatchTable
   else                                   wireCalcToggle();
 })();
 
+/* === Sticky BID shim: preserve asymmetric AM/PM after unitization (Opioid SR only) === */
+document.addEventListener('DOMContentLoaded', function(){
+  if (typeof window.recomposeSlots !== "function" ||
+      typeof window.composeForSlot  !== "function" ||
+      typeof window.slotTotalMg     !== "function" ||
+      typeof window.lowestStepMg    !== "function") {
+    return; // required hooks not present
+  }
 
+  const _recomposeSlots = window.recomposeSlots;
+
+  window.recomposeSlots = function recomposeSlots_sticky(targets, cls, med, form){
+    const out = _recomposeSlots(targets, cls, med, form);
+
+    try {
+      const isOpioidSR = (cls === "Opioid") && /SR/i.test(String(form||""));
+      if (!isOpioidSR) return out;
+
+      const step = (window.lowestStepMg(cls, med, form) || 1);
+
+      const tAM = +targets?.AM || 0;
+      const tPM = +targets?.PM || 0;
+      const intendedDelta = Math.abs(tPM - tAM);
+      if (!(intendedDelta >= step)) return out; // nothing to preserve
+
+      let am = window.slotTotalMg(out, "AM");
+      let pm = window.slotTotalMg(out, "PM");
+      const gotDelta = Math.abs(pm - am);
+
+      const lostAsymmetry = (gotDelta < intendedDelta);
+      const wrongDirection = (pm <= am); // prefer PM >= AM
+
+      if (lostAsymmetry || wrongDirection) {
+        const newAM = Math.max(0, am - step);
+        const newPM = pm + step;
+        out.AM = window.composeForSlot(newAM, cls, med, form);
+        out.PM = window.composeForSlot(newPM, cls, med, form);
+      }
+    } catch(_){}
+
+    return out;
+  };
+
+  // Optional: quick confirmation in console
+  try { console.log("[stickyBID] active:", window.recomposeSlots.name); } catch {}
+});
 
 /* =================== Build & init =================== */
 
