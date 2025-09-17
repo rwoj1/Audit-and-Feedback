@@ -3834,6 +3834,76 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 
   return rows;
 }
+/* =============================================================
+   Selected-aware rounding shim (minimal change)
+   - Uses the GCD of the *selected* oral strengths for the grid
+   - Biases true ties upward (consistent with “Round up”)
+   - Does NOT recalc steps; only affects nearestStep()
+   ============================================================= */
+(function () {
+  // Keep the original nearestStep for fallback
+  const _nearestStep = window.nearestStep || ((val, step) => Math.round(val / step) * step);
+
+  // Greatest Common Divisor
+  function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a || 0; }
+  function gcdArray(arr) {
+    let g = 0;
+    for (const n of arr) { const v = Math.round(Math.abs(+n) || 0); if (v > 0) g = g ? gcd(g, v) : v; }
+    return g || 0;
+  }
+
+  // Try to read the currently selected oral strengths (mg)
+  function getSelectedOralStrengths() {
+    // 1) Preferred: app state (adjust if your app exposes a different API)
+    if (Array.isArray(window.selectedStrengthsMg) && window.selectedStrengthsMg.length) {
+      return window.selectedStrengthsMg.slice();
+    }
+    if (typeof window.getSelectedStrengths === "function") {
+      try {
+        const out = window.getSelectedStrengths(); // e.g., [10,30,60]
+        if (Array.isArray(out) && out.length) return out.slice();
+      } catch {}
+    }
+    // 2) DOM fallback: any checked product checkboxes with data-strength/mg
+    try {
+      const nodes = document.querySelectorAll(
+        '[data-strength-mg] input[type="checkbox"]:checked, input[type="checkbox"][data-strength-mg]:checked'
+      );
+      const vals = Array.from(nodes).map(n => {
+        const mg = n.getAttribute("data-strength-mg") || n.parentElement?.getAttribute?.("data-strength-mg");
+        return mg ? parseFloat(mg) : NaN;
+      }).filter(v => isFinite(v) && v > 0);
+      if (vals.length) return vals;
+    } catch {}
+
+    // 3) Last-ditch: infer from the catalogue for current class/medicine/form (may include unselected → not ideal)
+    try {
+      const cls  = document.getElementById("classSelect")?.value || "";
+      const med  = document.getElementById("medicineSelect")?.value || "";
+      const form = document.getElementById("formSelect")?.value || "";
+      if (typeof window.catalogueStrengths === "function") {
+        const vals = window.catalogueStrengths(cls, med, form) || [];
+        if (Array.isArray(vals) && vals.length) return vals;
+      }
+    } catch {}
+
+    return []; // unknown → let fallback use the original step
+  }
+
+  function effectiveStep(baseStep) {
+    const selected = getSelectedOralStrengths();
+    const g = gcdArray(selected);
+    return g > 0 ? g : (baseStep > 0 ? baseStep : 1);
+  }
+
+  // Replace nearestStep with a selected-aware variant
+  window.nearestStep = function (value, step) {
+    const eff = effectiveStep(step);
+    // Tiny positive bias so exact ties round UP (e.g., 225 on 10-mg grid → 230)
+    const bias = eff * 1e-4;
+    return _nearestStep(value + bias, eff);
+  };
+})();
 
 /* =============================================================
 SHOW CALCULATIONS — logger + renderer (no recalculation)
