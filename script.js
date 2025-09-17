@@ -3849,19 +3849,9 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 /* =============================================================
 SHOW CALCULATIONS — logger + renderer (no recalculation)
 Hooks into renderStandardTable/renderPatchTable
-(simplified columns + inline rationale text)
 ============================================================= */
 (function () {
   const EPS = 1e-6;
-
-  // Short, controlled vocabulary printed inline (no tooltips)
-  const ROUNDING_RATIONALE = {
-    exact:        " ",
-    nearest:      " ",
-    fewest_units: " ",
-    round_up:     " ",
-    round_down:   " "
-  };
 
   const calcLogger = {
     rows: [],
@@ -3883,8 +3873,7 @@ Hooks into renderStandardTable/renderPatchTable
         ? (p2StartInput._flatpickr?.selectedDates?.[0] || (p2StartInput.value ? new Date(p2StartInput.value) : null))
         : null;
 
-      const unit   = /Patch/i.test(form) ? "mcg/h" : "mg";
-      const stepMg = (typeof window.lowestStepMg === "function" ? (window.lowestStepMg(cls, med, form) || 1) : 1);
+      const unit = /Patch/i.test(form) ? "mcg/h" : "mg";
 
       // Derive starting total from current inputs (no recomputation of future rows)
       let prevTotal = 0;
@@ -3899,18 +3888,17 @@ Hooks into renderStandardTable/renderPatchTable
       (stepRows || []).forEach((row) => {
         if (row.stop || row.review) return; // skip non-dose rows
 
-        const dateStr  = row.dateStr || row.date || row.when || "";
-        const cfgPct   = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
-        const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational
+        const dateStr   = row.dateStr || row.date || row.when || "";
+        const cfgPct    = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+        const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational (unrounded)
 
         // Chosen total comes from the rendered row itself
         let chosen = 0;
-        if (/Patch/i.test(form) || row.patches) chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
-        else                                     chosen = safePacksTotalMg(row.packs);
-
-        const rounded = nearestToGrid(rawTarget, stepMg);
-        const key     = rationaleTag(rawTarget, rounded, chosen, prevTotal, stepMg);
-        const text    = `${rationaleLabel(key)}: ${ROUNDING_RATIONALE[key] || ""}`;
+        if (/Patch/i.test(form) || row.patches) {
+          chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
+        } else {
+          chosen = safePacksTotalMg(row.packs);
+        }
 
         const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
 
@@ -3921,7 +3909,6 @@ Hooks into renderStandardTable/renderPatchTable
           cfgPct,
           chosen,
           unit,
-          rationaleText: text,
           actualPct
         });
 
@@ -3952,7 +3939,6 @@ Hooks into renderStandardTable/renderPatchTable
         "Calculated Dose",
         "Selected % Change",
         "Chosen Dose",
-        "Rounding Rationale",
         "Actual % Change"
       ].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
       thead.appendChild(trh);
@@ -3966,7 +3952,6 @@ Hooks into renderStandardTable/renderPatchTable
         tr.appendChild(td(fmtQty(r.target, r.unit), "mono"));
         tr.appendChild(td(stripZeros(+r.cfgPct) + "%"));
         tr.appendChild(td(fmtQty(r.chosen, r.unit), "mono"));
-        tr.appendChild(td(r.rationaleText, "wrap"));
         tr.appendChild(td(stripZeros(+r.actualPct.toFixed(1)) + "%"));
         tbody.appendChild(tr);
       });
@@ -4023,40 +4008,6 @@ Hooks into renderStandardTable/renderPatchTable
     return p1Pct;
   }
 
-  function nearestToGrid(val, step){
-    if (!(step > 0)) return val;
-    if (typeof window.nearestStep === "function") { try { return window.nearestStep(val, step); } catch {} }
-    return Math.round(val / step) * step;
-  }
-
-  // Decide label key using only what we already know (no new math)
-  function rationaleTag(rawTarget, roundedTarget, chosen, prevTotal, step){
-    if (Math.abs(chosen - rawTarget) < EPS && Math.abs(roundedTarget - rawTarget) < EPS) return "exact";
-    if (step > 0){
-      const r = rawTarget / step, flo = Math.floor(r), cei = Math.ceil(r);
-      if (Math.abs(r - flo) === Math.abs(cei - r)){
-        const down = flo * step, up = cei * step;
-        if (Math.abs(chosen - up)   < EPS) return "round_up";
-        if (Math.abs(chosen - down) < EPS) return "round_down";
-      }
-    }
-    if (Math.abs(chosen - roundedTarget) < EPS) return "nearest";
-    if (Math.abs(roundedTarget - prevTotal) < EPS && chosen < prevTotal - EPS) return "round_down";
-    if (chosen > roundedTarget + EPS) return "round_up";
-    return "nearest";
-  }
-
-  function rationaleLabel(key){
-    switch (key) {
-      case "exact":        return "Exact";
-      case "nearest":      return "Nearest";
-      case "fewest_units": return "Fewest units";
-      case "round_up":     return "Round up";
-      case "round_down":   return "Round down";
-      default:             return "Nearest";
-    }
-  }
-
   function td(text, cls){ const el = document.createElement("td"); if (cls) el.className = cls; el.textContent = text; return el; }
 
   // ---------- wrap existing renderers ----------
@@ -4093,6 +4044,8 @@ Hooks into renderStandardTable/renderPatchTable
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireCalcToggle);
   else                                   wireCalcToggle();
 })();
+
+
 
 /* =================== Build & init =================== */
 
