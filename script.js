@@ -2536,64 +2536,52 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // Respect selected products for rounding granularity
-  const step = lowestStepMg(cls, med, form) || 1;
+  // ⬅️ KEY CHANGE: snap total daily target to the selected grid (not per-slot)
+  const snap = (typeof snapTargetToSelection === "function")
+    ? snapTargetToSelection(tot, percent, cls, med, form)
+    : { target: (lowestStepMg(cls,med,form)||1) ? Math.round((tot*(1-percent/100))/(lowestStepMg(cls,med,form)||1))*(lowestStepMg(cls,med,form)||1) : tot, step: (lowestStepMg(cls,med,form)||1) };
 
-  // ----- tiny utilities (local, de-duplicated) -----
+  const step   = snap.step || (lowestStepMg(cls,med,form) || 1);
+  let   target = snap.target;
+
+  // --- helpers ---
   const toMg = (v) => {
     if (typeof v === 'number') return v;
     if (typeof parseMgFromStrength === 'function') {
-      const x = parseMgFromStrength(v);
-      if (Number.isFinite(x)) return x;
+      const x = parseMgFromStrength(v); if (Number.isFinite(x)) return x;
     }
     const m = String(v).match(/([\d.]+)\s*mg/i);
     return m ? parseFloat(m[1]) : NaN;
   };
 
   function commercialStrengthsMg(){
-    try {
-      if (typeof strengthsForPicker === "function") {
-        const arr = strengthsForPicker(cls, med, form) || [];
-        const mg = arr.map(toMg).filter(n => Number.isFinite(n) && n > 0)
-                     .sort((a,b)=>a-b);
-        return Array.from(new Set(mg));
-      }
-    } catch(_) {}
-    try {
+    try{
       const cat  = (window.CATALOG?.[cls]?.[med]) || {};
       const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
-      const mg   = (pool || []).map(toMg).filter(n => Number.isFinite(n) && n > 0)
-                         .sort((a,b)=>a-b);
+      const mg   = (pool || []).map(toMg).filter(n => Number.isFinite(n) && n > 0).sort((a,b)=>a-b);
       return Array.from(new Set(mg));
-    } catch(_) {}
-    return [];
+    }catch(_){ return []; }
   }
-
   function selectedStrengthsMg(){
-    try {
-      // Prefer live UI selection set
-      if (window.SelectedFormulations && SelectedFormulations.size > 0) {
-        return Array.from(SelectedFormulations)
-          .map(toMg).filter(n => Number.isFinite(n) && n > 0)
-          .sort((a,b)=>a-b);
+    try{
+      if (window.SelectedFormulations && SelectedFormulations.size > 0){
+        return Array.from(SelectedFormulations).map(toMg).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
       }
-      // Fallback to picker helper
-      if (typeof selectedProductMgs === "function") {
+      if (typeof selectedProductMgs === "function"){
         const arr = selectedProductMgs() || [];
-        return arr.map(toMg).filter(n => Number.isFinite(n) && n > 0)
-                  .sort((a,b)=>a-b);
+        return arr.map(toMg).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
       }
-    } catch(_) {}
+    }catch(_){}
     return [];
   }
 
   const catalog = commercialStrengthsMg();
-  const lcs     = catalog.length ? catalog[0] : NaN;            // lowest commercial strength
+  const lcs     = catalog.length ? catalog[0] : NaN;
   const selList = selectedStrengthsMg();
   const pickedAny      = selList.length > 0;
   const lcsSelected    = pickedAny ? selList.some(mg => Math.abs(mg - lcs) < 1e-9) : true; // none selected ⇒ treat as all
-  const selectedMinMg  = pickedAny ? selList[0] : lcs;          // selected minimum (or lcs if none selected)
-  const thresholdMg    = lcsSelected ? lcs : selectedMinMg;     // endpoint threshold we test against
+  const selectedMinMg  = pickedAny ? selList[0] : lcs;
+  const thresholdMg    = lcsSelected ? lcs : selectedMinMg;
 
   const AM  = slotTotalMg(packs,"AM");
   const MID = slotTotalMg(packs,"MID");
@@ -2601,47 +2589,37 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const PM  = slotTotalMg(packs,"PM");
 
   const isExactBIDAt = (mg) =>
-    Number.isFinite(mg) &&
-    Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
+    Number.isFinite(mg) && Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
 
   const isExactPMOnlyAt = (mg) =>
-    Number.isFinite(mg) &&
-    AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
+    Number.isFinite(mg) && AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
 
   // ----- BID end-sequence gate -----
   if (Number.isFinite(thresholdMg)) {
     // Already PM-only at threshold => signal STOP
-    if (isExactPMOnlyAt(thresholdMg)) {
-      if (window._forceReviewNext) window._forceReviewNext = false;
-      return {}; // empty packs ⇒ buildPlanTablets() prints STOP row
-    }
+    if (isExactPMOnlyAt(thresholdMg)) { if (window._forceReviewNext) window._forceReviewNext = false; return {}; }
 
-    // First time we hit exact BID at threshold:
+    // First time we hit exact BID at threshold
     if (isExactBIDAt(thresholdMg)) {
       if (lcsSelected) {
-        // LCS is among selected ⇒ emit PM-only at threshold (no rebalancing)
         if (window._forceReviewNext) window._forceReviewNext = false;
         const cur = { AM:0, MID:0, DIN:0, PM:thresholdMg };
         return recomposeSlots(cur, cls, med, form);
       } else {
-        // LCS not selected ⇒ Review next boundary
         window._forceReviewNext = true;
         return packs; // unchanged; loop will schedule Review
       }
     }
   }
 
-  // ----- Normal SR-style reduction (as in your original logic) -----
-  let target = roundTo(tot * (1 - percent/100), step);
-  if (target === tot && tot > 0) {
-    // force progress if rounding would stall
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
-  }
+  // --- Normal reduction (now total-first) ---
+  // Ensure progress if a rare tie ever snaps to current total
+  if (target === tot && tot > 0) target = Math.max(0, roundTo(tot - step, step));
 
   let cur = { AM, MID, DIN, PM };
   let reduce = +(tot - target).toFixed(3);
 
+  // SR-style: shave DIN, then MID (no effect here for pure BID)
   const shave = (slot) => {
     if (reduce <= EPS || cur[slot] <= EPS) return;
     const can = cur[slot];
@@ -2649,12 +2627,9 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     cur[slot] = +(cur[slot] - dec).toFixed(3);
     reduce    = +(reduce    - dec).toFixed(3);
   };
+  if (cur.DIN > EPS) { shave("DIN"); shave("MID"); } else { shave("MID"); }
 
-  // SR-style: reduce DIN first; then MID
-  if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
-  else               { shave("MID"); }
-
-  // Rebalance across AM/PM if reduction remains
+  // Rebalance across AM/PM for any remaining reduction (this enforces 40/50 on 90 mg total)
   if (reduce > EPS) {
     const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
     const bid = preferredBidTargets(bidTarget, cls, med, form);
@@ -2662,12 +2637,11 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     reduce = 0;
   }
 
-  // tidy negatives to zero
+  // tidy and compose
   for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
-
-  // Compose using selected products (keeps “fewest units” rules etc.)
   return recomposeSlots(cur, cls, med, form);
 }
+
 
 
 /* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN ===== */
