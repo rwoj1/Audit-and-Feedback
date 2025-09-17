@@ -2541,20 +2541,25 @@ function composeForSlot_AP_Selected(targetMg, cls, med, form){
   return pack || composeForSlot(targetMg, cls, med, form);
 }
 
-
-/* ===== Preferred BID split ===== */
+// Selection-aware BID splitter: AM = PM, or AM = PM + step (step = lowest selected mg)
 function preferredBidTargets(total, cls, med, form){
-  const step = lowestStepMg(cls,med,form) || 1;
-  const half = roundTo(total/2, step);
-  let am = Math.min(half, total-half);
-  let pm = total - am;
-  am = roundTo(am, step); pm = roundTo(pm, step);
-  if(am+pm !== total){
-    const diff = total - (am+pm);
-    pm = roundTo(pm+diff, step);
-    if(am>pm){ const t=am; am=pm; pm=t; }
-  }
-  return {AM:am, PM:pm};
+  const step = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
+
+  // Make sure the incoming total sits on the *selected* grid (your stepper already does this,
+  // but harmless to safeguard here)
+  total = Math.round(total / step) * step;
+
+  const half = total / 2;
+
+  // Bias AM "up" by one step when an exact half isn't possible so that AM >= PM
+  let AM = Math.ceil(half / step) * step;
+  let PM = total - AM;
+
+  // Safety: never negative PM
+  if (PM < 0) { AM = total; PM = 0; }
+
+  // Round to 3dp like the rest of your helpers
+  return { AM: +AM.toFixed(3), PM: +PM.toFixed(3) };
 }
 
 /* ===== Opioids (tablets/capsules) — shave DIN→MID, then rebalance BID ===== */
