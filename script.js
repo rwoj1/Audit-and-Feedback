@@ -3835,36 +3835,47 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
   return rows;
 }
 /* =============================================================
-   Selected-aware rounding shim (minimal change)
-   - Uses the GCD of the *selected* oral strengths for the grid
-   - Biases true ties upward (consistent with “Round up”)
-   - Does NOT recalc steps; only affects nearestStep()
+   Selected-aware rounding shim (class-aware, decimals, halves)
    ============================================================= */
 (function () {
-  // Keep the original nearestStep for fallback
   const _nearestStep = window.nearestStep || ((val, step) => Math.round(val / step) * step);
 
-  // Greatest Common Divisor
+  // ---- small utils ----
+  const Q = 0.25; // mg quantum to support 6.25, 12.5, halves, etc.
+  const toQ = x => Math.round((+x || 0) / Q);  // mg -> quantum units (int)
+  const fromQ = q => q * Q;                     // quantum units -> mg
+
   function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { const t = b; b = a % b; a = t; } return a || 0; }
-  function gcdArray(arr) {
-    let g = 0;
-    for (const n of arr) { const v = Math.round(Math.abs(+n) || 0); if (v > 0) g = g ? gcd(g, v) : v; }
-    return g || 0;
+  function gcdArray(ints) { let g = 0; for (const n of ints) { const v = Math.abs(n|0); if (v > 0) g = g ? gcd(g, v) : v; } return g || 0; }
+
+  function currentClass() { return document.getElementById("classSelect")?.value || ""; }
+  function currentMed()   { return document.getElementById("medicineSelect")?.value || ""; }
+  function currentForm()  { return document.getElementById("formSelect")?.value || ""; }
+
+  function isPatchForm(form) { return /patch/i.test(form || currentForm()); }
+
+  // Splitting rules: halves allowed for antipsychotics IR and BZRA except zolpidem CR
+  function splitFactor(cls, med, form) {
+    cls  = cls  || currentClass();
+    med  = med  || currentMed();
+    form = form || currentForm();
+    if (/patch/i.test(form)) return 1;
+    if (/Antipsychotic/i.test(cls)) return 2;
+    if (/BZRA/i.test(cls)) {
+      const isZolpCR = /zolpidem/i.test(med) && /(CR|MR|XR)/i.test(form);
+      return isZolpCR ? 1 : 2;
+    }
+    return 1; // SR opioids, PPIs, pregabalin, gabapentin: no splitting
   }
 
-  // Try to read the currently selected oral strengths (mg)
+  // Try to read the currently selected oral strengths (mg, may include decimals)
   function getSelectedOralStrengths() {
-    // 1) Preferred: app state (adjust if your app exposes a different API)
-    if (Array.isArray(window.selectedStrengthsMg) && window.selectedStrengthsMg.length) {
-      return window.selectedStrengthsMg.slice();
-    }
+    // App-provided APIs if present
+    if (Array.isArray(window.selectedStrengthsMg) && window.selectedStrengthsMg.length) return window.selectedStrengthsMg.slice();
     if (typeof window.getSelectedStrengths === "function") {
-      try {
-        const out = window.getSelectedStrengths(); // e.g., [10,30,60]
-        if (Array.isArray(out) && out.length) return out.slice();
-      } catch {}
+      try { const out = window.getSelectedStrengths(); if (Array.isArray(out) && out.length) return out.slice(); } catch {}
     }
-    // 2) DOM fallback: any checked product checkboxes with data-strength/mg
+    // DOM fallback: any checked product checkboxes with data-strength-mg
     try {
       const nodes = document.querySelectorAll(
         '[data-strength-mg] input[type="checkbox"]:checked, input[type="checkbox"][data-strength-mg]:checked'
@@ -3875,31 +3886,35 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
       }).filter(v => isFinite(v) && v > 0);
       if (vals.length) return vals;
     } catch {}
-
-    // 3) Last-ditch: infer from the catalogue for current class/medicine/form (may include unselected → not ideal)
+    // Fallback to catalogue (may include non-selected; acceptable fallback)
     try {
-      const cls  = document.getElementById("classSelect")?.value || "";
-      const med  = document.getElementById("medicineSelect")?.value || "";
-      const form = document.getElementById("formSelect")?.value || "";
       if (typeof window.catalogueStrengths === "function") {
-        const vals = window.catalogueStrengths(cls, med, form) || [];
+        const vals = window.catalogueStrengths(currentClass(), currentMed(), currentForm()) || [];
         if (Array.isArray(vals) && vals.length) return vals;
       }
     } catch {}
-
-    return []; // unknown → let fallback use the original step
+    return [];
   }
 
   function effectiveStep(baseStep) {
-    const selected = getSelectedOralStrengths();
-    const g = gcdArray(selected);
-    return g > 0 ? g : (baseStep > 0 ? baseStep : 1);
+    if (isPatchForm()) return baseStep; // never interfere with patches
+    const strengths = getSelectedOralStrengths();
+    if (!strengths.length) return baseStep > 0 ? baseStep : Q;
+
+    // Convert to quantum units, take GCD, then divide by split factor (if halves allowed)
+    const gQ = gcdArray(strengths.map(toQ));
+    const sf = splitFactor();
+    const effQ = Math.max(1, Math.floor(gQ / Math.max(1, sf)));
+    const eff = fromQ(effQ);
+    return eff > 0 ? eff : (baseStep > 0 ? baseStep : Q);
   }
 
-  // Replace nearestStep with a selected-aware variant
+  // Replace nearestStep with a selected-aware, class-aware version
   window.nearestStep = function (value, step) {
+    // Skip patches entirely
+    if (isPatchForm()) return _nearestStep(value, step);
     const eff = effectiveStep(step);
-    // Tiny positive bias so exact ties round UP (e.g., 225 on 10-mg grid → 230)
+    // Tiny upward bias for true ties (e.g., 225 on 10-mg grid -> 230)
     const bias = eff * 1e-4;
     return _nearestStep(value + bias, eff);
   };
