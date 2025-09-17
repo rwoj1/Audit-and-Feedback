@@ -3845,11 +3845,11 @@ Hooks into renderStandardTable/renderPatchTable
 
   // Short, controlled vocabulary printed inline (no tooltips)
   const ROUNDING_RATIONALE = {
-    exact:        "Target dose can be built exactly from available units.",
-    nearest:      "Chosen total is the closest makeable dose to the target.",
-    fewest_units: "Among equals, uses fewer tablets/patches.",
-    round_up:     "Tie: selected the higher makeable total.",
-    round_down:   "Selected the lower total to avoid repeating the previous step."
+    exact:        "Can be built exactly from available units.",
+    nearest:      "Closest makeable dose to the target.",
+    fewest_units: "Tie: uses fewer tablets/patches.",
+    round_up:     "Tie: selected the higher makeable dose.",
+    round_down:   "Lower total selected to avoid repeating the prior step."
   };
 
   const calcLogger = {
@@ -3940,7 +3940,7 @@ Hooks into renderStandardTable/renderPatchTable
         "Date",
         "Calculated Dose",
         "Selected % Change",
-        "Chosen total",
+        "Chosen Dose",
         "Rounding Rationale",
         "Actual % Change"
       ].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
