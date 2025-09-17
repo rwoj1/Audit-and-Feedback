@@ -285,28 +285,22 @@ function strengthsForPicker(){
 
 // Selection-aware strengths used by allowedPiecesMg/lowestStepMg
 function allowedStrengthsFilteredBySelection(){
-  // All strengths for current class/med/form (numeric mg)
   const all = (typeof strengthsForSelected === 'function'
-    ? strengthsForSelected().map(parseMgFromStrength).filter(v => v > 0)
+    ? (strengthsForSelected() || []).map(parseMgFromStrength).filter(v => v > 0)
     : []);
-  // If nothing explicitly selected, use all
   if (!window.SelectedFormulations || window.SelectedFormulations.size === 0) return all;
-  // Normalize the selection set into numeric mg first
-  const selMg = new Set(Array.from(window.SelectedFormulations)
-    .map(v => {
-      if (typeof v === 'number') return v;
-      if (typeof parseMgFromStrength === 'function') {
-        const x = parseMgFromStrength(v);
-        if (Number.isFinite(x) && x > 0) return x;
-      }
-      const m = String(v).match(/([\d.]+)/);
-      return m ? Number(m[1]) : NaN;
-    })
-    .filter(n => Number.isFinite(n) && n > 0));
 
-  // Keep only selected strengths
+  const selMg = new Set(Array.from(window.SelectedFormulations).map(v => {
+    if (typeof v === 'number') return v;
+    if (typeof parseMgFromStrength === 'function') {
+      const x = parseMgFromStrength(v); if (Number.isFinite(x) && x > 0) return x;
+    }
+    const m = String(v).match(/([\d.]+)/); return m ? Number(m[1]) : NaN;
+  }).filter(n => Number.isFinite(n) && n > 0));
+
   return all.filter(mg => selMg.has(mg));
 }
+
 // Returns the mg list to use for the step size: if user selected formulations, use those;
 // otherwise use all available strengths for the current selection.
 function stepBaseStrengthsMg(cls, med, form){
@@ -2544,26 +2538,25 @@ function composeForSlot_AP_Selected(targetMg, cls, med, form){
 
 /* ===== Preferred BID split ===== */
 // AM = PM when possible; otherwise AM = PM + one selected step (AM higher)
+// AM = PM when possible; else AM = PM + one selected step (AM higher).
 function preferredBidTargets(total, cls, med, form){
   const step = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
 
-  // Snap to grid defensively (your stepper already does this)
+  // Defensively align total to the per-unit grid (your stepper already does this)
   total = Math.round(total / step) * step;
 
-  // Equal split if possible…
+  // Equal halves if divisible by 2*step
   if (total % (2 * step) === 0) {
     const half = total / 2;
     return { AM: +half.toFixed(3), PM: +half.toFixed(3) };
   }
 
-  // …else make AM one step higher than PM
-  // total = PM + (PM + step)  => PM = (total - step)/2
+  // Otherwise skew AM up by one step so AM = PM + step
+  // total = PM + (PM + step) ⇒ PM = (total - step)/2 (rounded down to grid)
   let PM = Math.max(0, Math.floor(((total - step) / 2) / step) * step);
   let AM = total - PM;
 
-  // Guard against negatives from flooring math
-  if (PM < 0) { PM = 0; AM = total; }
-
+  if (PM < 0) { PM = 0; AM = total; } // guard
   return { AM: +AM.toFixed(3), PM: +PM.toFixed(3) };
 }
 
@@ -3020,7 +3013,14 @@ function stepGabapentinoid(packs, percent, med, form){
     if (dCei < dFlo) return cei * step;
     return cei * step; // exact tie -> round up
   }
-  function roundTo(x, step){ return step ? Math.round(x/step)*step : x; }
+  // Nearest multiple of 'step'. Ties go UP. No BID/times-per-day logic here.
+function roundTo(value, step){
+  step = (step > 0) ? step : 1;
+  const down = Math.floor(value / step) * step;
+  const up   = Math.ceil (value / step) * step;
+  if (Math.abs(value - down) === Math.abs(up - value)) return up;
+  return (value - down < up - value) ? down : up;
+}
   function floorTo(x, step){ return step ? Math.floor(x/step)*step : x; }
 
   function clonePacks(p){
