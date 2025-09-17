@@ -3836,14 +3836,14 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 }
 
 /* =============================================================
-   SHOW CALCULATIONS — logger + renderer (no recalculation)
-   Hooks into renderStandardTable/renderPatchTable
-   (simplified columns + inline rationale text)
-   ============================================================= */
+SHOW CALCULATIONS — logger + renderer (no recalculation)
+Hooks into renderStandardTable/renderPatchTable
+(simplified columns + inline rationale text)
+============================================================= */
 (function () {
   const EPS = 1e-6;
 
-  // Tooltip text now rendered inline in the table
+  // Short, controlled vocabulary printed inline (no tooltips)
   const ROUNDING_RATIONALE = {
     exact:        "Target dose can be built exactly from available units.",
     nearest:      "Chosen total is the closest makeable dose to the target.",
@@ -3854,42 +3854,33 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 
   const calcLogger = {
     rows: [],
-    clear() { this.rows = []; },
+    clear(){ this.rows = []; },
 
-    buildFromRows(stepRows, mode) {
+    // Build from the same rows that renderers use (no new math)
+    buildFromRows(stepRows){
       this.clear();
 
       const cls  = document.getElementById("classSelect")?.value || "";
       const med  = document.getElementById("medicineSelect")?.value || "";
       const form = document.getElementById("formSelect")?.value || "";
 
-      const p1Pct = nump(document.getElementById("p1Percent")?.value);
-      const p2Pct = nump(document.getElementById("p2Percent")?.value);
+      const p1Pct = num(document.getElementById("p1Percent")?.value);
+      const p2Pct = num(document.getElementById("p2Percent")?.value);
       const p2Int = Math.max(0, parseInt(document.getElementById("p2Interval")?.value || "", 10));
       const p2StartInput = document.getElementById("p2StartDate");
-      const p2Start =
-        (p2Pct > 0 && p2Int > 0 && p2StartInput)
-          ? (p2StartInput._flatpickr?.selectedDates?.[0] ||
-             (p2StartInput.value ? new Date(p2StartInput.value) : null))
-          : null;
+      const p2Start = (p2Pct > 0 && p2Int > 0 && p2StartInput)
+        ? (p2StartInput._flatpickr?.selectedDates?.[0] || (p2StartInput.value ? new Date(p2StartInput.value) : null))
+        : null;
 
-      const unit = /Patch/i.test(form) ? "mcg/h" : "mg";
+      const unit   = /Patch/i.test(form) ? "mcg/h" : "mg";
       const stepMg = (typeof window.lowestStepMg === "function" ? (window.lowestStepMg(cls, med, form) || 1) : 1);
 
-      // derive starting total from current inputs (no recalculation)
+      // Derive starting total from current inputs (no recomputation of future rows)
       let prevTotal = 0;
       if (cls === "Antipsychotic" && typeof window.apSeedPacksFromFourInputs === "function") {
         prevTotal = safePacksTotalMg(window.apSeedPacksFromFourInputs() || {});
       } else if (/Patch/i.test(form)) {
-        let startTotal = 0;
-        (window.doseLines || []).forEach(ln => {
-          const rate = (typeof window.parsePatchRate === "function")
-            ? (window.parsePatchRate(ln.strengthStr) || 0)
-            : parseFloat(ln.strengthStr) || 0;
-          const qty  = Math.max(0, Math.floor(ln.qty ?? 0));
-          startTotal += rate * qty;
-        });
-        prevTotal = startTotal;
+        prevTotal = sumPatchesFromDoseLines();
       } else if (typeof window.buildPacksFromDoseLines === "function") {
         prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
       }
@@ -3897,22 +3888,18 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
       (stepRows || []).forEach((row) => {
         if (row.stop || row.review) return; // skip non-dose rows
 
-        const dateStr = row.dateStr || row.date || row.when || "";
-        const cfgPct  = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+        const dateStr  = row.dateStr || row.date || row.when || "";
+        const cfgPct   = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+        const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational
 
-        const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational only
-
-        // chosen total comes from rendered row
+        // Chosen total comes from the rendered row itself
         let chosen = 0;
-        if (/Patch/i.test(form) || row.patches) {
-          chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
-        } else {
-          chosen = safePacksTotalMg(row.packs);
-        }
+        if (/Patch/i.test(form) || row.patches) chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
+        else                                     chosen = safePacksTotalMg(row.packs);
 
         const rounded = nearestToGrid(rawTarget, stepMg);
-        const rationaleKey = rationaleTag(rawTarget, rounded, chosen, prevTotal, stepMg);
-        const rationaleText = `${rationaleLabel(rationaleKey)}: ${ROUNDING_RATIONALE[rationaleKey] || ""}`;
+        const key     = rationaleTag(rawTarget, rounded, chosen, prevTotal, stepMg);
+        const text    = `${rationaleLabel(key)}: ${ROUNDING_RATIONALE[key] || ""}`;
 
         const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
 
@@ -3923,19 +3910,18 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
           cfgPct,
           chosen,
           unit,
-          rationaleText,
+          rationaleText: text,
           actualPct
         });
 
-        prevTotal = chosen; // advance to next step
+        prevTotal = chosen; // advance for next step’s comparisons
       });
     },
 
-    render() {
+    render(){
       const hostCard  = document.getElementById("calcBlock");
       const hostTable = document.getElementById("calcTableHost");
       const checked   = document.getElementById("showCalc")?.checked;
-
       if (!hostCard || !hostTable) return;
 
       if (!checked || !this.rows.length) {
@@ -3944,11 +3930,11 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
         return;
       }
 
-      const tbl = document.createElement("table");
+      const tbl   = document.createElement("table");
       tbl.className = "plan-table calc-table";
 
       const thead = document.createElement("thead");
-      const trh = document.createElement("tr");
+      const trh   = document.createElement("tr");
       [
         "Step",
         "Date",
@@ -3957,11 +3943,7 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
         "Chosen total",
         "Rounding Rationale",
         "Actual % Change"
-      ].forEach(h => {
-        const th = document.createElement("th");
-        th.textContent = h;
-        trh.appendChild(th);
-      });
+      ].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
       thead.appendChild(trh);
       tbl.appendChild(thead);
 
@@ -3986,76 +3968,74 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
   };
 
   // ---------- helpers ----------
-  function nump(v) {
-    const n = parseFloat(v ?? "");
-    return isFinite(n) ? n : 0;
-    }
+  function num(v){ const n = parseFloat(v ?? ""); return isFinite(n) ? n : 0; }
 
-  function stripZeros(n) {
+  function stripZeros(n){
     if (typeof window.stripZeros === "function") return window.stripZeros(n);
     if (Number.isInteger(n)) return String(n);
     return String(n).replace(/(\.\d*?[1-9])0+$/,"$1").replace(/\.0+$/,"");
   }
 
-  function fmtQty(n, unit) {
-    const v = Math.round((+n) * 100) / 100;
-    return stripZeros(v) + " " + unit;
+  function fmtQty(n, unit){
+    const val = Math.abs(n) < EPS ? 0 : +(+n).toFixed(2);
+    return `${stripZeros(val)} ${unit}`;
   }
 
-  function sumPatches(arr) {
-    return (arr || []).reduce((a, b) => a + (parseFloat(b) || 0), 0);
-  }
-
-  function safePacksTotalMg(packs) {
-    try {
-      if (typeof window.packsTotalMg === "function") return window.packsTotalMg(packs) || 0;
-      let total = 0;
-      ["AM","MID","DIN","PM"].forEach(slot => {
-        Object.entries(packs?.[slot] || {}).forEach(([mg, count]) => {
-          total += (parseFloat(mg) || 0) * (parseFloat(count) || 0);
-        });
-      });
-      return total;
+  function safePacksTotalMg(p){
+    try{
+      if (typeof window.packsTotalMg === "function") return window.packsTotalMg(p || {});
+      const s = k => Object.entries((p||{})[k]||{}).reduce((a,[mg,c]) => a + (+mg)*(+c||0), 0);
+      return s("AM")+s("MID")+s("DIN")+s("PM");
     } catch { return 0; }
   }
 
-  function pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start) {
+  function sumPatchesFromDoseLines(){
+    let total = 0;
+    (window.doseLines || []).forEach(ln => {
+      const rate = (typeof window.parsePatchRate === "function")
+        ? (window.parsePatchRate(ln.strengthStr) || 0)
+        : parseFloat(ln.strengthStr) || 0;
+      const qty = Math.max(0, Math.floor(ln.qty ?? 0));
+      total += rate * qty;
+    });
+    return total;
+  }
+
+  function sumPatches(list){
+    try { return (list || []).reduce((s, p) => s + ((+p.rate) || 0), 0); }
+    catch { return 0; }
+  }
+
+  function pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start){
     if (!(p2Start instanceof Date) || !(p2Pct > 0)) return p1Pct;
-    try {
-      const dt = new Date(dateStr);
-      if (isFinite(+dt) && +dt >= +p2Start) return p2Pct;
-    } catch {}
+    try { const dt = new Date(dateStr); if (isFinite(+dt) && +dt >= +p2Start) return p2Pct; } catch {}
     return p1Pct;
   }
 
-  function nearestToGrid(val, step) {
+  function nearestToGrid(val, step){
     if (!(step > 0)) return val;
-    if (typeof window.nearestStep === "function") {
-      try { return window.nearestStep(val, step); } catch {}
-    }
+    if (typeof window.nearestStep === "function") { try { return window.nearestStep(val, step); } catch {} }
     return Math.round(val / step) * step;
   }
 
-  function rationaleTag(rawTarget, roundedTarget, chosen, prevTotal, step) {
+  // Decide label key using only what we already know (no new math)
+  function rationaleTag(rawTarget, roundedTarget, chosen, prevTotal, step){
     if (Math.abs(chosen - rawTarget) < EPS && Math.abs(roundedTarget - rawTarget) < EPS) return "exact";
-
-    if (step > 0) {
-      const r = rawTarget / step;
-      const flo = Math.floor(r), cei = Math.ceil(r);
-      if (Math.abs(r - flo) === Math.abs(cei - r)) {
+    if (step > 0){
+      const r = rawTarget / step, flo = Math.floor(r), cei = Math.ceil(r);
+      if (Math.abs(r - flo) === Math.abs(cei - r)){
         const down = flo * step, up = cei * step;
         if (Math.abs(chosen - up)   < EPS) return "round_up";
         if (Math.abs(chosen - down) < EPS) return "round_down";
       }
     }
-
     if (Math.abs(chosen - roundedTarget) < EPS) return "nearest";
     if (Math.abs(roundedTarget - prevTotal) < EPS && chosen < prevTotal - EPS) return "round_down";
     if (chosen > roundedTarget + EPS) return "round_up";
     return "nearest";
   }
 
-  function rationaleLabel(key) {
+  function rationaleLabel(key){
     switch (key) {
       case "exact":        return "Exact";
       case "nearest":      return "Nearest";
@@ -4066,18 +4046,13 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
     }
   }
 
-  function td(text, cls) {
-    const el = document.createElement("td");
-    if (cls) el.className = cls;
-    el.textContent = text;
-    return el;
-  }
+  function td(text, cls){ const el = document.createElement("td"); if (cls) el.className = cls; el.textContent = text; return el; }
 
   // ---------- wrap existing renderers ----------
-  const _renderStd = (typeof window.renderStandardTable === "function") ? window.renderStandardTable : null;
-  if (_renderStd) {
-    window.renderStandardTable = function (rows) {
-      try { calcLogger.buildFromRows(rows, "std"); } catch {}
+  const _renderStd   = (typeof window.renderStandardTable === "function") ? window.renderStandardTable : null;
+  if (_renderStd){
+    window.renderStandardTable = function(rows){
+      try { calcLogger.buildFromRows(rows); } catch {}
       const rv = _renderStd.apply(this, arguments);
       try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
       return rv;
@@ -4085,9 +4060,9 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
   }
 
   const _renderPatch = (typeof window.renderPatchTable === "function") ? window.renderPatchTable : null;
-  if (_renderPatch) {
-    window.renderPatchTable = function (rows) {
-      try { calcLogger.buildFromRows(rows, "patch"); } catch {}
+  if (_renderPatch){
+    window.renderPatchTable = function(rows){
+      try { calcLogger.buildFromRows(rows); } catch {}
       const rv = _renderPatch.apply(this, arguments);
       try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
       return rv;
@@ -4095,189 +4070,19 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
   }
 
   // ---------- checkbox toggle ----------
-  function wireCalcToggle() {
+  function wireCalcToggle(){
     const el = document.getElementById("showCalc");
     if (!el) return;
     el.addEventListener("change", () => {
       const hostCard = document.getElementById("calcBlock");
-      if (el.checked) {
-        try { calcLogger.render(); } catch {}
-      } else if (hostCard) {
-        hostCard.style.display = "none";
-      }
+      if (el.checked) { try { calcLogger.render(); } catch {} }
+      else if (hostCard) { hostCard.style.display = "none"; }
     });
   }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", wireCalcToggle);
-  } else {
-    wireCalcToggle();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireCalcToggle);
+  else                                   wireCalcToggle();
 })();
 
-  // ---------- helpers (no plan math, just formatting/inference) ----------
-  function nump(v) {
-    const n = parseFloat(v ?? "");
-    return isFinite(n) ? n : 0;
-  }
-
-  function stripZeros(n) {
-    if (typeof window.stripZeros === "function") return window.stripZeros(n);
-    if (Number.isInteger(n)) return String(n);
-    return String(n).replace(/(\.\d*?[1-9])0+$/,"$1").replace(/\.0+$/,"");
-  }
-
-  function stripNumLike(x) {
-    // Accept numbers or strings like "25", "25 mcg/h"
-    if (typeof x === "number") return stripZeros(x);
-    const m = String(x).match(/-?\d+(\.\d+)?/);
-    return m ? stripZeros(+m[0]) : String(x);
-  }
-
-  function fmtQty(n, unit) {
-    const v = Math.round((+n) * 100) / 100;
-    return stripZeros(v) + " " + unit;
-  }
-
-  function sumPatches(arr) {
-    return (arr || []).reduce((a, b) => a + (parseFloat(b) || 0), 0);
-  }
-
-  function safePacksTotalMg(packs) {
-    try {
-      if (typeof window.packsTotalMg === "function") return window.packsTotalMg(packs) || 0;
-      // fallback: sum strengths × counts across AM/MID/DIN/PM
-      let total = 0;
-      ["AM", "MID", "DIN", "PM"].forEach(slot => {
-        Object.entries(packs?.[slot] || {}).forEach(([mg, count]) => {
-          total += (parseFloat(mg) || 0) * (parseFloat(count) || 0);
-        });
-      });
-      return total;
-    } catch { return 0; }
-  }
-
-  function unitsFromPacks(p) {
-    try {
-      const acc = {};
-      ["AM", "MID", "DIN", "PM"].forEach(slot => {
-        Object.entries(p?.[slot] || {}).forEach(([mg, count]) => {
-          const k = +mg;
-          acc[k] = (acc[k] || 0) + (+count || 0);
-        });
-      });
-      const parts = Object.keys(acc)
-        .map(k => +k)
-        .sort((a, b) => b - a)
-        .map(mg => `${stripZeros(mg)}×${acc[mg]}`);
-      return parts.join(" + ");
-    } catch { return ""; }
-  }
-
-  function pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start) {
-    if (!(p2Start instanceof Date) || !(p2Pct > 0)) return p1Pct;
-    try {
-      // Try robust parse (supports dd/mm/yyyy, yyyy-mm-dd, etc.)
-      const dt = new Date(dateStr);
-      if (isFinite(+dt) && +dt >= +p2Start) return p2Pct;
-    } catch {}
-    return p1Pct;
-  }
-
-  function nearestToGrid(val, step) {
-    if (!(step > 0)) return val;
-    if (typeof window.nearestStep === "function") {
-      try { return window.nearestStep(val, step); } catch {}
-    }
-    return Math.round(val / step) * step;
-  }
-
-  // Decide label key using only information we already have (no new math)
-  function rationaleTag(rawTarget, roundedTarget, chosen, prevTotal, step) {
-    if (Math.abs(chosen - rawTarget) < EPS && Math.abs(roundedTarget - rawTarget) < EPS) return "exact";
-
-    // True tie on grid?
-    if (step > 0) {
-      const r = rawTarget / step;
-      const flo = Math.floor(r), cei = Math.ceil(r);
-      if (Math.abs(r - flo) === Math.abs(cei - r)) {
-        const down = flo * step, up = cei * step;
-        if (Math.abs(chosen - up)   < EPS) return "round_up";
-        if (Math.abs(chosen - down) < EPS) return "round_down";
-      }
-    }
-
-    // If chosen equals our nearest grid guess → Nearest
-    if (Math.abs(chosen - roundedTarget) < EPS) return "nearest";
-
-    // If nearest grid would duplicate previous total, but chosen stepped down → Round down (avoid repeat)
-    if (Math.abs(roundedTarget - prevTotal) < EPS && chosen < prevTotal - EPS) return "round_down";
-
-    // If chosen ended above our nearest guess → Round up
-    if (chosen > roundedTarget + EPS) return "round_up";
-
-    return "nearest"; // safe default
-  }
-
-  function rationaleLabel(key) {
-    switch (key) {
-      case "exact":        return "Exact";
-      case "nearest":      return "Nearest";
-      case "fewest_units": return "Fewest units";
-      case "round_up":     return "Round up";
-      case "round_down":   return "Round down";
-      default:             return "Nearest";
-    }
-  }
-
-  function td(text, cls) {
-    const el = document.createElement("td");
-    if (cls) el.className = cls;
-    el.textContent = text;
-    return el;
-  }
-
-  // ---------- wrap existing renderers so we see the same rows ----------
-  const _renderStd = (typeof window.renderStandardTable === "function") ? window.renderStandardTable : null;
-  if (_renderStd) {
-    window.renderStandardTable = function (rows) {
-      try { calcLogger.buildFromRows(rows, "std"); } catch {}
-      const rv = _renderStd.apply(this, arguments);
-      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
-      return rv;
-    };
-  }
-
-  const _renderPatch = (typeof window.renderPatchTable === "function") ? window.renderPatchTable : null;
-  if (_renderPatch) {
-    window.renderPatchTable = function (rows) {
-      try { calcLogger.buildFromRows(rows, "patch"); } catch {}
-      const rv = _renderPatch.apply(this, arguments);
-      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
-      return rv;
-    };
-  }
-
-  // ---------- wire checkbox toggle ----------
-  function wireCalcToggle() {
-    const el = document.getElementById("showCalc");
-    if (!el) return;
-    el.addEventListener("change", () => {
-      const hostCard = document.getElementById("calcBlock");
-      if (el.checked) {
-        try { calcLogger.render(); } catch {}
-      } else if (hostCard) {
-        hostCard.style.display = "none";
-      }
-    });
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", wireCalcToggle);
-  } else {
-    wireCalcToggle();
-  }
-})();
 
 /* =================== Build & init =================== */
 
