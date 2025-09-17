@@ -3938,7 +3938,7 @@ Hooks into renderStandardTable/renderPatchTable
         "Date",
         "Calculated Dose",
         "Selected % Change",
-        "Chosen Dose",
+        "Rounded Dose",
         "Actual % Change"
       ].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
       thead.appendChild(trh);
