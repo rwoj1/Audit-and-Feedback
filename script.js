@@ -338,24 +338,6 @@ function selectionGridStep(cls, med, form){
 function lowestStepMg(cls, med, form){
   return selectionGridStep(cls, med, form) || 1;
 }
-// Total-grid step for rounding the day's TOTAL before we split across slots.
-// For BID classes (SR opioids, Pregabalin) the total must land on multiples
-// of 2 × (lowest selected mg), otherwise even halves (AM/PM) can't be built.
-function totalGridStepFromSelection(packs, cls, med, form){
-  const base = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
-
-  // Force BID grid for SR opioids and Pregabalin (even if only PM is non-zero now;
-  // the end-sequence logic handles PM-only afterwards).
-  const isOpioidSR = cls === "Opioid" && /SR/i.test(form) && /Tablet/i.test(form);
-  const isPregab   = /pregabalin/i.test(med);
-
-  if (isOpioidSR || isPregab) return base * 2;
-
-  // Fallback (rare for this fix): multiply by #active slots if you ever need it.
-  const slots = ["AM","MID","DIN","PM"];
-  const n = slots.reduce((acc, s) => acc + ((typeof slotTotalMg === "function" ? slotTotalMg(packs, s) : 0) > 0 ? 1 : 0), 0);
-  return base * Math.max(1, n || 1);
-}
 
 // Snap %-reduced target to the selection-aware grid.
 // Tie → round UP (avoid under-dose). If unchanged, nudge down one step to ensure progress.
