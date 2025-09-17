@@ -2518,18 +2518,30 @@ function composeForSlot_AP_Selected(targetMg, cls, med, form){
 
 /* ===== Preferred BID split ===== */
 function preferredBidTargets(total, cls, med, form){
-  const step = lowestStepMg(cls,med,form) || 1;
-  const half = roundTo(total/2, step);
-  let am = Math.min(half, total-half);
-  let pm = total - am;
-  am = roundTo(am, step); pm = roundTo(pm, step);
-  if(am+pm !== total){
-    const diff = total - (am+pm);
-    pm = roundTo(pm+diff, step);
-    if(am>pm){ const t=am; am=pm; pm=t; }
-  }
-  return {AM:am, PM:pm};
+  const EPS  = 1e-9;
+  const step = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
+
+  // Snap total to the grid once (selection-aware)
+  total = Math.max(0, Math.round(total / step) * step);
+
+  // Base even split on the grid
+  let am = Math.floor((total / 2) / step) * step;  // floor half on the grid
+  let pm = total - am;                             // remainder to PM (so PM >= AM)
+
+  // Snap PM to grid (guard tiny float noise), recompute AM as the remainder
+  pm = Math.round(pm / step) * step;
+  am = total - pm;
+
+  // Clean tiny negatives
+  if (am < EPS) am = 0;
+  if (pm < EPS) pm = 0;
+
+  // Prefer PM >= AM; swap if needed
+  if (am > pm) { const t = am; am = pm; pm = t; }
+
+  return { AM: am, PM: pm };
 }
+
 
 /* ===== Opioids (tablets/capsules) — shave DIN→MID, then rebalance BID ===== */
 function stepOpioid_Shave(packs, percent, cls, med, form){
