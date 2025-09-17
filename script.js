@@ -3836,74 +3836,333 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 }
 
 /* =============================================================
-SHOW CALCULATIONS — logger + renderer (no recalculation)
-Hooks into renderStandardTable/renderPatchTable
-============================================================= */
-(function(){
-const EPS = 1e-6;
+   SHOW CALCULATIONS — logger + renderer (no recalculation)
+   Hooks into renderStandardTable/renderPatchTable
+   ============================================================= */
+(function () {
+  const EPS = 1e-6;
 
-// Short, controlled vocabulary for the tooltip column
-const ROUNDING_RATIONALE = {
-exact: "Target dose can be built exactly from available units.",
-nearest: "Chosen total is the closest makeable dose to the target.",
-fewest_units: "Among equals, uses fewer tablets/patches.",
-round_up: "Tie: selected the higher makeable total.",
-round_down: "Selected the lower total to avoid repeating the previous step."
-};
+  // Short, controlled vocabulary (tooltips)
+  const ROUNDING_RATIONALE = {
+    exact:        "Target dose can be built exactly from available units.",
+    nearest:      "Chosen total is the closest makeable dose to the target.",
+    fewest_units: "Among equals, uses fewer tablets/patches.",
+    round_up:     "Tie: selected the higher makeable total.",
+    round_down:   "Selected the lower total to avoid repeating the previous step."
+  };
 
-// ---- Calc log (built from existing rows) ----
-const calcLogger = {
-rows: [],
-clear(){ this.rows = []; },
+  // ---------- calc log built from existing rendered rows ----------
+  const calcLogger = {
+    rows: [],
+    clear() { this.rows = []; },
 
-buildFromRows(stepRows, mode){
-this.clear();
-const cls = document.getElementById("classSelect")?.value || "";
-const med = document.getElementById("medicineSelect")?.value || "";
-const form = document.getElementById("formSelect")?.value || "";
+    buildFromRows(stepRows, mode) {
+      this.clear();
 
-// inputs to mimic phase switching (not recalculating steps)
-const p1Pct = Math.max(0, parseFloat(document.getElementById("p1Percent")?.value || ""));
-const p2Pct = Math.max(0, parseFloat(document.getElementById("p2Percent")?.value || ""));
-const p2Int = Math.max(0, parseInt(document.getElementById("p2Interval")?.value || "", 10));
-const p2StartVal = document.getElementById("p2StartDate")?._flatpickr?.selectedDates?.[0]
-|| (document.getElementById("p2StartDate")?.value ? new Date(document.getElementById("p2StartDate").value) : null);
-const p2Start = (p2Pct>0 && p2Int>0 && p2StartVal && !isNaN(+p2StartVal)) ? p2StartVal : null;
+      const cls  = document.getElementById("classSelect")?.value || "";
+      const med  = document.getElementById("medicineSelect")?.value || "";
+      const form = document.getElementById("formSelect")?.value || "";
 
-const unit = (/Patch/i.test(form) ? "mcg/h" : "mg");
-const stepMg = (typeof lowestStepMg === "function") ? lowestStepMg(cls, med, form) || 1 : 1;
+      // read % controls to know which % applied at each step/date (no recompute)
+      const p1Pct = nump(document.getElementById("p1Percent")?.value);
+      const p2Pct = nump(document.getElementById("p2Percent")?.value);
+      const p2Int = Math.max(0, parseInt(document.getElementById("p2Interval")?.value || "", 10));
+      const p2StartInput = document.getElementById("p2StartDate");
+      const p2Start =
+        (p2Pct > 0 && p2Int > 0 && p2StartInput) ?
+          (p2StartInput._flatpickr?.selectedDates?.[0] ||
+           (p2StartInput.value ? new Date(p2StartInput.value) : null)) : null;
 
-// previous total before Step 1
-let prevPacks;
-if (cls === "Antipsychotic" && typeof apSeedPacksFromFourInputs === "function") {
-prevPacks = apSeedPacksFromFourInputs();
-} else if (/Patch/i.test(form)) {
-// compute start total from doseLines for patches
-let startTotal = 0;
-(window.doseLines || []).forEach(ln => {
-const rate = (typeof parsePatchRate === "function") ? parsePatchRate(ln.strengthStr) : 0;
-const qty = Math.max(0, Math.floor(ln.qty ?? 0));
-startTotal += rate * qty;
-});
-prevPacks = { AM:{}, MID:{}, DIN:{}, PM:{} }; // not used for patches; we track numeric
-prevPacks.__patchTotal = startTotal; // stash
-} else if (typeof buildPacksFromDoseLines === "function") {
-prevPacks = buildPacksFromDoseLines();
-} else {
-prevPacks = { AM:{}, MID:{}, DIN:{}, PM:{} };
-}
+      const unit = /Patch/i.test(form) ? "mcg/h" : "mg";
+      const stepMg = (typeof window.lowestStepMg === "function" ? (window.lowestStepMg(cls, med, form) || 1) : 1);
 
-let prevTotal = /Patch/i.test(form)
-? (prevPacks.__patchTotal || 0)
-: (typeof packsTotalMg === "function" ? packsTotalMg(prevPacks) : 0);
+      // derive starting total (from current inputs / packs), without recalculation
+      let prevTotal = 0;
 
-(stepRows || []).forEach((row, idx)=>{
-if (row.stop || row.review) return; // only true dose steps
+      if (cls === "Antipsychotic" && typeof window.apSeedPacksFromFourInputs === "function") {
+        const packs = window.apSeedPacksFromFourInputs() || {};
+        prevTotal = safePacksTotalMg(packs);
+      } else if (/Patch/i.test(form)) {
+        // patches: sum current dose lines (e.g., 25 + 12)
+        let startTotal = 0;
+        (window.doseLines || []).forEach(ln => {
+          const rate = (typeof window.parsePatchRate === "function") ? (window.parsePatchRate(ln.strengthStr) || 0) : parseFloat(ln.strengthStr) || 0;
+          const qty  = Math.max(0, Math.floor(ln.qty ?? 0));
+          startTotal += rate * qty;
+        });
+        prevTotal = startTotal;
+      } else if (typeof window.buildPacksFromDoseLines === "function") {
+        const packs = window.buildPacksFromDoseLines() || {};
+        prevTotal = safePacksTotalMg(packs);
+      }
 
-const dateStr = row.dateStr || row.date || row.when || "";
-const cfgPct = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+      (stepRows || []).forEach((row) => {
+        // skip non-dose rows
+        if (row.stop || row.review) return;
 
-const rawTarget = prevTotal * (1 - cfgPct/100);
+        const dateStr = row.dateStr || row.date || row.when || "";
+        const cfgPct  = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+
+        // "Target" is informational only: previous total × (1 − %). We do not use it to rebuild.
+        const rawTarget = prevTotal * (1 - (cfgPct / 100));
+
+        // Chosen total: from the already-rendered row
+        let chosen = 0;
+        let unitsStr = "";
+
+        if (/Patch/i.test(form) || row.patches) {
+          const plist = Array.isArray(row.patches) ? row.patches : [];
+          chosen  = sumPatches(plist);
+          unitsStr = plist.map(stripNumLike).join(" + ");
+        } else {
+          chosen  = safePacksTotalMg(row.packs);
+          unitsStr = unitsFromPacks(row.packs);
+        }
+
+        // Rounded (nearest grid point) for rationale only
+        const rounded = nearestToGrid(rawTarget, stepMg);
+        const rationale = rationaleTag(rawTarget, rounded, chosen, prevTotal, stepMg);
+
+        const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
+
+        this.rows.push({
+          step: this.rows.length + 1,
+          date: dateStr,
+          target: rawTarget,
+          cfgPct,
+          chosen,
+          units: unitsStr,
+          unit,
+          rationale,
+          actualPct
+        });
+
+        // advance
+        prevTotal = chosen;
+      });
+    },
+
+    render() {
+      const hostCard  = document.getElementById("calcBlock");
+      const hostTable = document.getElementById("calcTableHost");
+      const checked   = document.getElementById("showCalc")?.checked;
+
+      if (!hostCard || !hostTable) return;
+
+      if (!checked || !this.rows.length) {
+        hostCard.style.display = "none";
+        hostTable.innerHTML = "";
+        return;
+      }
+
+      // Build table
+      const tbl = document.createElement("table");
+      tbl.className = "plan-table calc-table";
+
+      const thead = document.createElement("thead");
+      const trh   = document.createElement("tr");
+      ["Step","Date","Target","% drop","Chosen total","Units used","Rationale","Actual %"].forEach(h => {
+        const th = document.createElement("th");
+        th.textContent = h;
+        trh.appendChild(th);
+      });
+      thead.appendChild(trh);
+      tbl.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      this.rows.forEach(r => {
+        const tr = document.createElement("tr");
+
+        tr.appendChild(td(r.step));
+        tr.appendChild(td(r.date || ""));
+        tr.appendChild(td(fmtQty(r.target, r.unit), "mono"));
+        tr.appendChild(td(stripZeros(+r.cfgPct) + "%"));
+        tr.appendChild(td(fmtQty(r.chosen, r.unit), "mono"));
+        tr.appendChild(td(r.units || "—", "wrap"));
+
+        // rationale pill with tooltip
+        const tdWhy = document.createElement("td");
+        const span  = document.createElement("span");
+        span.className = "pill";
+        span.textContent = rationaleLabel(r.rationale);
+        span.title = ROUNDING_RATIONALE[r.rationale] || "";
+        tdWhy.appendChild(span);
+        tr.appendChild(tdWhy);
+
+        tr.appendChild(td(stripZeros(+r.actualPct.toFixed(1)) + "%"));
+
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+
+      hostTable.innerHTML = "";
+      hostTable.appendChild(tbl);
+      hostCard.style.display = "";
+    }
+  };
+
+  // ---------- helpers (no plan math, just formatting/inference) ----------
+  function nump(v) {
+    const n = parseFloat(v ?? "");
+    return isFinite(n) ? n : 0;
+  }
+
+  function stripZeros(n) {
+    if (typeof window.stripZeros === "function") return window.stripZeros(n);
+    if (Number.isInteger(n)) return String(n);
+    return String(n).replace(/(\.\d*?[1-9])0+$/,"$1").replace(/\.0+$/,"");
+  }
+
+  function stripNumLike(x) {
+    // Accept numbers or strings like "25", "25 mcg/h"
+    if (typeof x === "number") return stripZeros(x);
+    const m = String(x).match(/-?\d+(\.\d+)?/);
+    return m ? stripZeros(+m[0]) : String(x);
+  }
+
+  function fmtQty(n, unit) {
+    const v = Math.round((+n) * 100) / 100;
+    return stripZeros(v) + " " + unit;
+  }
+
+  function sumPatches(arr) {
+    return (arr || []).reduce((a, b) => a + (parseFloat(b) || 0), 0);
+  }
+
+  function safePacksTotalMg(packs) {
+    try {
+      if (typeof window.packsTotalMg === "function") return window.packsTotalMg(packs) || 0;
+      // fallback: sum strengths × counts across AM/MID/DIN/PM
+      let total = 0;
+      ["AM", "MID", "DIN", "PM"].forEach(slot => {
+        Object.entries(packs?.[slot] || {}).forEach(([mg, count]) => {
+          total += (parseFloat(mg) || 0) * (parseFloat(count) || 0);
+        });
+      });
+      return total;
+    } catch { return 0; }
+  }
+
+  function unitsFromPacks(p) {
+    try {
+      const acc = {};
+      ["AM", "MID", "DIN", "PM"].forEach(slot => {
+        Object.entries(p?.[slot] || {}).forEach(([mg, count]) => {
+          const k = +mg;
+          acc[k] = (acc[k] || 0) + (+count || 0);
+        });
+      });
+      const parts = Object.keys(acc)
+        .map(k => +k)
+        .sort((a, b) => b - a)
+        .map(mg => `${stripZeros(mg)}×${acc[mg]}`);
+      return parts.join(" + ");
+    } catch { return ""; }
+  }
+
+  function pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start) {
+    if (!(p2Start instanceof Date) || !(p2Pct > 0)) return p1Pct;
+    try {
+      // Try robust parse (supports dd/mm/yyyy, yyyy-mm-dd, etc.)
+      const dt = new Date(dateStr);
+      if (isFinite(+dt) && +dt >= +p2Start) return p2Pct;
+    } catch {}
+    return p1Pct;
+  }
+
+  function nearestToGrid(val, step) {
+    if (!(step > 0)) return val;
+    if (typeof window.nearestStep === "function") {
+      try { return window.nearestStep(val, step); } catch {}
+    }
+    return Math.round(val / step) * step;
+  }
+
+  // Decide label key using only information we already have (no new math)
+  function rationaleTag(rawTarget, roundedTarget, chosen, prevTotal, step) {
+    if (Math.abs(chosen - rawTarget) < EPS && Math.abs(roundedTarget - rawTarget) < EPS) return "exact";
+
+    // True tie on grid?
+    if (step > 0) {
+      const r = rawTarget / step;
+      const flo = Math.floor(r), cei = Math.ceil(r);
+      if (Math.abs(r - flo) === Math.abs(cei - r)) {
+        const down = flo * step, up = cei * step;
+        if (Math.abs(chosen - up)   < EPS) return "round_up";
+        if (Math.abs(chosen - down) < EPS) return "round_down";
+      }
+    }
+
+    // If chosen equals our nearest grid guess → Nearest
+    if (Math.abs(chosen - roundedTarget) < EPS) return "nearest";
+
+    // If nearest grid would duplicate previous total, but chosen stepped down → Round down (avoid repeat)
+    if (Math.abs(roundedTarget - prevTotal) < EPS && chosen < prevTotal - EPS) return "round_down";
+
+    // If chosen ended above our nearest guess → Round up
+    if (chosen > roundedTarget + EPS) return "round_up";
+
+    return "nearest"; // safe default
+  }
+
+  function rationaleLabel(key) {
+    switch (key) {
+      case "exact":        return "Exact";
+      case "nearest":      return "Nearest";
+      case "fewest_units": return "Fewest units";
+      case "round_up":     return "Round up";
+      case "round_down":   return "Round down";
+      default:             return "Nearest";
+    }
+  }
+
+  function td(text, cls) {
+    const el = document.createElement("td");
+    if (cls) el.className = cls;
+    el.textContent = text;
+    return el;
+  }
+
+  // ---------- wrap existing renderers so we see the same rows ----------
+  const _renderStd = (typeof window.renderStandardTable === "function") ? window.renderStandardTable : null;
+  if (_renderStd) {
+    window.renderStandardTable = function (rows) {
+      try { calcLogger.buildFromRows(rows, "std"); } catch {}
+      const rv = _renderStd.apply(this, arguments);
+      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
+      return rv;
+    };
+  }
+
+  const _renderPatch = (typeof window.renderPatchTable === "function") ? window.renderPatchTable : null;
+  if (_renderPatch) {
+    window.renderPatchTable = function (rows) {
+      try { calcLogger.buildFromRows(rows, "patch"); } catch {}
+      const rv = _renderPatch.apply(this, arguments);
+      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
+      return rv;
+    };
+  }
+
+  // ---------- wire checkbox toggle ----------
+  function wireCalcToggle() {
+    const el = document.getElementById("showCalc");
+    if (!el) return;
+    el.addEventListener("change", () => {
+      const hostCard = document.getElementById("calcBlock");
+      if (el.checked) {
+        try { calcLogger.render(); } catch {}
+      } else if (hostCard) {
+        hostCard.style.display = "none";
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireCalcToggle);
+  } else {
+    wireCalcToggle();
+  }
 })();
 
 /* =================== Build & init =================== */
