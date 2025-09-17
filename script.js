@@ -306,32 +306,58 @@ function stepBaseStrengthsMg(cls, med, form){
   return [5]; // generic (SR opioids usually have 5 mg somewhere)
 }
 
-// Effective step size = smallest base strength in use (selected or all)
-function lowestStepMg(cls, med, form){
-  const mgList = stepBaseStrengthsMg(cls, med, form);
-  return (mgList && mgList.length) ? mgList[0] : 5;
+// ---- Selection-aware grid step (uses selected products, incl. splits where allowed) ----
+function _gcdInt(a, b){ a=Math.abs(a); b=Math.abs(b); while(b){ const t=b; b=a%b; a=t; } return a||1; }
+function _gcdArray(ints){ return ints.reduce((g,n)=>_gcdInt(g,n)); }
+
+function selectionGridStep(cls, med, form){
+  // Base strengths from the current med/form respecting the product picker
+  const bases = (stepBaseStrengthsMg(cls, med, form) || []).filter(n => n > 0);
+  if (!bases.length) return 1;
+
+  // Add split pieces if the form/med allows them (SR forms typically don't)
+  const split = (typeof canSplitTablets === "function")
+    ? (canSplitTablets(cls, form, med) || {half:false, quarter:false})
+    : {half:false, quarter:false};
+
+  const pieces = new Set();
+  bases.forEach(mg => {
+    pieces.add(mg);
+    if (split.half)    pieces.add(mg/2);
+    if (split.quarter) pieces.add(mg/4);
+  });
+
+  // Work in integers to avoid FP drift: scale to 2 decimal places
+  const SCALE = 100;
+  const ints  = [...pieces].map(v => Math.round(v * SCALE));
+  const stepI = _gcdArray(ints);
+  return Math.max(1, stepI) / SCALE;
 }
 
-// Snap a %-reduced target to the effective step size.
-// Policy: round UP to avoid under-dose; if unchanged, nudge down by one step for progress.
+// Back-compat wrapper used across the codebase
+function lowestStepMg(cls, med, form){
+  return selectionGridStep(cls, med, form) || 1;
+}
+
+// Snap %-reduced target to the selection-aware grid.
+// Tie → round UP (avoid under-dose). If unchanged, nudge down one step to ensure progress.
 function snapTargetToSelection(totalMg, percent, cls, med, form){
   const step = lowestStepMg(cls, med, form) || 1;
   const raw  = totalMg * (1 - percent/100);
 
   const down = Math.floor(raw / step) * step;
-  const up   = Math.ceil(raw / step) * step;
+  const up   = Math.ceil (raw / step) * step;
 
-  let target;
   const dDown = raw - down;
   const dUp   = up  - raw;
 
-  if (dDown < dUp)       target = down;       // nearer below
-  else if (dUp < dDown)  target = up;         // nearer above
-  else                   target = up;         // exact tie → prefer UP
+  let target = (dDown < dUp) ? down : (dUp < dDown) ? up : up; // tie → up
 
-  // ensure progress if rounding lands unchanged
-  if (target === totalMg && totalMg > 0) target = Math.max(0, totalMg - step);
-
+  // Ensure forward movement if rounding landed on the same total
+  if (Math.abs(target - totalMg) < 1e-6 && totalMg > 0){
+    target = Math.max(0, totalMg - step);
+    target = Math.round(target / step) * step;
+  }
   return { target, step };
 }
 
