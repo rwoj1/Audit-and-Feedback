@@ -3846,81 +3846,6 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 
   return rows;
 }
-/* === Opioid SR BID clamp: prevent post-rounding inflating totals (e.g., 30 -> 40) === */
-(function(){
-  const need = (f) => typeof f === "function";
-  if (!need(window.recomposeSlots) || !need(window.composeForSlot) || !need(window.slotTotalMg) || !need(window.lowestStepMg)) {
-    return; // required hooks not present
-  }
-
-  const _recompose = window.recomposeSlots;
-
-  window.recomposeSlots = function recomposeSlots_preserveTotals(targets, cls, med, form){
-    const out = _recompose.apply(this, arguments);
-
-    try {
-      // Only for Morphine-style SR opioids
-      if (cls !== "Opioid" || !/SR/i.test(String(form||""))) return out;
-
-      const EPS  = 1e-9;
-      const step = (window.lowestStepMg(cls, med, form) || 1);
-
-      // Intended per-slot targets coming *into* unitization
-      const tAM = Math.max(0, +(targets?.AM || 0));
-      const tPM = Math.max(0, +(targets?.PM || 0));
-      const targetTotal = Math.round((tAM + tPM) / step) * step;
-
-      // What the unitizer actually produced
-      let am = window.slotTotalMg(out, "AM");
-      let pm = window.slotTotalMg(out, "PM");
-
-      // 1) Per-slot cap: never exceed the intended target for that slot
-      const capSlot = (slot, have, cap) => {
-        if (!(cap > 0)) { out[slot] = {}; return 0; }
-        if (have <= cap + EPS) return have;
-        out[slot] = window.composeForSlot(cap, cls, med, form);
-        return cap;
-      };
-      am = capSlot("AM", am, tAM);
-      pm = capSlot("PM", pm, tPM);
-
-      // 2) Total clamp: if rounding inflated total, trim PM then AM in grid steps
-      let sum = am + pm;
-      if (sum > targetTotal + EPS) {
-        let excess = sum - targetTotal;
-
-        // Trim PM first
-        if (pm > 0 && excess > EPS) {
-          const dec = Math.min(pm, Math.ceil(excess / step) * step);
-          pm = Math.max(0, pm - dec);
-          out.PM = window.composeForSlot(pm, cls, med, form);
-          excess = (am + pm) - targetTotal;
-        }
-
-        // Then trim AM if needed
-        if (excess > EPS && am > 0) {
-          const dec = Math.min(am, Math.ceil(excess / step) * step);
-          am = Math.max(0, am - dec);
-          out.AM = window.composeForSlot(am, cls, med, form);
-        }
-      }
-
-      // 3) Preference: PM >= AM when possible (don’t change total)
-      if (pm < am) {
-        const diff = am - pm;
-        const shift = Math.floor(diff / (2*step)) * step; // keep total constant
-        if (shift > 0) {
-          am -= shift; pm += shift;
-          out.AM = window.composeForSlot(am, cls, med, form);
-          out.PM = window.composeForSlot(pm, cls, med, form);
-        }
-      }
-    } catch (_) { /* swallow; leave 'out' as-is */ }
-
-    return out;
-  };
-})();
-
 /* =============================================================
 SHOW CALCULATIONS — logger + renderer (no recalculation)
 Hooks into renderStandardTable/renderPatchTable
@@ -4119,6 +4044,8 @@ Hooks into renderStandardTable/renderPatchTable
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireCalcToggle);
   else                                   wireCalcToggle();
 })();
+
+
 
 /* =================== Build & init =================== */
 
