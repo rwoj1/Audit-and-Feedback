@@ -1,4 +1,29 @@
 /* ============================================================================
+ Deprescribing Taper Planner — script.js (Labeled Edition)
+ Date: 2025-09-18
+
+ WHAT THIS IS
+ ------------
+ - Same as the organized version, but with **explicit labels** explaining each area.
+ - The ORIGINAL CODE remains unchanged; labels live above it.
+ - Use this file to quickly navigate *what does what* before refactoring.
+
+ HIGH-LEVEL ARCHITECTURE (labels)
+ --------------------------------
+ [U] Utilities & Constants        — dates, rounding, clamps, string helpers
+ [S] Safety Rules                 — patch intervals, caps, validation gates
+ [D] Dose Math                    — target calc, rounding, distribution (BID/TDS/QID)
+ [C] Composers                    — compose per-slot packs; end-dose logic
+ [A] Antipsychotic Panel (UI)     — inputs, caps, order chips, seed packs
+ [R] Renderers                    — HTML table builders, print/PDF ornaments
+ [W] Wiring                       — event handlers, dirty flags, toasts, init
+
+ HOW TO READ
+ -----------
+ - Scan the FUNCTION INDEX below to jump to items of interest.
+ - The UI ID MAP helps frontend work (bindings, tests).
+ - Then review the ORIGINAL CODE block.
+/* ============================================================================
   Deprescribing Taper Planner — script.js (Organized Edition)
   Non-destructive organization: header + foldable regions only.
 ============================================================================ */
