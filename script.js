@@ -3846,67 +3846,76 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 
   return rows;
 }
-/* === BID ROUND-UP SHIM (Opioid SR): always round AM/PM up to selected grid === */
+/* === Opioid SR BID clamp: prevent post-rounding inflating totals (e.g., 30 -> 40) === */
 (function(){
-  if (typeof window.recomposeSlots !== "function" ||
-      typeof window.composeForSlot  !== "function" ||
-      typeof window.slotTotalMg     !== "function" ||
-      typeof window.lowestStepMg    !== "function") {
+  const need = (f) => typeof f === "function";
+  if (!need(window.recomposeSlots) || !need(window.composeForSlot) || !need(window.slotTotalMg) || !need(window.lowestStepMg)) {
     return; // required hooks not present
   }
 
   const _recompose = window.recomposeSlots;
 
-  function selectedMinMg(cls, med, form){
-    try{
-      if (window.SelectedFormulations && SelectedFormulations.size){
-        const vals = Array.from(SelectedFormulations).map(v => +v).filter(n => n > 0);
-        if (vals.length) return Math.min(...vals);
+  window.recomposeSlots = function recomposeSlots_preserveTotals(targets, cls, med, form){
+    const out = _recompose.apply(this, arguments);
+
+    try {
+      // Only for Morphine-style SR opioids
+      if (cls !== "Opioid" || !/SR/i.test(String(form||""))) return out;
+
+      const EPS  = 1e-9;
+      const step = (window.lowestStepMg(cls, med, form) || 1);
+
+      // Intended per-slot targets coming *into* unitization
+      const tAM = Math.max(0, +(targets?.AM || 0));
+      const tPM = Math.max(0, +(targets?.PM || 0));
+      const targetTotal = Math.round((tAM + tPM) / step) * step;
+
+      // What the unitizer actually produced
+      let am = window.slotTotalMg(out, "AM");
+      let pm = window.slotTotalMg(out, "PM");
+
+      // 1) Per-slot cap: never exceed the intended target for that slot
+      const capSlot = (slot, have, cap) => {
+        if (!(cap > 0)) { out[slot] = {}; return 0; }
+        if (have <= cap + EPS) return have;
+        out[slot] = window.composeForSlot(cap, cls, med, form);
+        return cap;
+      };
+      am = capSlot("AM", am, tAM);
+      pm = capSlot("PM", pm, tPM);
+
+      // 2) Total clamp: if rounding inflated total, trim PM then AM in grid steps
+      let sum = am + pm;
+      if (sum > targetTotal + EPS) {
+        let excess = sum - targetTotal;
+
+        // Trim PM first
+        if (pm > 0 && excess > EPS) {
+          const dec = Math.min(pm, Math.ceil(excess / step) * step);
+          pm = Math.max(0, pm - dec);
+          out.PM = window.composeForSlot(pm, cls, med, form);
+          excess = (am + pm) - targetTotal;
+        }
+
+        // Then trim AM if needed
+        if (excess > EPS && am > 0) {
+          const dec = Math.min(am, Math.ceil(excess / step) * step);
+          am = Math.max(0, am - dec);
+          out.AM = window.composeForSlot(am, cls, med, form);
+        }
       }
-      if (typeof window.selectedProductMgs === "function"){
-        const arr = (window.selectedProductMgs() || []).map(v => +v).filter(n => n > 0);
-        if (arr.length) return Math.min(...arr);
+
+      // 3) Preference: PM >= AM when possible (don’t change total)
+      if (pm < am) {
+        const diff = am - pm;
+        const shift = Math.floor(diff / (2*step)) * step; // keep total constant
+        if (shift > 0) {
+          am -= shift; pm += shift;
+          out.AM = window.composeForSlot(am, cls, med, form);
+          out.PM = window.composeForSlot(pm, cls, med, form);
+        }
       }
-    }catch(_){}
-    // Fallback to the grid step if we can't read selections
-    const step = window.lowestStepMg(cls, med, form) || 1;
-    return step;
-  }
-
-  window.recomposeSlots = function recomposeSlots_roundUp(targets, cls, med, form){
-    const isOpioidSR = (cls === "Opioid") && /SR/i.test(String(form||""));
-    const step = window.lowestStepMg(cls, med, form) || 1;
-
-    // Default: pass-through
-    let adjTargets = targets;
-
-    // For Opioid SR BID, ceil each side to the grid before composing
-    if (isOpioidSR){
-      const tAM = +targets?.AM || 0;
-      const tPM = +targets?.PM || 0;
-      adjTargets = { ...targets };
-      if (tAM > 0) adjTargets.AM = Math.ceil(tAM / step) * step;
-      if (tPM > 0) adjTargets.PM = Math.ceil(tPM / step) * step;
-    }
-
-    // Compose with original logic
-    const out = _recompose.call(this, adjTargets, cls, med, form);
-
-    if (!isOpioidSR) return out;
-
-    // If any side still came in below its ceil target, add one smallest selected unit
-    const minMg = selectedMinMg(cls, med, form);
-    const bumpIfBelow = (slot, targetMg) => {
-      if (!(targetMg > 0)) return;
-      const have = window.slotTotalMg(out, slot);
-      if (have + 1e-9 < targetMg) {
-        const bucket = out[slot] || (out[slot] = {});
-        const key = String(minMg);
-        bucket[key] = (bucket[key] || 0) + 1; // add one smallest tablet/capsule
-      }
-    };
-    bumpIfBelow("AM", +adjTargets.AM || 0);
-    bumpIfBelow("PM", +adjTargets.PM || 0);
+    } catch (_) { /* swallow; leave 'out' as-is */ }
 
     return out;
   };
