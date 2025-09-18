@@ -3846,6 +3846,72 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 
   return rows;
 }
+/* === BID ROUND-UP SHIM (Opioid SR): always round AM/PM up to selected grid === */
+(function(){
+  if (typeof window.recomposeSlots !== "function" ||
+      typeof window.composeForSlot  !== "function" ||
+      typeof window.slotTotalMg     !== "function" ||
+      typeof window.lowestStepMg    !== "function") {
+    return; // required hooks not present
+  }
+
+  const _recompose = window.recomposeSlots;
+
+  function selectedMinMg(cls, med, form){
+    try{
+      if (window.SelectedFormulations && SelectedFormulations.size){
+        const vals = Array.from(SelectedFormulations).map(v => +v).filter(n => n > 0);
+        if (vals.length) return Math.min(...vals);
+      }
+      if (typeof window.selectedProductMgs === "function"){
+        const arr = (window.selectedProductMgs() || []).map(v => +v).filter(n => n > 0);
+        if (arr.length) return Math.min(...arr);
+      }
+    }catch(_){}
+    // Fallback to the grid step if we can't read selections
+    const step = window.lowestStepMg(cls, med, form) || 1;
+    return step;
+  }
+
+  window.recomposeSlots = function recomposeSlots_roundUp(targets, cls, med, form){
+    const isOpioidSR = (cls === "Opioid") && /SR/i.test(String(form||""));
+    const step = window.lowestStepMg(cls, med, form) || 1;
+
+    // Default: pass-through
+    let adjTargets = targets;
+
+    // For Opioid SR BID, ceil each side to the grid before composing
+    if (isOpioidSR){
+      const tAM = +targets?.AM || 0;
+      const tPM = +targets?.PM || 0;
+      adjTargets = { ...targets };
+      if (tAM > 0) adjTargets.AM = Math.ceil(tAM / step) * step;
+      if (tPM > 0) adjTargets.PM = Math.ceil(tPM / step) * step;
+    }
+
+    // Compose with original logic
+    const out = _recompose.call(this, adjTargets, cls, med, form);
+
+    if (!isOpioidSR) return out;
+
+    // If any side still came in below its ceil target, add one smallest selected unit
+    const minMg = selectedMinMg(cls, med, form);
+    const bumpIfBelow = (slot, targetMg) => {
+      if (!(targetMg > 0)) return;
+      const have = window.slotTotalMg(out, slot);
+      if (have + 1e-9 < targetMg) {
+        const bucket = out[slot] || (out[slot] = {});
+        const key = String(minMg);
+        bucket[key] = (bucket[key] || 0) + 1; // add one smallest tablet/capsule
+      }
+    };
+    bumpIfBelow("AM", +adjTargets.AM || 0);
+    bumpIfBelow("PM", +adjTargets.PM || 0);
+
+    return out;
+  };
+})();
+
 /* =============================================================
 SHOW CALCULATIONS — logger + renderer (no recalculation)
 Hooks into renderStandardTable/renderPatchTable
