@@ -3846,67 +3846,124 @@ if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
 
   return rows;
 }
-/* === BID ROUND-UP SHIM (Opioid SR): always round AM/PM up to selected grid === */
+/* === No-overshoot unitizer for Opioid SR (BID slots): respect per-slot targets === */
 (function(){
-  if (typeof window.recomposeSlots !== "function" ||
-      typeof window.composeForSlot  !== "function" ||
-      typeof window.slotTotalMg     !== "function" ||
-      typeof window.lowestStepMg    !== "function") {
+  const need = (f) => typeof f === "function";
+  if (!need(window.recomposeSlots) || !need(window.composeForSlot) || !need(window.slotTotalMg) || !need(window.lowestStepMg)) {
     return; // required hooks not present
   }
 
   const _recompose = window.recomposeSlots;
 
-  function selectedMinMg(cls, med, form){
+  function selectedStrengthsMg(cls, med, form){
     try{
       if (window.SelectedFormulations && SelectedFormulations.size){
         const vals = Array.from(SelectedFormulations).map(v => +v).filter(n => n > 0);
-        if (vals.length) return Math.min(...vals);
+        if (vals.length) return Array.from(new Set(vals)).sort((a,b)=>a-b);
       }
       if (typeof window.selectedProductMgs === "function"){
         const arr = (window.selectedProductMgs() || []).map(v => +v).filter(n => n > 0);
-        if (arr.length) return Math.min(...arr);
+        if (arr.length) return Array.from(new Set(arr)).sort((a,b)=>a-b);
       }
-    }catch(_){}
-    // Fallback to the grid step if we can't read selections
-    const step = window.lowestStepMg(cls, med, form) || 1;
-    return step;
+      // Fallback to catalog
+      const cat = (window.CATALOG?.[cls]?.[med]) || {};
+      const pool = (form && cat[form]) ? cat[form] : Object.values(cat).flat();
+      const mg = (pool || []).map(s => {
+        const m = String(s).match(/([\d.]+)\s*mg/i); return m ? +m[1] : NaN;
+      }).filter(n => n > 0);
+      return Array.from(new Set(mg)).sort((a,b)=>a-b);
+    }catch(_){ return []; }
   }
 
-  window.recomposeSlots = function recomposeSlots_roundUp(targets, cls, med, form){
-    const isOpioidSR = (cls === "Opioid") && /SR/i.test(String(form||""));
-    const step = window.lowestStepMg(cls, med, form) || 1;
+  // bounded DP on the grid: best sum <= target, then fewest units
+  function packNoOvershoot(targetMg, strengthsMg, step){
+    const s = step || 1;
+    const T = Math.max(0, Math.floor((targetMg + 1e-9) / s));
+    if (T === 0 || !strengthsMg.length) return {};
+    const vals = Array.from(new Set(strengthsMg.map(m => Math.max(1, Math.round(m / s))))).sort((a,b)=>a-b);
 
-    // Default: pass-through
-    let adjTargets = targets;
+    const INF = 1e9;
+    const dp = new Array(T+1).fill(INF);
+    const prev = new Array(T+1).fill(-1);
+    const coin = new Array(T+1).fill(-1);
+    dp[0] = 0;
+    for (const v of vals){
+      for (let x = v; x <= T; x++){
+        if (dp[x - v] + 1 < dp[x]){
+          dp[x] = dp[x - v] + 1;
+          prev[x] = x - v;
+          coin[x] = v;
+        }
+      }
+    }
+    // choose highest achievable sum; dp ensures fewest units at that sum
+    let best = -1;
+    for (let x = T; x >= 0; x--) if (dp[x] < INF) { best = x; break; }
+    if (best < 0) return {};
 
-    // For Opioid SR BID, ceil each side to the grid before composing
-    if (isOpioidSR){
-      const tAM = +targets?.AM || 0;
-      const tPM = +targets?.PM || 0;
-      adjTargets = { ...targets };
-      if (tAM > 0) adjTargets.AM = Math.ceil(tAM / step) * step;
-      if (tPM > 0) adjTargets.PM = Math.ceil(tPM / step) * step;
+    // reconstruct counts in "steps"
+    const countsSteps = {};
+    for (let cur = best; cur > 0; cur = prev[cur]) {
+      const v = coin[cur];
+      countsSteps[v] = (countsSteps[v] || 0) + 1;
     }
 
-    // Compose with original logic
-    const out = _recompose.call(this, adjTargets, cls, med, form);
+    // map steps back to mg using smallest mg per step
+    const stepToMg = {};
+    for (const mg of strengthsMg){
+      const k = Math.max(1, Math.round(mg / s));
+      if (!(k in stepToMg) || mg < stepToMg[k]) stepToMg[k] = mg;
+    }
+    const countsMg = {};
+    let sum = 0;
+    for (const [k, c] of Object.entries(countsSteps)){
+      const mg = stepToMg[+k];
+      countsMg[mg] = (countsMg[mg] || 0) + c;
+      sum += mg * c;
+    }
+    // guard (shouldn't happen): never exceed target
+    if (sum > targetMg + 1e-9) return {};
+    return countsMg;
+  }
 
-    if (!isOpioidSR) return out;
+  window.recomposeSlots = function recomposeSlots_noOvershoot(targets, cls, med, form){
+    const out = _recompose.apply(this, arguments);
 
-    // If any side still came in below its ceil target, add one smallest selected unit
-    const minMg = selectedMinMg(cls, med, form);
-    const bumpIfBelow = (slot, targetMg) => {
-      if (!(targetMg > 0)) return;
-      const have = window.slotTotalMg(out, slot);
-      if (have + 1e-9 < targetMg) {
-        const bucket = out[slot] || (out[slot] = {});
-        const key = String(minMg);
-        bucket[key] = (bucket[key] || 0) + 1; // add one smallest tablet/capsule
-      }
-    };
-    bumpIfBelow("AM", +adjTargets.AM || 0);
-    bumpIfBelow("PM", +adjTargets.PM || 0);
+    try{
+      if (cls !== "Opioid" || !/SR/i.test(String(form||""))) return out;
+
+      const step = (window.lowestStepMg(cls, med, form) || 1);
+      const strengths = selectedStrengthsMg(cls, med, form);
+
+      const fix = (slot) => {
+        const target = +((targets && targets[slot]) || 0);
+        if (!(target > 0)) { out[slot] = {}; return; }
+        const have = window.slotTotalMg(out, slot);
+        if (have <= target + 1e-9) return; // ok (<= target) or under
+
+        // Re-pack that slot so it never exceeds its target
+        const combo = packNoOvershoot(target, strengths, step);
+        if (Object.keys(combo).length){
+          out[slot] = combo;
+        } else {
+          // Fallback: remove largest units until <= target
+          const current = out[slot] || {};
+          const keys = Object.keys(current).map(k => +k).sort((a,b)=>b-a);
+          let total = have;
+          for (const mg of keys){
+            while (current[mg] > 0 && total - mg >= target - 1e-9){
+              current[mg] -= 1; total -= mg;
+            }
+            if (current[mg] <= 0) delete current[mg];
+            if (total <= target + 1e-9) break;
+          }
+          out[slot] = current;
+        }
+      };
+
+      fix("AM");
+      fix("PM");
+    }catch(_){}
 
     return out;
   };
