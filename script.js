@@ -1,29 +1,4 @@
 /* ============================================================================
- Deprescribing Taper Planner — script.js (Labeled Edition)
- Date: 2025-09-18
-
- WHAT THIS IS
- ------------
- - Same as the organized version, but with **explicit labels** explaining each area.
- - The ORIGINAL CODE remains unchanged; labels live above it.
- - Use this file to quickly navigate *what does what* before refactoring.
-
- HIGH-LEVEL ARCHITECTURE (labels)
- --------------------------------
- [U] Utilities & Constants        — dates, rounding, clamps, string helpers
- [S] Safety Rules                 — patch intervals, caps, validation gates
- [D] Dose Math                    — target calc, rounding, distribution (BID/TDS/QID)
- [C] Composers                    — compose per-slot packs; end-dose logic
- [A] Antipsychotic Panel (UI)     — inputs, caps, order chips, seed packs
- [R] Renderers                    — HTML table builders, print/PDF ornaments
- [W] Wiring                       — event handlers, dirty flags, toasts, init
-
- HOW TO READ
- -----------
- - Scan the FUNCTION INDEX below to jump to items of interest.
- - The UI ID MAP helps frontend work (bindings, tests).
- - Then review the ORIGINAL CODE block.
-/* ============================================================================
   Deprescribing Taper Planner — script.js (Organized Edition)
   Non-destructive organization: header + foldable regions only.
 ============================================================================ */
@@ -161,6 +136,16 @@ function ensureIntervalHints(){
     return el;
   };
   return [mk("p1IntHint","p1Interval"), mk("p2IntHint","p2Interval")];
+}
+
+// --- Global AM/PM preference (used by all splitters & end-sequence code)
+function getBidHeavierPreference(){
+  try {
+    const am = document.getElementById("bidHeavyAM");
+    const pm = document.getElementById("bidHeavyPM");
+    if (am && am.checked) return "AM";
+    return "PM"; // default Night heavier
+  } catch { return "PM"; }
 }
 
 // --- End-sequence helpers for BID classes (SR opioids & pregabalin) ---
@@ -337,27 +322,81 @@ function lowestStepMg(cls, med, form){
   return (mgList && mgList.length) ? mgList[0] : 5;
 }
 
-// Snap a %-reduced target to the effective step size.
-// Policy: round UP to avoid under-dose; if unchanged, nudge down by one step for progress.
+// Greatest common divisor for integers (mg strengths should be integers)
+function _gcd(a, b){
+  a = Math.abs(a|0); b = Math.abs(b|0);
+  while (b) { const t = b; b = a % b; a = t; }
+  return a || 0;
+}
+
+// Compute the effective rounding grid ("quantum") from selected strengths (mg).
+// Use GCD(selected); if none selected, GCD(all available). Fallback to lowestStepMg.
+function effectiveQuantumMg(cls, med, form){
+  try {
+    // Prefer explicitly selected formulations if present
+    let arr = (typeof selectedProductMgs === "function" ? (selectedProductMgs() || []) : []) 
+      .map(v => (typeof v === "number" ? v : parseMgFromStrength(v)))
+      .filter(n => Number.isFinite(n) && n > 0);
+
+    // If none selected, use all strengths for the current med/form
+    if (!arr.length) {
+      arr = (typeof strengthsForSelectedSafe === "function" ? strengthsForSelectedSafe(cls, med, form) : [])
+        .map(v => (typeof v === "number" ? v : parseMgFromStrength(v)))
+        .filter(n => Number.isFinite(n) && n > 0);
+    }
+
+    // Dedup & integerize
+    arr = Array.from(new Set(arr.map(n => Math.round(n)))).sort((a,b)=>a-b);
+
+    // Compute GCD across the list
+    let g = 0;
+    for (const n of arr) g = _gcd(g, n);
+
+    if (g && Number.isFinite(g) && g > 0) return g;
+
+    // Fallback: use your existing min step
+    return lowestStepMg(cls, med, form) || 1;
+  } catch {
+    return lowestStepMg(cls, med, form) || 1;
+  }
+}
+
+// --- Always-UP rounding helpers for % reductions (selection-aware) ---
+function ceilToQuantum(val, q){
+  return Math.ceil(val / q) * q;
+}
+
+// Centralised target calculation used by the schedule/table
+// - Rounds UP to quantum (GCD of selected strengths)
+// - If rounding-up would stall (no change), drop by one quantum
+function alwaysUpTarget(totalMg, percent, cls, med, form){
+  const q = (typeof effectiveQuantumMg === "function"
+    ? effectiveQuantumMg(cls, med, form)
+    : (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1)) || 1;
+
+  const raw = totalMg * (1 - percent/100);
+  let target = ceilToQuantum(raw, q);
+
+  if (target === totalMg && totalMg > 0){
+    target = Math.max(0, totalMg - q);
+  }
+  return { target, quantum: q };
+}
+
 function snapTargetToSelection(totalMg, percent, cls, med, form){
-  const step = lowestStepMg(cls, med, form) || 1;
-  const raw  = totalMg * (1 - percent/100);
+  const stepMin = lowestStepMg(cls, med, form) || 1;           // difference cap / UI rules
+  const q       = effectiveQuantumMg(cls, med, form) || stepMin; // rounding grid (GCD)
+  const raw     = totalMg * (1 - percent/100);
 
-  const down = Math.floor(raw / step) * step;
-  const up   = Math.ceil(raw / step) * step;
+  // ALWAYS ROUND UP to the quantum
+  let target = Math.ceil(raw / q) * q;
 
-  let target;
-  const dDown = raw - down;
-  const dUp   = up  - raw;
+  // ensure progress if rounding would stall (i.e., stays the same dose)
+  if (target === totalMg && totalMg > 0) {
+    target = Math.max(0, totalMg - q);
+  }
 
-  if (dDown < dUp)       target = down;       // nearer below
-  else if (dUp < dDown)  target = up;         // nearer above
-  else                   target = up;         // exact tie → prefer UP
-
-  // ensure progress if rounding lands unchanged
-  if (target === totalMg && totalMg > 0) target = Math.max(0, totalMg - step);
-
-  return { target, step };
+  return { target, step: stepMin, quantum: q };
 }
 
 /* ===== Antipsychotic UI wiring (layout only) ===== */
@@ -1516,38 +1555,106 @@ function saveOutputAsPdf() {
 // --- Suggested practice copy (exact wording from your doc) ---
 //#endregion
 //#region 7. Suggested Practice & Footers
+// --- Suggested Practice copy (updated wording and titles) ---
 const SUGGESTED_PRACTICE = {
-  opioids: `Tailor the deprescribing plan based on the person’s clinical characteristics, goals and preferences. Consider:
-• < 3 months use: reduce the dose by 10% to 25% every week
-• >3 months use: reduce the dose by 10% to 25% every 4 weeks
-• Long-term opioid use (e.g. 1> year) or on high doses: slower tapering and frequent monitoring
-[INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
+  opioids: `
+  <p>
+    Tapering should be gradual and individualised to the person’s clinical characteristics, treatment goals and preferences. 
+    A variety of tapering regimens have been recommended in guidelines – summarised here [LINK].
+  </p>
 
-  bzra: `• Taper slowly with the patient; e.g., 25% every 2 weeks.
-• Near end: consider 12.5% reductions and/or planned drug-free days.
-[INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
+  <ul>
+    <li>Short-term use (less than 3 months): slow dose reduction (e.g. 10 to 25 % every week).</li>
+    <li>Longer-term use (more than 3 months): slower dose reduction (e.g. 10 to 25 % every 4 weeks). Some patients (e.g. those taking higher doses or for long periods) may need slower reductions.</li>
+  </ul>
 
+  <p>
+    Closely monitor and regularly review patients during tapering, and adjust tapering plan if needed.
+  </p>
+
+  <p>
+    This calculator is designed to use whole slow-release dose forms (which cannot be cut). 
+    It is not designed for reducing immediate-release formulations, or for patients with severe substance use disorder, high risk of withdrawal, 
+    or symptom recurrence – seek specialist advice for tailored tapering plans for these patients.
+  </p>
+
+  <p>
+    At the later stages of a taper, the desired dose reduction may not be possible with a slow-release formulation; 
+    a short-acting opioid may be required to complete the taper or to manage withdrawal symptoms.
+  </p>
+
+  <p>
+    If the patient is also taking a short-acting opioid, ensure the dose is reviewed as their total daily opioid dose reduces.
+  </p>
+  `,
+
+  bzra: `
+  <p>
+    Tapering should occur gradually and be individualised to the person’s clinical characteristics, treatment goals and preferences. 
+    Tapering recommendations in guidelines vary from 5 to 25% reductions every 1 to 4 weeks, with slower or faster tapers depending on dose and duration of use – summarised here [LINK].
+  </p>
+
+  <p>
+  Closely monitor and regularly review patients during tapering, and adjust tapering plan if needed.
+  <p>
+
+  <p>
+    This calculator is designed to use commercially available formulations in whole or half dose forms. 
+    It is not designed to calculate a slower taper using quarter-tablet doses or compounded formulations; 
+    such approaches may be required for patients with severe substance use disorder, high risk of withdrawal, or symptom recurrence.
+  </p>
+  `,
   antipsychotic: `• Reduce ~25–50% every 1–2 weeks with close monitoring.
 • Slower taper may be appropriate depending on symptoms.
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
 
-  gabapentinoids: `• Reduce X% every Y weeks with close monitoring
+  gabapentinoids: `• Reduce X% every Y weeks with close monitoring 
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
   
-  ppi: `• Step-down to lowest effective dose, alternate-day dosing, or stop and use on-demand.
-• Review at 4–12 weeks.
+  ppi: `•	Reduce dose by 50% every 1-2 weeks 
+•	Step-down to lowest effective dose, alternate-day dosing, or stop and use on-demand.
+•	Review at 4–12 weeks.
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE]   [INSERT GUIDE TO RULESET]`,
 };
 
 // ---- Class-specific footer copy (placeholder text) ----
 const CLASS_FOOTER_COPY = {
-  opioids:       "Insert specific footer + disclaimer for Opioids",
-  bzra:          "Insert specific footer + disclaimer for Benzodiazepines / Z Drugs (BZRA)",
+opioids: `
+<p><strong>Talk to your doctor, pharmacist or nurse before making any changes to your medicine.</strong>
+They can help you plan and monitor your dose reduction safely.</p>
+<p>If you are taking a short-acting or “when required” opioid, confirm with your healthcare professional which dose to continue during each reduction step.</p>
+<p>Your tolerance to opioids will reduce as your dose reduces. This means you are at risk of overdosing if you quickly return to your previous high doses of opioids. Naloxone is a freely available medication that reverses the effects of opioids and may save your life if you have a severe opioid reaction. For more information, see <a href="https://saferopioiduse.com.au" target="_blank">The Opioid Safety Toolkit</a>.</p>
+<strong>Discuss the following with your doctor, pharmacist or nurse:</strong>
+<ul class="footer-list">
+  <li>Other strategies to help manage your pain</li>
+  <li>Regular review and follow-up appointments</li>
+  <li>Your support network</li>
+  <li>Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild (e.g. flu-like symptoms, nausea, diarrhoea, stomach aches).</li>
+</ul>
+<strong>Additional Notes:</strong>
+<textarea></textarea>
+<em>This information is not intended as a substitute for medical advice and should not be exclusively relied on to diagnose or manage a medical condition. Monash University disclaims all liability (including for negligence) for any loss, damage or injury resulting from reliance on or use of this information.</em>
+`,
+bzra: `
+<strong>Talk to your doctor, pharmacist or nurse before making any changes to your medicine.</strong>
+They can help you plan and monitor your dose reduction safely.
+<strong>Discuss the following with your doctor, pharmacist or nurse:</strong>
+<ul class="footer-list">
+  <li>Other strategies to help manage your insomnia</li>
+  <li>Regular review and follow-up appointments</li>
+  <li>Your support network</li>
+  <li>Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild (e.g. sleeplessness, anxiety, restlessness).</li>
+</ul>
+<strong>Additional Notes:</strong>
+<textarea></textarea>
+<em>This information is not intended as a substitute for medical advice and should not be exclusively relied on to diagnose or manage a medical condition. Monash University disclaims all liability (including for negligence) for any loss, damage or injury resulting from reliance on or use of this information.</em>
+`,
   antipsychotic: "Insert specific footer + disclaimer for Antipsychotics",
   ppi:           "Insert specific footer + disclaimer for Proton Pump Inhibitors",
-  gabapentinoids: "Insert specific footer + disclaimer for Gabapentinoids",
+  gabapentinoids:"Insert specific footer + disclaimer for Gabapentinoids",
   _default:      ""
 };
+
 
 // Map the visible class label to a key in CLASS_FOOTER_COPY
 function mapClassToKey(label){
@@ -1574,10 +1681,10 @@ function footerKeyFromLabel(label) {
 
 function updateClassFooter() {
   const cls = document.getElementById("classSelect")?.value || "";
-  const key = mapClassToKey(cls);                     // "opioids" | "bzra" | "antipsychotic" | "ppi" | null
-  const text = (key && CLASS_FOOTER_COPY[key]) || CLASS_FOOTER_COPY._default;
+  const key = mapClassToKey(cls); // "opioids" | "bzra" | "antipsychotic" | "ppi" | null
+  const html = (key && CLASS_FOOTER_COPY[key]) || CLASS_FOOTER_COPY._default;
   const target = document.getElementById("classFooter");
-  if (target) target.textContent = text;
+  if (target) target.innerHTML = html;  // ← was textContent
 }
 
 let _lastPracticeKey = null;
@@ -1596,20 +1703,20 @@ function updateBestPracticeBox() {
   _lastPracticeKey = key;
 
  const titleMap = {
-  opioids: "Opioids",
-  bzra: "Benzodiazepines / Z-Drugs (BZRA)",
+  opioids: "Opioids for persistent noncancer pain",
+  bzra: "Benzodiazepines and Z-drugs for insomnia in older adults",
   antipsychotic: "Antipsychotics",
   ppi: "Proton Pump Inhibitors",
   gabapentinoids: "Gabapentinoids"
 };
   
   const text = SUGGESTED_PRACTICE[key] || "";
-  box.innerHTML = `
-    <h2>Suggested practice for ${titleMap[key]}</h2>
-    <div class="practice-text">
-      ${text.split("\n").map(line => `<p>${line}</p>`).join("")}
-    </div>
-  `;
+ box.innerHTML = `
+  <h2>${titleMap[key]}</h2>
+  <div class="practice-text">
+    ${text}
+  </div>
+`;
 }
 
 /* ---- Dirty state + gating ---- */
@@ -2342,26 +2449,65 @@ sSel.onchange = (e) => {
     sSel.onchange=(e)=>{ const id=+e.target.dataset.id; const l=doseLines.find(x=>x.id===id); if(l) l.strengthStr=e.target.value; setDirty(true); };
     fSel.onchange=(e)=>{ const id=+e.target.dataset.id; const l=doseLines.find(x=>x.id===id); if(l) l.freqMode=e.target.value; setDirty(true); };
 
-    // Quantity constraints per form
-    const qtyInput = row.querySelector(".dl-qty");
-    const split = canSplitTablets(cls, form, med);
-    if (/Patch/i.test(form)) {
-      qtyInput.min = 0; qtyInput.max = 2; qtyInput.step = 1;
-    } else {
-      qtyInput.min = 0; qtyInput.max = 4;
-      qtyInput.step = split.quarter ? 0.25 : (split.half ? 0.5 : 1);
-    }
-    qtyInput.value = (ln.qty ?? 1);
+// Quantity constraints per form (no hard caps; snap to allowed step)
+const qtyInput = row.querySelector(".dl-qty");
 
-    qtyInput.onchange = (e)=>{
-      const id=+e.target.dataset.id; let v=parseFloat(e.target.value);
-      if(isNaN(v)) v=0;
-      const min=parseFloat(e.target.min||"0"), max=parseFloat(e.target.max||"4"), step=parseFloat(e.target.step||"1");
-      v=Math.max(min, Math.min(max, Math.round(v/step)*step));
-      e.target.value=v;
-      const l=doseLines.find(x=>x.id===id); if(l) l.qty=v;
-      setDirty(true);
-    };
+// Better mobile keypad + lower bound
+qtyInput.inputMode = "decimal";
+qtyInput.min = 0;
+
+// Decide the allowed increment ("step")
+let step;
+if (/Patch/i.test(form)) {
+  // Patches: whole-only
+  step = 1;
+} else if (/SR/i.test(form)) {
+  // SR tablets: whole-only
+  step = 1;
+} else {
+  // Others: allow halves (or quarters if your split rules permit)
+  const split = (typeof canSplitTablets === "function")
+    ? canSplitTablets(cls, form, med)   // keep your existing signature/order
+    : { half: true, quarter: false };
+
+  step = split.quarter ? 0.25 : (split.half ? 0.5 : 1);
+}
+
+// Remove any upper cap and set step
+qtyInput.removeAttribute("max");
+qtyInput.step = String(step);
+
+// Initial value (keep existing if present, otherwise 1 or a single step)
+qtyInput.value = (typeof ln.qty !== "undefined")
+  ? ln.qty
+  : (step < 1 ? step : 1);
+
+// Shared snapper (no negatives, snap to step, keep sensible precision)
+const sanitizeQty = (val) => {
+  let v = parseFloat(val);
+  if (!Number.isFinite(v)) v = 0;
+  v = Math.max(0, Math.round(v / step) * step);
+  if (step === 0.25) return Math.round(v * 4) / 4;
+  if (step === 0.5)  return Math.round(v * 2) / 2;
+  return Math.round(v);
+};
+
+// Only sanitize after editing (no cursor jumping)
+qtyInput.addEventListener("blur", () => {
+  qtyInput.value = sanitizeQty(qtyInput.value);
+});
+
+qtyInput.addEventListener("change", (e) => {
+  const id = +e.target.dataset.id;
+  const v  = sanitizeQty(e.target.value);
+  e.target.value = v;
+
+  const l = doseLines.find(x => x.id === id);
+  if (l) l.qty = v;
+
+  setDirty(true);
+});
+
 
     row.querySelector(".dl-remove").onclick=(e)=>{ const id=+e.target.dataset.id; doseLines=doseLines.filter(x=>x.id!==id); renderDoseLines(); setDirty(true); };
   });
@@ -2540,33 +2686,123 @@ function composeForSlot_AP_Selected(targetMg, cls, med, form){
   return pack || composeForSlot(targetMg, cls, med, form);
 }
 
-
-/* ===== Preferred BID split ===== */
+/* ===== Preferred BID split (robust + hardened; never single-slot unless total < 2*q) ===== */
 function preferredBidTargets(total, cls, med, form){
-  const EPS  = 1e-9;
-  const step = (typeof lowestStepMg === "function" ? lowestStepMg(cls, med, form) : 1) || 1;
+  const EPS = 1e-9;
 
-  // Snap total to the grid once (selection-aware)
-  total = Math.max(0, Math.round(total / step) * step);
+  // Helpers
+  const isNum = (x) => Number.isFinite(x);
+  const clampGrid = (x, q) => Math.max(0, Math.round(x / q) * q);
 
-  // Base even split on the grid
-  let am = Math.floor((total / 2) / step) * step;  // floor half on the grid
-  let pm = total - am;                             // remainder to PM (so PM >= AM)
+  // Read rules
+  const stepMinRaw = (typeof lowestStepMg       === "function" ? lowestStepMg(cls, med, form)       : 1);
+  const qRaw       = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : stepMinRaw);
 
-  // Snap PM to grid (guard tiny float noise), recompute AM as the remainder
-  pm = Math.round(pm / step) * step;
+  // Preference (global source of truth)
+  const pref = (typeof getBidHeavierPreference === "function") ? getBidHeavierPreference() : "PM";
+
+  // --- Sanitise inputs (CRITICAL to prevent NaNs / freezes) ---
+  let stepMin = isNum(stepMinRaw) && stepMinRaw > 0 ? stepMinRaw : 1;
+  let q       = isNum(qRaw)       && qRaw       > 0 ? qRaw       : stepMin;
+  if (!(isNum(q) && q > 0)) q = 1;               // last-resort floor
+  if (!(isNum(stepMin) && stepMin > 0)) stepMin = q;
+
+  // Safe divide (avoids NaN/Inf if q ever drifted)
+  const sdiv = (a,b) => (isNum(a) && isNum(b) && b !== 0) ? (a / b) : 0;
+
+  total = isNum(total) ? total : 0;
+  total = Math.max(0, Math.round(sdiv(total, q)) * q); // snap safely to grid
+
+  // Trivial cases
+  if (total <= 0) return { AM:0, PM:0 };
+  if (total < 2*q){
+    // Not enough to support BID; return single-slot on preferred side
+    return (pref === "AM") ? { AM: total, PM: 0 } : { AM: 0, PM: total };
+  }
+
+  // Start from an even split on the grid
+  let am = Math.floor(sdiv(total, 2) / q) * q; // ≤ total/2, integer multiples of q
+  let pm = total - am;
+  pm = clampGrid(pm, q);
   am = total - pm;
 
-  // Clean tiny negatives
-  if (am < EPS) am = 0;
-  if (pm < EPS) pm = 0;
+  // Enforce heavier-side preference (when unequal)
+  if (am !== pm) {
+    const amHeavier = am > pm;
+    if (pref === "PM" && amHeavier) { const t = am; am = pm; pm = t; }
+    if (pref === "AM" && !amHeavier){ const t = am; am = pm; pm = t; }
+  }
 
-  // Prefer PM >= AM; swap if needed
-  if (am > pm) { const t = am; am = pm; pm = t; }
+  // Cap difference to ≤ lowest selected strength
+  const cap = stepMin;
+  let diff = Math.abs(pm - am);
+  if (diff > cap) {
+    const targetLight = (pm >= am) ? "AM" : "PM";   // move from heavier → lighter
+    let guard = 64;                                 // hard cap to prevent runaway loops
+    while (diff > cap && guard-- > 0) {
+      if (targetLight === "AM" && pm - q >= 0) { pm -= q; am += q; }
+      else if (targetLight === "PM" && am - q >= 0) { am -= q; pm += q; }
+      else break;
+      diff = Math.abs(pm - am);
+    }
+  }
+
+  // Final guard: forbid single-slot when BID is possible
+  if ((am === 0 || pm === 0) && total >= 2*q) {
+    if (pref === "AM") { am = q; pm = total - q; }
+    else               { pm = q; am = total - q; }
+
+    // Re-apply cap with a guard
+    let guard = 64;
+    while (Math.abs(pm - am) > stepMin && guard-- > 0) {
+      if (pm >= am && pm - q >= 0) { pm -= q; am += q; }
+      else if (am > pm && am - q >= 0) { am -= q; pm += q; }
+      else break;
+    }
+  }
+
+  // Snap to grid one last time
+  am = clampGrid(am, q);
+  pm = clampGrid(pm, q);
+
+  // Safety: keep sums exact to total if tiny drift happened
+  const drift = (am + pm) - total;
+  if (Math.abs(drift) >= q - EPS) {
+    // If something is badly off, just rebuild to preferred minimal split
+    if (pref === "AM") { am = q; pm = total - q; }
+    else               { pm = q; am = total - q; }
+  } else if (Math.abs(drift) >= EPS) {
+    // Nudge the heavier side down by the drift
+    if (pm >= am && pm - drift >= 0) pm -= drift;
+    else if (am > pm && am - drift >= 0) am -= drift;
+  }
+
+  // Final snap
+  am = clampGrid(am, q);
+  pm = clampGrid(pm, q);
+
+  // === FINAL re-assertion of heavier-side preference (after all nudges/snaps) ===
+  if (am !== pm) {
+    const amHeavier = am > pm;
+    if (pref === "PM" && amHeavier) { const t = am; am = pm; pm = t; }
+    if (pref === "AM" && !amHeavier){ const t = am; am = pm; pm = t; }
+
+    // ensure the difference cap still holds (one guarded pass)
+    if (Math.abs(pm - am) > stepMin) {
+      let guard = 8;
+      while (Math.abs(pm - am) > stepMin && guard-- > 0) {
+        if (pm >= am && pm - q >= 0) { pm -= q; am += q; }
+        else if (am > pm && am - q >= 0) { am -= q; pm += q; }
+        else break;
+      }
+      // snap again for safety
+      am = Math.max(0, Math.round(am / q) * q);
+      pm = Math.max(0, Math.round(pm / q) * q);
+    }
+  }
 
   return { AM: am, PM: pm };
 }
-
 
 /* ===== Opioids (tablets/capsules) — shave DIN→MID, then rebalance BID ===== */
 function stepOpioid_Shave(packs, percent, cls, med, form){
@@ -2641,39 +2877,46 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     Number.isFinite(mg) &&
     Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
 
-  const isExactPMOnlyAt = (mg) =>
-    Number.isFinite(mg) &&
-    AM < EPS && MID < EPS && DIN < EPS && Math.abs(PM - mg) < EPS;
+function isExactSingleOnlyAt(mg){
+  const pref = (typeof getBidHeavierPreference === "function" && getBidHeavierPreference() === "AM") ? "AM" : "PM";
+  const amOk = (pref === "AM") ? Math.abs(AM - mg) < EPS : AM < EPS;
+  const pmOk = (pref === "PM") ? Math.abs(PM - mg) < EPS : PM < EPS;
+  return Number.isFinite(mg) && amOk && pmOk && MID < EPS && DIN < EPS;
+}
 
-  // ----- BID end-sequence gate -----
-  if (Number.isFinite(thresholdMg)) {
-    // Already PM-only at threshold => signal STOP
-    if (isExactPMOnlyAt(thresholdMg)) {
-      if (window._forceReviewNext) window._forceReviewNext = false;
-      return {}; // empty packs ⇒ buildPlanTablets() prints STOP row
-    }
-
-    // First time we hit exact BID at threshold:
-    if (isExactBIDAt(thresholdMg)) {
-      if (lcsSelected) {
-        // LCS is among selected ⇒ emit PM-only at threshold (no rebalancing)
-        if (window._forceReviewNext) window._forceReviewNext = false;
-        const cur = { AM:0, MID:0, DIN:0, PM:thresholdMg };
-        return recomposeSlots(cur, cls, med, form);
-      } else {
-        // LCS not selected ⇒ Review next boundary
-        window._forceReviewNext = true;
-        return packs; // unchanged; loop will schedule Review
-      }
-    }
+// ----- BID end-sequence gate (preference-aware) -----
+if (Number.isFinite(thresholdMg)) {
+  // Already at single-dose (AM-only or PM-only by preference) ⇒ STOP
+  if (isExactSingleOnlyAt(thresholdMg)) {
+    if (window._forceReviewNext) window._forceReviewNext = false;
+    return {}; // empty packs ⇒ buildPlanTablets() prints STOP row
   }
 
-  // ----- Normal SR-style reduction (as in your original logic) -----
-  let target = roundTo(tot * (1 - percent/100), step);
+  // First time we hit exact BID at threshold
+  if (isExactBIDAt(thresholdMg)) {
+    if (lcsSelected) {
+   // LCS among selected ⇒ emit single-dose at threshold per preference (no rebalancing)
+if (window._forceReviewNext) window._forceReviewNext = false;
+const pref = (typeof getBidHeavierPreference === "function" && getBidHeavierPreference() === "AM") ? "AM" : "PM";
+const cur = { AM:0, MID:0, DIN:0, PM:0 };
+cur[pref] = thresholdMg;
+return recomposeSlots(cur, cls, med, form);
+    } else {
+      // LCS not selected ⇒ Review next boundary
+      window._forceReviewNext = true;
+      return packs; // unchanged; loop will schedule Review
+    }
+  }
+}
+
+  const q = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : step) || step;
+
+  // ALWAYS ROUND UP to the quantum
+  let target = Math.ceil((tot * (1 - percent/100)) / q) * q;
+
+  // Anti-stall: if "up" keeps us at the same dose, step down one quantum
   if (target === tot && tot > 0) {
-    // force progress if rounding would stall
-    target = Math.max(0, tot - step);
-    target = roundTo(target, step);
+    target = Math.max(0, tot - q);
   }
 
   let cur = { AM, MID, DIN, PM };
@@ -2691,13 +2934,13 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
   else               { shave("MID"); }
 
-  // Rebalance across AM/PM if reduction remains
-  if (reduce > EPS) {
-    const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
-    const bid = preferredBidTargets(bidTarget, cls, med, form);
-    cur.AM = bid.AM; cur.PM = bid.PM;
-    reduce = 0;
-  }
+// Rebalance across AM/PM if reduction remains
+if (reduce > EPS) {
+  const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
+  const bid = preferredBidTargets(bidTarget, cls, med, form);
+  cur.AM = bid.AM; cur.PM = bid.PM;
+  reduce = 0;
+}
 
   // tidy negatives to zero
   for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
@@ -2929,11 +3172,15 @@ function stepGabapentinoid(packs, percent, med, form){
     }
   }
 
-  // ---- Compute this step's target from PREVIOUS ACHIEVED total, then quantise ----
-  const rawTarget     = tot * (1 - percent/100);
-  const targetRounded = nearestStep(rawTarget, stepMg);   // ties → round up
-  let reductionNeeded = Math.max(0, +(tot - targetRounded).toFixed(3));
-  if (reductionNeeded <= EPS) reductionNeeded = stepMg;   // ensure progress on first call
+// ---- Compute this step's target from PREVIOUS ACHIEVED total, then quantise ----
+const rawTarget = tot * (1 - percent/100);
+let targetRounded = nearestStep(rawTarget, stepMg);     // ties → round up
+// ✅ Anti-stall: if rounding returns the SAME total (e.g., 500 → 450 → ⤴︎ 500), force a one-step drop
+if (Math.abs(targetRounded - tot) < EPS && tot > 0) {
+  targetRounded = Math.max(0, tot - stepMg);           // e.g., 500 → 400
+}
+let reductionNeeded = Math.max(0, +(tot - targetRounded).toFixed(3));
+if (reductionNeeded <= EPS) reductionNeeded = stepMg;   // safety: still ensure progress
 
   // ---- QID: rebuild DIN to the reduced target, leave AM/MID/PM untouched this step ----
   if (isQID) {
@@ -3319,12 +3566,29 @@ function isAtSelectedBID(packs, selMin){
   return Math.abs(AM - selMin) < EPS && Math.abs(PM - selMin) < EPS && MID < EPS && DIN < EPS;
 }
 
-// Make a PM-only snapshot from current packs (drop AM/MID/DIN, keep PM composition)
+// Helper: read the user's AM/PM preference (default PM)
+function heavierPref(){
+  try {
+    const am = document.getElementById("bidHeavyAM");
+    const pm = document.getElementById("bidHeavyPM");
+    if (am && am.checked) return "AM";
+    return "PM";
+  } catch { return "PM"; }
+}
+
+// Make a single-dose snapshot from current packs (keep AM or PM per preference; drop the rest)
 function pmOnlyFrom(packs){
+  // We keep the slot that matches the user's preference.
+  // If someone wants "AM heavier", they likely want the last single dose in the morning.
+  const keep = (heavierPref() === "AM") ? "AM" : "PM";
   const q = deepCopy(packs);
-  if (q.AM)  q.AM.length = 0;
-  if (q.MID) q.MID.length = 0;
-  if (q.DIN) q.DIN.length = 0;
+
+  // Clear all other slots
+  if (keep !== "AM"  && q.AM)  q.AM.length  = 0;
+  if (keep !== "MID" && q.MID) q.MID.length = 0;
+  if (keep !== "DIN" && q.DIN) q.DIN.length = 0;
+  if (keep !== "PM"  && q.PM)  q.PM.length  = 0;
+
   return q;
 }
 
@@ -3368,17 +3632,38 @@ const doStep = (phasePct) => {
 
   // Step 1 on start date using whichever phase applies at start
   const useP2Now = p2Start && (+startDate >= +p2Start);
-  doStep(useP2Now ? p2Pct : p1Pct);
-  console.log("[DEBUG] Step1 packs:", JSON.stringify(packs));
-  if (packsTotalMg(packs) > EPS) rows.push({ week: 1, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
+// STEP 1 — compute “calculated” from pre-step total, and “rounded” from the packs after stepping
+const prevTotalMg_step1 = packsTotalMg(packs);
+const usedPct_step1 = (useP2Now ? p2Pct : p1Pct);
+
+doStep(usedPct_step1);
+console.log("[DEBUG] Step1 packs:", JSON.stringify(packs));
+
+if (packsTotalMg(packs) > EPS) {
+  const roundedMg_step1   = packsTotalMg(packs);                             // policy-rounded, from engine
+  const calculatedMg_step1= prevTotalMg_step1 * (1 - (usedPct_step1/100));   // informational
+  const actualPct_step1   = prevTotalMg_step1 > EPS
+    ? (100 * (1 - (roundedMg_step1 / prevTotalMg_step1)))
+    : 0;
+
+  rows.push({
+    week: 1,
+    date: fmtDate(date),
+    packs: deepCopy(packs),
+    med, form, cls,
+    calculatedMg: calculatedMg_step1,
+    roundedMg:    roundedMg_step1,
+    actualPct:    actualPct_step1
+  });
+}
 
 // If a BID class has reached selected-min BID and the class-lowest is among selections,
 // schedule PM-only at next boundary, then Stop at the following boundary.
 if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoids")) {
   const selMin = selectedMinMg(cls, med, form);
   if (isAtSelectedBID(packs, selMin) && lowestSelectedForClassIsPresent(cls, med, form)) {
-    window._pmOnlySnapshot = pmOnlyFrom(packs);
-  }
+  window._pmOnlySnapshot = singleDoseFrom(packs);
+}
 }
   
   let week=1;
@@ -3397,11 +3682,13 @@ if (window._forceStopNext) {
 // If a PM-only row was scheduled for this boundary, emit it now and prepare to Stop next
 if (window._pmOnlySnapshot) {
   date = nextDate; week++;
-  packs = deepCopy(window._pmOnlySnapshot);
+  // Re-assert preference defensively in case some other code mutated the snapshot
+  packs = singleDoseFrom(window._pmOnlySnapshot);
   window._pmOnlySnapshot = null;
+
   rows.push({ week, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
-  window._forceStopNext = true;   // Stop at the *following* boundary
-  continue; // skip normal stepping this iteration
+  window._forceStopNext = true;
+  continue;
 }
     
    // Phase rule: Phase 2 begins only AFTER the current Phase 1 step completes
@@ -3422,9 +3709,11 @@ if (window._forceReviewNext) {
   window._forceReviewNext = false;
   break;
 }
-    
+    // Stash the pre-step total for THIS iteration’s row
+const _prevTotalMg_beforeStep = packsTotalMg(packs);
     date = nextDate; week++;
     const nowInP2 = p2Start && (+date >= +p2Start);
+    const _usedPct_forStep = (nowInP2 ? p2Pct : p1Pct);
     doStep(nowInP2 ? p2Pct : p1Pct);
 
     // Suppress duplicate row if a step forced review and did not change packs
@@ -3436,7 +3725,29 @@ if (typeof window !== "undefined" && window._forceReviewNext){
   break;
 }
     
-    if (packsTotalMg(packs) > EPS) rows.push({ week, date: fmtDate(date), packs: deepCopy(packs), med, form, cls });
+    if (packsTotalMg(packs) > EPS) {
+  // For the row we just produced, show the policy-rounded total and the actual % change
+  // We need the "pre-step" total and the pct we used for THIS step:
+  // 1) pre-step total was what we had before calling doStep this iteration
+  // 2) pct used was decided by nowInP2 (see below where we compute it)
+
+  // We stashed these just before calling doStep in this iteration:
+  const roundedMg_iter   = packsTotalMg(packs);                                   // policy-rounded after step
+  const calculatedMg_iter= _prevTotalMg_beforeStep * (1 - (_usedPct_forStep/100)); // informational
+  const actualPct_iter   = _prevTotalMg_beforeStep > EPS
+    ? (100 * (1 - (roundedMg_iter / _prevTotalMg_beforeStep)))
+    : 0;
+
+  rows.push({
+    week,
+    date: fmtDate(date),
+    packs: deepCopy(packs),
+    med, form, cls,
+    calculatedMg: calculatedMg_iter,
+    roundedMg:    roundedMg_iter,
+    actualPct:    actualPct_iter
+  });
+}
     if (week > MAX_WEEKS) break;
   }
 
@@ -3444,8 +3755,8 @@ if (typeof window !== "undefined" && window._forceReviewNext){
 if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoids")) {
   const selMin = selectedMinMg(cls, med, form);
   if (isAtSelectedBID(packs, selMin) && lowestSelectedForClassIsPresent(cls, med, form)) {
-    window._pmOnlySnapshot = pmOnlyFrom(packs);
-  }
+  window._pmOnlySnapshot = singleDoseFrom(packs);
+}
 }
  
   if (packsTotalMg(packs) <= EPS) rows.push({ week: week+1, date: fmtDate(date), packs: {}, med, form, cls, stop:true });
@@ -4247,16 +4558,32 @@ function setupDisclaimerGate(){
   const card = document.createElement('div');
   card.id = 'disclaimerCard';
   card.className = 'card';
-  card.innerHTML = `
-    <div class="card-head"><h2>Important Notice</h2></div>
-    <div class="disclaimer-copy">
-      <p>This calculator is designed as an information tool only, and all information contained is solely for the use by a trained medical professional who is experienced in tapering medicines based on currently published evidence and are competent to understand the risk, benefits and alternatives to various medicine tapering plans and determine which medicine and dosage, if any, will be safe and effective for any particular patient. Clinical application of any data obtained by use of the calculator is the sole responsibility of the user only.</p>
-      <label class="inline-label" for="acceptTaperDisclaimer">
-        <strong>Check the box if you accept</strong>
-        <input id="acceptTaperDisclaimer" type="checkbox" />
-      </label>
-    </div>
-  `;
+card.innerHTML = `
+  <div class="card-head"><h2>Important Notice</h2></div>
+  <div class="disclaimer-copy">
+    <p>
+      This calculator and its associated content are intended exclusively for use by qualified health professionals and developed for the Australian context. 
+      It is designed to support deprescribing, when this is deemed clinically appropriate by the prescriber. 
+      This calculator does not replace professional clinical judgment. The interpretation and application of any information obtained from this calculator remain the sole responsibility of the user.
+    </p>
+
+    <p>
+      This calculator is not designed for generating an individualised tapering plan for patients with severe substance use disorder; 
+      these patients require tailored plans beyond the scope of this calculator.
+    </p>
+
+    <p>
+      <strong>By accessing and using this site, you acknowledge and agree to the following:</strong><br>
+      • You will exercise your own independent clinical judgement when treating patients.<br>
+      • You accept and agree to these terms and conditions.
+    </p>
+
+    <label class="inline-label" for="acceptTaperDisclaimer" style="margin-top:10px; display:block;">
+      <strong>Check the box if you accept</strong>
+      <input id="acceptTaperDisclaimer" type="checkbox" />
+    </label>
+  </div>
+`;
 
   // Insert at the very top of the app container
   container.insertBefore(card, container.firstChild);
