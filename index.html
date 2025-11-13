@@ -110,11 +110,11 @@
     <div class="accordion-body">
 
       <!-- Phase 2 (entirely inside the accordion) -->
+      <div class="sub-card">
       <div class="taper-block">
         <h3>Phase 2</h3>
         <p class="hint" style="margin-top:0">
-          Phase 2 will start at the closest date after the last step of Phase 1 is complete.
-          If Phase 2 is blank or only partly set up, a single-phase taper will be generated.
+          Choose the start date and taper controls for Phase 2. Phase 2 will starts at the earliest available date after the end of the last Phase 1 step. If Phase 2 is blank or only partly set up, a single-phase taper will be generated.
         </p>
         <div class="taper-row">
           <label class="inline-label">
@@ -131,8 +131,10 @@
           </label>
         </div>
       </div>
+          </div>
 
       <!-- Product/formulation picker: moved inside the accordion, above Mode -->
+       <div class="sub-card">
       <div id="productPickerCard" class="card-subtle" style="display:none; margin-top:8px;">
         <h3 style="margin:0 0 6px 0;">Select formulations to use in the taper (optional)</h3>
         <p class="hint" style="margin-top:0">
@@ -145,7 +147,23 @@
           <button id="clearProductSelection"  type="button" class="secondary">Clear selection</button>
         </div>
       </div>
+        </div>
+      
+<!-- BID split preference -->
+     <div class="sub-card">
+<div class="taper-block">
+  <h3>Dose-split preference for twice-daily dosing</h3>
+  <label class="inline-label">
+    <span>If the total daily dose cannot be split equally, make the:</span>
+    <span class="inline-radios" style="display:inline-flex; gap:1rem; align-items:center;">
+      <label><input type="radio" name="bidHeavier" id="bidHeavyAM" value="AM"> morning dose larger </label>
+      <label><input type="radio" name="bidHeavier" id="bidHeavyPM" value="PM" checked> night dose larger</label>
+    </span>
+  </label>
+</div>
+      </div>
 
+      
     </div>
   </details>
 </section>
