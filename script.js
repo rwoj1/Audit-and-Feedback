@@ -371,30 +371,53 @@ function _gcd(a, b){
   return a || 0;
 }
 
-// Compute the effective rounding grid ("quantum") from selected strengths (mg).
-// Use GCD(selected); if none selected, GCD(all available). Fallback to lowestStepMg.
+// Compute the effective rounding grid ("quantum") from *pieces* we can actually give.
+// Uses the available/selected base strengths, then adds halves/quarters if the
+// tablet can be split (and the BZRA quarter toggle is on). The quantum is the
+// smallest positive piece.
 function effectiveQuantumMg(cls, med, form){
   try {
-    // Prefer explicitly selected formulations if present
-    let arr = (typeof selectedProductMgs === "function" ? (selectedProductMgs() || []) : []) 
-      .map(v => (typeof v === "number" ? v : parseMgFromStrength(v)))
-      .filter(n => Number.isFinite(n) && n > 0);
+    // Base strengths (mg) – respects product picker when used
+    const bases = stepBaseStrengthsMg(cls, med, form) || [];
 
-    // If none selected, use all strengths for the current med/form
-    if (!arr.length) {
-      arr = (typeof strengthsForSelectedSafe === "function" ? strengthsForSelectedSafe(cls, med, form) : [])
-        .map(v => (typeof v === "number" ? v : parseMgFromStrength(v)))
-        .filter(n => Number.isFinite(n) && n > 0);
+    // Splitting rules for this med/form (e.g. BZRA quarters toggle, SR/ODT cannot split)
+    const split = (typeof canSplitTablets === "function")
+      ? canSplitTablets(cls, form, med)
+      : { half: false, quarter: false };
+
+    const pieces = [];
+
+    for (const raw of bases) {
+      const mg = Number(raw);
+      if (!Number.isFinite(mg) || mg <= 0) continue;
+
+      // whole tablet
+      pieces.push(mg);
+
+      // half tablet if allowed
+      if (split.half) {
+        pieces.push(mg / 2);
+      }
+
+      // quarter tablet if allowed
+      if (split.quarter) {
+        pieces.push(mg / 4);
+      }
     }
 
-    // Dedup & integerize
-    arr = Array.from(new Set(arr.map(n => Math.round(n)))).sort((a,b)=>a-b);
+    // Clean up: round to 3 decimal places, dedupe, sort
+    const clean = Array.from(
+      new Set(
+        pieces
+          .map(x => +(+x).toFixed(3))
+          .filter(x => x > 0)
+      )
+    ).sort((a, b) => a - b);
 
-    // Compute GCD across the list
-    let g = 0;
-    for (const n of arr) g = _gcd(g, n);
-
-    if (g && Number.isFinite(g) && g > 0) return g;
+    if (clean.length) {
+      // The quantum is simply the smallest piece we can actually dispense
+      return clean[0];
+    }
 
     // Fallback: use your existing min step
     return lowestStepMg(cls, med, form) || 1;
