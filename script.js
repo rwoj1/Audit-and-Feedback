@@ -35,6 +35,48 @@ const MAX_WEEKS = 60;
 const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
 const EPS = 1e-6;
 
+// Compute the maximum plan/chart date from user controls.
+// Defaults to 3 months from startDate if controls are missing or unset.
+function getChartCapDate(startDate){
+  const base = new Date(startDate);
+  if (!(base instanceof Date) || isNaN(+base)) {
+    return new Date(+startDate + THREE_MONTHS_MS);
+  }
+
+  // Default: 3 months from start date (current behaviour)
+  let cap = new Date(+base + THREE_MONTHS_MS);
+
+  // Expected HTML IDs:
+  //  - radio for "duration" option:    chartRangePresetMode
+  //  - <select> for e.g. "1 month":    chartRangePreset  (value = number of months, e.g. "1", "3")
+  //  - radio for "specific end date":  chartRangeEndMode
+  //  - <input type="date">:            chartRangeEndDate
+  const presetRadio = document.getElementById("chartRangePresetMode");
+  const presetSelect = document.getElementById("chartRangePreset");
+  const endRadio    = document.getElementById("chartRangeEndMode");
+  const endInput    = document.getElementById("chartRangeEndDate");
+
+  // Option A: duration from dropdown (e.g. 1, 2, 3 months…)
+  if (presetRadio && presetRadio.checked && presetSelect) {
+    const months = parseInt(presetSelect.value, 10);
+    if (Number.isFinite(months) && months > 0) {
+      cap = new Date(base);
+      cap.setMonth(cap.getMonth() + months);
+      return cap;
+    }
+  }
+
+  // Option B: explicit end date
+  if (endRadio && endRadio.checked && endInput && endInput.value) {
+    const d = new Date(endInput.value);
+    if (!isNaN(+d)) {
+      cap = d;
+    }
+  }
+
+  return cap;
+}
+
 /* ===== Patch interval safety (Fentanyl: ×3 days, Buprenorphine: ×7 days) ===== */
 //#endregion
 //#region 2. Patch Interval Rules (safety)
@@ -2329,6 +2371,14 @@ function populateForms(){
 /* ---- Dose lines (state) ---- */
 let doseLines=[]; let nextLineId=1;
 
+// Helper: read Benzodiazepine quarter-tablet toggle (if present in the UI)
+function isBzraQuarterAllowed(){
+  const yes = document.getElementById("bzraQuarterYes");
+  if (!yes) return false; // default: quarters off if control not present
+  return !!yes.checked;
+}
+
+
 /* splitting rules */
 function canSplitTablets(cls, form, med){
   const f = String(form || "");
@@ -2343,10 +2393,12 @@ function canSplitTablets(cls, form, med){
   if (cls === "Opioid" || cls === "Proton Pump Inhibitor" || cls === "Gabapentinoids") {
     return { half:false, quarter:false };
   }
-  // BZRA: plain tablets can be halved (no quarters)
+  // BZRA: plain tablets can be split; quartering depends on the toggle
   if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
     const nonSplittable = /odt|wafer|dispers/i.test(f); // extra guard, though blocked above
-    return nonSplittable ? { half:false, quarter:false } : { half:true, quarter:false };
+    if (nonSplittable) return { half:false, quarter:false };
+    const allowQuarter = (typeof isBzraQuarterAllowed === "function" && isBzraQuarterAllowed());
+    return { half:true, quarter:allowQuarter };
   }
   // Antipsychotics: plain IR tablets can be halved (no quarters)
   if (cls === "Antipsychotic" && /Tablet/i.test(f)) {
@@ -2624,50 +2676,80 @@ function recomposeSlots(targets, cls, med, form){
   for(const slot of ["AM","MID","DIN","PM"]) out[slot] = composeForSlot(targets[slot]||0, cls, med, form);
   return out;
 }
-/* === BZRA selection-only composer (PM-only). Keeps halves on their source product. === */
+
+/* === BZRA selection-only composer (PM-only). LCS-based splitting, whole > half > quarter === */
 function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
-  // Use this ONLY when there really is a selection
-  if (!Array.isArray(selectedMg) || selectedMg.length === 0) return null;
+  // Require a positive target
   if (!(targetMg > 0)) return {};
 
-  // Build allowed units from the selected list:
-  // - full tablet: unit = mg,   piece = 1.0, source = mg
-  // - half tablet: unit = mg/2, piece = 0.5, source = mg (only if halving allowed)
-  const name = String(med||"").toLowerCase();
-  const fr   = String(form||"").toLowerCase();
+  // Normalise the mg list
+  let mgList = Array.isArray(selectedMg) ? selectedMg.slice() : [];
+  mgList = mgList
+    .map(Number)
+    .filter(n => Number.isFinite(n) && n > 0)
+    .sort((a,b)=>a-b);
+  if (!mgList.length) return null;
 
-  const isMR = /slow\s*release|sr|cr|er|mr/.test(fr);
-  const isNoSplitForm = isMR || /odt|wafer|dispers/i.test(fr);
-  const noSplitAlp025 = (mg) => (name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6);
+  // Check global splitting rules for this class / med / form
+  let allowHalf = false;
+  let allowQuarter = false;
+  if (typeof canSplitTablets === "function") {
+    const rule = canSplitTablets(cls, form, med) || {};
+    allowHalf    = !!rule.half;
+    allowQuarter = !!rule.quarter;
+  }
 
+  // Lowest commercial strength (LCS) defines the grid and which strength we split
+  const lcs = +mgList[0].toFixed(3);
+
+  // Build units:
+  // - whole tablets for all strengths
+  // - half/quarter only from LCS
   const units = [];
-  for (const mg of selectedMg){
-    const m = Number(mg);
-    if (!Number.isFinite(m) || m <= 0) continue;
-    // full
-    units.push({ unit:m, source:m, piece:1.0 });
-    // half (only when allowed)
-    if (!isNoSplitForm && !noSplitAlp025(m)) {
-      units.push({ unit:m/2, source:m, piece:0.5 });
+  for (const mg of mgList){
+    const m = +Number(mg).toFixed(3);
+    if (!(m > 0)) continue;
+
+    // Whole tablet always allowed
+    units.push({ unit: m, source: m, piece: 1.0 });
+
+    // Only split the LCS (this keeps the grid consistent)
+    if (m === lcs && allowHalf) {
+      const halfUnit = +(m / 2).toFixed(3);
+      units.push({ unit: halfUnit, source: m, piece: 0.5 });
+
+      if (allowQuarter) {
+        const quarterUnit = +(m / 4).toFixed(3);
+        units.push({ unit: quarterUnit, source: m, piece: 0.25 });
+      }
     }
   }
   if (!units.length) return null;
 
-  // Greedy largest-first exact pack into PM, crediting pieces to the SOURCE mg
-  units.sort((a,b)=> b.unit - a.unit);
+  // Prefer whole > half > quarter, then larger strengths within each
+  units.sort((a,b)=>{
+    if (b.piece !== a.piece) return b.piece - a.piece; // 1.0 > 0.5 > 0.25
+    return b.unit - a.unit;                            // within that, larger mg first
+  });
+
+  // Greedy pack into PM, crediting pieces to their source strength
   let r = +targetMg.toFixed(6);
   const PM = {};
   for (const u of units){
-    if (r <= 1e-6) break;
+    if (r <= EPS) break;
     const q = Math.floor(r / u.unit + 1e-9);
     if (q > 0){
-      PM[u.source] = (PM[u.source] || 0) + q * u.piece; // halves stay on the same product row
+      PM[u.source] = (PM[u.source] || 0) + q * u.piece;
       r -= q * u.unit;
+      r = +r.toFixed(6);
     }
   }
-  if (r > 1e-6) return null; // cannot represent exactly with the selected set → caller will fallback
+
+  // If we can't hit the target exactly with these units, let the caller fall back
+  if (r > EPS) return null;
   return PM;
 }
+
 // Selection-aware AP composer with safe fallback to "all"
 function composeForSlot_AP_Selected(targetMg, cls, med, form){
   let sel = [];
@@ -3375,13 +3457,13 @@ if (reductionNeeded <= EPS) reductionNeeded = stepMg;   // safety: still ensure 
     return out;
   }
 }
-
-/* ===== Benzodiazepines / Z-Drug (BZRA) — PM-only daily taper with selection-only & halving rules ===== */
+/* ===== Benzodiazepines / Z-Drug (BZRA) — PM-only daily taper with selection & split rules ===== */
 function stepBZRA(packs, percent, med, form){
+  const cls = "Benzodiazepines / Z-Drug (BZRA)";
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // Base step (your original): 6.25 for Zolpidem SR, else per map (default 0.5)
+  // Base step fallback: 6.25 for Zolpidem SR, else per map (default 0.5)
   const baseStep = (!isMR(form) || !/Zolpidem/i.test(med))
     ? ((BZRA_MIN_STEP && BZRA_MIN_STEP[med]) || 0.5)
     : 6.25;
@@ -3396,53 +3478,51 @@ function stepBZRA(packs, percent, med, form){
       .sort((a,b)=>a-b);
   }
 
-  // Prefer a selection-driven grid (GCD of selected units incl. halves); else fall back to baseStep
+  // If nothing explicitly selected, treat as "all products" for this BZRA
+  let gridMg = selectedMg.slice();
+  if ((!gridMg || !gridMg.length) && typeof strengthsForPicker === "function") {
+    const all = strengthsForPicker(cls, med, form) || [];
+    gridMg = all
+      .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/)||[])[1]))
+      .map(Number)
+      .filter(n => Number.isFinite(n) && n > 0)
+      .sort((a,b)=>a-b);
+  }
+
+  // 0) Determine grid step from selection (LCS + quarter toggle) or fall back to baseStep
   const gridStep = (typeof selectionGridStepBZRA === "function")
-    ? (selectionGridStepBZRA(med, form, selectedMg) || 0)
+    ? (selectionGridStepBZRA(med, form, gridMg) || 0)
     : 0;
   const step = gridStep || baseStep;
 
-  // Quantise to nearest step
+  // 1) Calculate raw target based on percentage reduction
   const raw = tot * (1 - percent/100);
-  const down = floorTo(raw, step), up = ceilTo(raw, step);
-  const dUp = Math.abs(up - raw), dDown = Math.abs(raw - down);
 
-  let target;
-  if (dUp < dDown) {
-    target = up;
-  } else if (dDown < dUp) {
-    target = down;
-  } else {
-    // --- TIE ---
-    if (selectedMg.length > 0) {
-      // With a selection: choose FEWEST pieces; if still tie, round up
-      const piecesDown = piecesNeededBZRA(down, med, form, selectedMg);
-      const piecesUp   = piecesNeededBZRA(up,   med, form, selectedMg);
-      if (piecesDown != null && piecesUp != null) {
-        if (piecesDown < piecesUp)      target = down;
-        else if (piecesUp < piecesDown) target = up;
-        else                            target = up;   // tie → up
-      } else {
-        target = down; // conservative fallback
-      }
-    } else {
-      // No selection: prefer round DOWN on tie (fewest units before rounding up)
-      target = down;
-    }
+  // 2) Round UP to the nearest allowed by the grid
+  let target = ceilTo(raw, step);
+
+  // Never increase the dose above the current total
+  if (target > tot + EPS) {
+    target = tot;
   }
 
-  // Ensure progress (never repeat same total)
+  // 2b) If still same as prior step, step DOWN by one grid step
   if (Math.abs(target - tot) < EPS && tot > 0) {
     target = roundTo(Math.max(0, tot - step), step);
   }
 
-  // Compose: try selection-aware first, then fallback to original composer
+  // Safety: clamp very small negatives to zero
+  if (target < 0 && Math.abs(target) < EPS) target = 0;
+  if (target < 0) target = 0;
+
+  // 3) Compose: try selection-aware first, then fallback to original composer
   let pm = null;
-  if (typeof composeForSlot_BZRA_Selected === "function") {
-    pm = composeForSlot_BZRA_Selected(target, "Benzodiazepines / Z-Drug (BZRA)", med, form, selectedMg);
+  const selectedForCompose = gridMg && gridMg.length ? gridMg : selectedMg;
+  if (typeof composeForSlot_BZRA_Selected === "function" && selectedForCompose && selectedForCompose.length) {
+    pm = composeForSlot_BZRA_Selected(target, cls, med, form, selectedForCompose);
   }
   if (!pm) {
-    pm = composeForSlot(target, "Benzodiazepines / Z-Drug (BZRA)", med, form);
+    pm = composeForSlot(target, cls, med, form);
   }
 
   return { AM:{}, MID:{}, DIN:{}, PM: pm };
@@ -3453,14 +3533,40 @@ function stepBZRA(packs, percent, med, form){
     const fr   = String(form||"").toLowerCase();
     const nonSplit = /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)|odt|wafer|dispers/i.test(fr);
 
+    let allowHalf  = false;
+    let allowQuarter = false;
+
+    if (!nonSplit && typeof canSplitTablets === "function") {
+      const rule = canSplitTablets(cls, form, med) || {};
+      allowHalf    = !!rule.half;
+      allowQuarter = !!rule.quarter;
+    }
+
+    // If no explicit selection passed, use gridMg as the universe
+    let mgList = Array.isArray(selected) && selected.length ? selected.slice() : gridMg.slice();
+
     const units = [];
-    for (const mgRaw of (selected || [])) {
+    for (const mgRaw of (mgList || [])) {
       const mg = Number(mgRaw);
       if (!Number.isFinite(mg) || mg <= 0) continue;
-      units.push({ unit: mg, piece: 1.0 }); // whole tablet
-      const forbidHalf = nonSplit || (name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6);
-      if (!forbidHalf) units.push({ unit: mg/2, piece: 0.5 }); // half tablet
+
+      const mgClean = +mg.toFixed(3);
+
+      // Always allow whole tablets
+      units.push({ unit: mgClean, piece: 1.0 });
+
+      if (!nonSplit && allowHalf) {
+        const halfUnit = +(mgClean / 2).toFixed(3);
+        units.push({ unit: halfUnit, piece: 0.5 });
+
+        if (allowQuarter) {
+          const quarterUnit = +(mgClean / 4).toFixed(3);
+          units.push({ unit: quarterUnit, piece: 0.25 });
+        }
+      }
     }
+
+    // Greedy composer will always try bigger units first → whole > halves > quarters
     units.sort((a,b)=> b.unit - a.unit);
     return units;
   }
@@ -3477,31 +3583,52 @@ function stepBZRA(packs, percent, med, form){
     return (r > EPS) ? null : pieces;
   }
 }
-// Compute the rounding grid from the current selection (GCD of selected tablets and allowed halves).
+
 function selectionGridStepBZRA(med, form, selectedMg){
-  if (!Array.isArray(selectedMg) || !selectedMg.length) return 0;
+  // Accept an explicit selection list, but if empty, treat as "all products" via strengthsForPicker
+  let mgList = Array.isArray(selectedMg) ? selectedMg.slice() : [];
 
   const name = String(med||"").toLowerCase();
   const fr   = String(form||"").toLowerCase();
-  const isMR = /slow\s*release|sr|cr|er|mr/.test(fr);
-  const noSplitForm = isMR || /odt|wafer|dispers/i.test(fr);
-  const forbidAlp025 = (mg) => (name.includes("alprazolam") && Math.abs(mg - 0.25) < 1e-6);
 
-  const units = [];
-  for (const mgRaw of selectedMg){
-    const m = Number(mgRaw);
-    if (!Number.isFinite(m) || m <= 0) continue;
-    units.push(+m.toFixed(3));
-    if (!noSplitForm && !forbidAlp025(m)) units.push(+(m/2).toFixed(3));
+  // Detect modified/unsplittable forms
+  const isMRform = (typeof isMR === "function")
+    ? isMR(form)
+    : /slow\s*release|(?:^|\W)(sr|cr|er|mr)(?:\W|$)/i.test(fr);
+  const noSplitForm = isMRform || /odt|wafer|dispers/i.test(fr);
+
+  // Special case: Zolpidem MR uses a fixed 6.25 mg grid
+  if (isMRform && /zolpidem/i.test(name)) {
+    return 6.25;
   }
-  if (!units.length) return 0;
 
-  // Use hundredths to handle 0.25, 1.25, 6.25 cleanly
-  const ints = units.map(u => Math.round(u * 100));
-  const gcd = (a,b)=>{ a=Math.abs(a); b=Math.abs(b); while(b){ const t=a%b; a=b; b=t; } return a; };
-  const g = ints.reduce((a,b)=>gcd(a,b));
-  return g > 0 ? g / 100 : 0;
+  const cls = "Benzodiazepines / Z-Drug (BZRA)";
+
+  if ((!mgList || !mgList.length) && typeof strengthsForPicker === "function") {
+    const all = strengthsForPicker(cls, med, form) || [];
+    mgList = all
+      .map(v => (typeof v === "number" ? v : (String(v).match(/(\d+(\.\d+)?)/)||[])[1]))
+      .map(Number)
+      .filter(n => Number.isFinite(n) && n > 0);
+  }
+
+  if (!mgList || !mgList.length) return 0;
+
+  // Lowest commercial strength from the current (or implied) selection
+  const lcs = mgList.slice().sort((a,b)=>a-b)[0];
+
+  // If we cannot split this form, the grid is just the tablet strength
+  if (noSplitForm) {
+    return +lcs.toFixed(3);
+  }
+
+  const allowQuarter = (typeof isBzraQuarterAllowed === "function" && isBzraQuarterAllowed());
+
+  // Grid = half or quarter of the LCS depending on the toggle
+  const smallestPiece = allowQuarter ? (lcs / 4) : (lcs / 2);
+  return +smallestPiece.toFixed(3);
 }
+
 
 /* =================== Plan builders (tablets) — date-based Phase-2 =================== */
 
@@ -3620,7 +3747,7 @@ if (cls === "Antipsychotic") {
   }
   apMarkDirty?.(false); // clean state before rendering
 }
-  const rows=[]; let date=new Date(startDate); const capDate=new Date(+startDate + THREE_MONTHS_MS);
+  const rows=[]; let date=new Date(startDate); const capDate = getChartCapDate(startDate);
 
 const doStep = (phasePct) => {
   if (cls === "Opioid") packs = stepOpioid_Shave(packs, phasePct, cls, med, form);
@@ -3701,7 +3828,7 @@ if (p2Start && +date < +p2Start) {
 }
 
     if (reviewDate && +nextDate >= +reviewDate) { rows.push({ week: week+1, date: fmtDate(reviewDate), packs:{}, med, form, cls, review:true }); break; }
-    if (+nextDate - +startDate >= THREE_MONTHS_MS) { rows.push({ week: week+1, date: fmtDate(nextDate), packs:{}, med, form, cls, review:true }); break; }
+    if (+nextDate >= +capDate) { rows.push({ date: fmtDate(nextDate), packs:{}, med, form, cls, review:true }); break; }
 
 // NEW: end-sequence Case B (LCS not selected) → force Review on the next boundary
 if (window._forceReviewNext) {
@@ -4045,7 +4172,7 @@ if (startTotal <= 0) {
   let currentPct = p1Pct, currentReduceEvery = p1Int;
   let nextReductionCutoff = new Date(startDate); // first reduction on start date
 
-  const capDate = new Date(+startDate + THREE_MONTHS_MS);
+  const capDate = getChartCapDate(startDate);
   let smallestAppliedOn = null;
   let stopThresholdDate = null;
 
