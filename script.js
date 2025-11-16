@@ -2763,15 +2763,16 @@ function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
 
     // Only split the LCS (this keeps the grid consistent)
     if (m === lcs && allowHalf) {
-      const halfUnit = +(m / 2).toFixed(3);
+      const halfUnit = +(m / 2).toFixed(4);      // was toFixed(3)
       units.push({ unit: halfUnit, source: m, piece: 0.5 });
 
       if (allowQuarter) {
-        const quarterUnit = +(m / 4).toFixed(3);
+        const quarterUnit = +(m / 4).toFixed(4); // was toFixed(3)
         units.push({ unit: quarterUnit, source: m, piece: 0.25 });
       }
     }
   }
+
   if (!units.length) return null;
 
   // Prefer whole > half > quarter, then larger strengths within each
