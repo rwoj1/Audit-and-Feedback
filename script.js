@@ -3252,13 +3252,11 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
 
   function selectedStrengthsMg(){
     try {
-      // Prefer live UI selection set
       if (window.SelectedFormulations && SelectedFormulations.size > 0) {
         return Array.from(SelectedFormulations)
           .map(toMg).filter(n => Number.isFinite(n) && n > 0)
           .sort((a,b)=>a-b);
       }
-      // Fallback to picker helper
       if (typeof selectedProductMgs === "function") {
         const arr = selectedProductMgs() || [];
         return arr.map(toMg).filter(n => Number.isFinite(n) && n > 0)
@@ -3319,20 +3317,19 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
 
   const isPureBID = MID < EPS && DIN < EPS;
 
-  // ===== New BID taper logic for opioids =====
+  // ===== NEW: BID taper logic for opioids (AM + PM only) =====
   if (isPureBID) {
-    // Total-daily grid for opioids is 5 mg (all strengths are multiples of 5).
+    // Total-daily grid for opioids: 5 mg (all SR morphine strengths are multiples of 5).
     const grid = 5;
     const raw  = tot * (1 - percent/100);
 
-    // First attempt: round UP to grid, but do not exceed current total.
-    let up = Math.ceil(raw / grid) * grid;
-    if (up >= tot - EPS) {
-      // Rounding up would repeat or increase the dose: force a minimal step down.
-      up = Math.max(0, tot - grid);
+    // Initial upward target on the 5 mg grid
+    let targetUp = Math.ceil(raw / grid) * grid;
+    // We require an actual reduction, so cap at (tot - grid)
+    if (targetUp >= tot - EPS) {
+      targetUp = Math.max(0, tot - grid);
     }
 
-    // Helper: can we realise this total as a BID regimen using selected products?
     const tryBuildTotal = (targetTotal) => {
       if (!Number.isFinite(targetTotal) || targetTotal <= 0) return null;
       if (typeof preferredBidTargets !== "function" ||
@@ -3363,17 +3360,17 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
       return null;
     };
 
-    let candidate = up;
     let nextPacks = null;
+    let candidate = targetUp;
 
-    // 1) Prefer rounding UP: search upwards in 5 mg steps while still < current total.
+    // 1) Prefer rounding UP: search upwards on the 5 mg grid, but never back to or above current dose
     while (candidate < tot - EPS) {
       nextPacks = tryBuildTotal(candidate);
       if (nextPacks) break;
       candidate += grid;
     }
 
-    // 2) If no upward candidate is achievable, search DOWN in 5 mg steps.
+    // 2) If no upward candidate is reachable, search DOWN on the 5 mg grid
     if (!nextPacks) {
       candidate = Math.max(0, tot - grid);
       while (candidate > 0) {
@@ -3395,7 +3392,7 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     return packs;
   }
 
-  // ===== Fallback: original shave logic for non-BID patterns =====
+  // ===== Fallback: shave logic for non-BID patterns (DIN/MID present) =====
   const q = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : step) || step;
 
   // ALWAYS ROUND UP to the quantum
@@ -3412,7 +3409,9 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const shave = (slot) => {
     if (reduce <= EPS || cur[slot] <= EPS) return;
     const can = cur[slot];
-    const dec = Math.min(can, roundTo(reduce, step));
+    // IMPORTANT: never remove more than 'reduce' – use floorTo to avoid over-shaving
+    const dec = Math.min(can, floorTo(reduce, step));
+    if (dec <= 0) return;
     cur[slot] = +(cur[slot] - dec).toFixed(3);
     reduce    = +(reduce    - dec).toFixed(3);
   };
@@ -3421,7 +3420,7 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
   else               { shave("MID"); }
 
-  // Rebalance across AM/PM if reduction remains
+  // If there is still reduction remaining, rebalance across AM/PM
   if (reduce > EPS) {
     const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
     const bid = preferredBidTargets(bidTarget, cls, med, form);
@@ -3430,7 +3429,9 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   }
 
   // tidy negatives to zero
-  for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
+  for (const k of ["AM","MID","DIN","PM"]) {
+    if (cur[k] < EPS) cur[k] = 0;
+  }
 
   // Compose using selected products (keeps “fewest units” rules etc.)
   return recomposeSlots(cur, cls, med, form);
