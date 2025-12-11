@@ -3217,7 +3217,7 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
-  // Respect selected products for rounding granularity
+  // Respect selected products for rounding granularity in non-BID patterns
   const step = lowestStepMg(cls, med, form) || 1;
 
   // ----- tiny utilities (local, de-duplicated) -----
@@ -3285,39 +3285,118 @@ function stepOpioid_Shave(packs, percent, cls, med, form){
     Number.isFinite(mg) &&
     Math.abs(AM - mg) < EPS && Math.abs(PM - mg) < EPS && MID < EPS && DIN < EPS;
 
-function isExactSingleOnlyAt(mg){
-  const pref = (typeof getBidHeavierPreference === "function" && getBidHeavierPreference() === "AM") ? "AM" : "PM";
-  const amOk = (pref === "AM") ? Math.abs(AM - mg) < EPS : AM < EPS;
-  const pmOk = (pref === "PM") ? Math.abs(PM - mg) < EPS : PM < EPS;
-  return Number.isFinite(mg) && amOk && pmOk && MID < EPS && DIN < EPS;
-}
-
-// ----- BID end-sequence gate (preference-aware) -----
-if (Number.isFinite(thresholdMg)) {
-  // Already at single-dose (AM-only or PM-only by preference) ⇒ STOP
-  if (isExactSingleOnlyAt(thresholdMg)) {
-    if (window._forceReviewNext) window._forceReviewNext = false;
-    return {}; // empty packs ⇒ buildPlanTablets() prints STOP row
+  function isExactSingleOnlyAt(mg){
+    const pref = (typeof getBidHeavierPreference === "function" && getBidHeavierPreference() === "AM") ? "AM" : "PM";
+    const amOk = (pref === "AM") ? Math.abs(AM - mg) < EPS : AM < EPS;
+    const pmOk = (pref === "PM") ? Math.abs(PM - mg) < EPS : PM < EPS;
+    return Number.isFinite(mg) && amOk && pmOk && MID < EPS && DIN < EPS;
   }
 
-  // First time we hit exact BID at threshold
-  if (isExactBIDAt(thresholdMg)) {
-    if (lcsSelected) {
-   // LCS among selected ⇒ emit single-dose at threshold per preference (no rebalancing)
-if (window._forceReviewNext) window._forceReviewNext = false;
-const pref = (typeof getBidHeavierPreference === "function" && getBidHeavierPreference() === "AM") ? "AM" : "PM";
-const cur = { AM:0, MID:0, DIN:0, PM:0 };
-cur[pref] = thresholdMg;
-return recomposeSlots(cur, cls, med, form);
-    } else {
-      // LCS not selected ⇒ Review next boundary
-      window._forceReviewNext = true;
-      return packs; // unchanged; loop will schedule Review
+  // ----- BID end-sequence gate (preference-aware) -----
+  if (Number.isFinite(thresholdMg)) {
+    // Already at single-dose (AM-only or PM-only by preference) ⇒ STOP
+    if (isExactSingleOnlyAt(thresholdMg)) {
+      if (window._forceReviewNext) window._forceReviewNext = false;
+      return {}; // empty packs ⇒ buildPlanTablets() prints STOP row
+    }
+
+    // First time we hit exact BID at threshold
+    if (isExactBIDAt(thresholdMg)) {
+      if (lcsSelected) {
+        // LCS among selected ⇒ emit single-dose at threshold per preference (no rebalancing)
+        if (window._forceReviewNext) window._forceReviewNext = false;
+        const pref = (typeof getBidHeavierPreference === "function" && getBidHeavierPreference() === "AM") ? "AM" : "PM";
+        const cur = { AM:0, MID:0, DIN:0, PM:0 };
+        cur[pref] = thresholdMg;
+        return recomposeSlots(cur, cls, med, form);
+      } else {
+        // LCS not selected ⇒ Review next boundary
+        window._forceReviewNext = true;
+        return packs; // unchanged; loop will schedule Review
+      }
     }
   }
-}
 
-    const q = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : step) || step;
+  const isPureBID = MID < EPS && DIN < EPS;
+
+  // ===== New BID taper logic for opioids =====
+  if (isPureBID) {
+    // Total-daily grid for opioids is 5 mg (all strengths are multiples of 5).
+    const grid = 5;
+    const raw  = tot * (1 - percent/100);
+
+    // First attempt: round UP to grid, but do not exceed current total.
+    let up = Math.ceil(raw / grid) * grid;
+    if (up >= tot - EPS) {
+      // Rounding up would repeat or increase the dose: force a minimal step down.
+      up = Math.max(0, tot - grid);
+    }
+
+    // Helper: can we realise this total as a BID regimen using selected products?
+    const tryBuildTotal = (targetTotal) => {
+      if (!Number.isFinite(targetTotal) || targetTotal <= 0) return null;
+      if (typeof preferredBidTargets !== "function" ||
+          typeof recomposeSlots      !== "function" ||
+          typeof packsTotalMg        !== "function") {
+        return null;
+      }
+
+      const bid = preferredBidTargets(targetTotal, cls, med, form) || {
+        AM: targetTotal/2,
+        PM: targetTotal/2
+      };
+
+      const slots = {
+        AM: bid.AM || 0,
+        MID: 0,
+        DIN: 0,
+        PM: bid.PM || 0
+      };
+
+      const rec = recomposeSlots(slots, cls, med, form);
+      const achieved = packsTotalMg(rec);
+
+      // Accept only exact matches that are a real reduction.
+      if (Math.abs(achieved - targetTotal) < 1e-6 && achieved < tot - EPS) {
+        return rec;
+      }
+      return null;
+    };
+
+    let candidate = up;
+    let nextPacks = null;
+
+    // 1) Prefer rounding UP: search upwards in 5 mg steps while still < current total.
+    while (candidate < tot - EPS) {
+      nextPacks = tryBuildTotal(candidate);
+      if (nextPacks) break;
+      candidate += grid;
+    }
+
+    // 2) If no upward candidate is achievable, search DOWN in 5 mg steps.
+    if (!nextPacks) {
+      candidate = Math.max(0, tot - grid);
+      while (candidate > 0) {
+        nextPacks = tryBuildTotal(candidate);
+        if (nextPacks) break;
+        candidate -= grid;
+      }
+    }
+
+    if (nextPacks) {
+      return nextPacks;
+    }
+
+    // 3) No reachable lower total with the selected products:
+    // flag a Review rather than inventing a ghost dose step.
+    if (typeof window !== "undefined") {
+      window._forceReviewNext = true;
+    }
+    return packs;
+  }
+
+  // ===== Fallback: original shave logic for non-BID patterns =====
+  const q = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : step) || step;
 
   // ALWAYS ROUND UP to the quantum
   let target = Math.ceil((tot * (1 - percent/100)) / q) * q;
@@ -3342,13 +3421,13 @@ return recomposeSlots(cur, cls, med, form);
   if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
   else               { shave("MID"); }
 
-// Rebalance across AM/PM if reduction remains
-if (reduce > EPS) {
-  const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
-  const bid = preferredBidTargets(bidTarget, cls, med, form);
-  cur.AM = bid.AM; cur.PM = bid.PM;
-  reduce = 0;
-}
+  // Rebalance across AM/PM if reduction remains
+  if (reduce > EPS) {
+    const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
+    const bid = preferredBidTargets(bidTarget, cls, med, form);
+    cur.AM = bid.AM; cur.PM = bid.PM;
+    reduce = 0;
+  }
 
   // tidy negatives to zero
   for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
