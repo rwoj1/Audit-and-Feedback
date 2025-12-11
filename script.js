@@ -3317,46 +3317,139 @@ return recomposeSlots(cur, cls, med, form);
   }
 }
 
-  const q = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : step) || step;
+   // === New opioid rounding + composition logic ===
+  // If we are already pure BID (AM/PM only), use a search-down approach
+  // on a 5 mg total grid (for opioids) or the usual step size (for others),
+  // so we never create "fake" steps below the reachable dose.
+  if (MID <= EPS && DIN <= EPS) {
+    const minStep = step || 1;
+    const baseGrid = (cls === "Opioid" ? 5 : minStep);
+    const qTotal = baseGrid > 0 ? baseGrid : 1;
 
-  // ALWAYS ROUND UP to the quantum
-  let target = Math.ceil((tot * (1 - percent/100)) / q) * q;
+    const rawTotal = tot * (1 - percent/100);
+    let candidate = Math.floor(rawTotal / qTotal) * qTotal;
 
-  // Anti-stall: if "up" keeps us at the same dose, step down one quantum
-  if (target === tot && tot > 0) {
-    target = Math.max(0, tot - q);
+    // Guard: avoid NaNs and avoid non-reducing targets
+    if (!Number.isFinite(candidate)) {
+      return packs;
+    }
+    if (candidate >= tot - EPS) {
+      candidate = tot - qTotal;
+    }
+    candidate = Math.max(0, Math.floor(candidate / qTotal) * qTotal);
+
+    const tryBuildBID = (targetTotal) => {
+      if (!Number.isFinite(targetTotal) || targetTotal <= 0) return null;
+      if (typeof preferredBidTargets !== "function" ||
+          typeof recomposeSlots      !== "function" ||
+          typeof packsTotalMg        !== "function") {
+        return null;
+      }
+
+      // Use the BID helper to get AM/PM split; keep MID/DIN at zero
+      const bid = preferredBidTargets(targetTotal, cls, med, form) || {
+        AM: targetTotal/2,
+        PM: targetTotal/2
+      };
+
+      const targets = {
+        AM: bid.AM || 0,
+        MID: 0,
+        DIN: 0,
+        PM: bid.PM || 0
+      };
+
+      const rec = recomposeSlots(targets, cls, med, form);
+      const achieved = packsTotalMg(rec);
+
+      // Accept only exact matches that are a real reduction
+      if (Math.abs(achieved - targetTotal) < 1e-6 && achieved < tot - EPS) {
+        return rec;
+      }
+      return null;
+    };
+
+    let nextPacks = null;
+    while (candidate > 0) {
+      nextPacks = tryBuildBID(candidate);
+      if (nextPacks) break;
+      candidate -= qTotal;
+    }
+
+    if (nextPacks) {
+      return nextPacks;
+    }
+
+    // No reachable lower total with the selected products:
+    // flag a Review rather than inventing a ghost dose step.
+    if (typeof window !== "undefined") {
+      window._forceReviewNext = true;
+    }
+    return packs;
+  } else {
+    // Fallback: original "shave then recompose" behaviour for non-BID patterns
+    const q = (typeof effectiveQuantumMg === "function" ? effectiveQuantumMg(cls, med, form) : step) || step;
+
+    // ALWAYS ROUND UP to the quantum
+    let target = Math.ceil((tot * (1 - percent/100)) / q) * q;
+
+    // Anti-stall: if "up" keeps us at the same dose, step down one quantum
+    if (target === tot && tot > 0) {
+      target = Math.max(0, tot - q);
+    }
+
+    let cur = { AM, MID, DIN, PM };
+    let reduce = +(tot - target).toFixed(3);
+
+    const shave = (slot) => {
+      if (reduce <= EPS || cur[slot] <= EPS) return;
+      const can = cur[slot];
+      const dec = Math.min(can, roundTo(reduce, step));
+      cur[slot] = +(cur[slot] - dec).toFixed(3);
+      reduce = +(reduce - dec).toFixed(3);
+    };
+
+    // SR-style: reduce DIN first; then MID
+    shave("DIN"); shave("MID");
+
+    // Now distribute remaining reduction across AM/PM while preserving preference
+    const pref = (typeof getBidHeavierPreference === "function")
+      ? getBidHeavierPreference()
+      : "PM";
+
+    const shaveBid = (first, second) => {
+      if (reduce <= EPS) return;
+      const slots = [first, second];
+      for (const s of slots) {
+        if (reduce <= EPS || cur[s] <= EPS) continue;
+        const can = cur[s];
+        const dec = Math.min(can, roundTo(reduce, step));
+        cur[s] = +(cur[s] - dec).toFixed(3);
+        reduce = +(reduce - dec).toFixed(3);
+        if (reduce <= EPS) break;
+      }
+    };
+
+    if (pref === "AM") shaveBid("AM", "PM");
+    else               shaveBid("PM", "AM");
+
+    // Rebalance across AM/PM if reduction remains
+    if (reduce > EPS) {
+      const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
+      const bid = preferredBidTargets(bidTarget, cls, med, form);
+      cur.AM = bid.AM; cur.PM = bid.PM;
+      reduce = 0;
+    }
+
+    // tidy negatives to zero
+    for (const k of ["AM","MID","DIN","PM"]) {
+      if (cur[k] < EPS) cur[k] = 0;
+    }
+
+    // Compose using selected products (keeps “fewest units” rules etc.)
+    return recomposeSlots(cur, cls, med, form);
   }
-
-  let cur = { AM, MID, DIN, PM };
-  let reduce = +(tot - target).toFixed(3);
-
-  const shave = (slot) => {
-    if (reduce <= EPS || cur[slot] <= EPS) return;
-    const can = cur[slot];
-    const dec = Math.min(can, roundTo(reduce, step));
-    cur[slot] = +(cur[slot] - dec).toFixed(3);
-    reduce    = +(reduce    - dec).toFixed(3);
-  };
-
-  // SR-style: reduce DIN first; then MID
-  if (cur.DIN > EPS) { shave("DIN"); shave("MID"); }
-  else               { shave("MID"); }
-
-// Rebalance across AM/PM if reduction remains
-if (reduce > EPS) {
-  const bidTarget = Math.max(0, +(cur.AM + cur.PM - reduce).toFixed(3));
-  const bid = preferredBidTargets(bidTarget, cls, med, form);
-  cur.AM = bid.AM; cur.PM = bid.PM;
-  reduce = 0;
 }
-
-  // tidy negatives to zero
-  for (const k of ["AM","MID","DIN","PM"]) if (cur[k] < EPS) cur[k] = 0;
-
-  // Compose using selected products (keeps “fewest units” rules etc.)
-  return recomposeSlots(cur, cls, med, form);
-}
-
 
 /* ===== Proton Pump Inhibitor — reduce MID → PM → AM → DIN ===== */
 function stepPPI(packs, percent, cls, med, form){
