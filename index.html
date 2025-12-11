@@ -92,7 +92,7 @@
 
     <span class="inline-label" style="display:flex; align-items:center; gap:8px;">
       <input type="radio" name="taperMode" id="taperModeDate" value="date" />
-      <input id="taperEndDate" class="datepick" placeholder="Select end date" disabled />
+      <input id="taperEndDate" class="datepick" placeholder="Select end date" readonly />
     </span>
   </label>
 </div>
@@ -214,6 +214,9 @@
   <div class="actions">
     <button id="generateBtn" type="button">Generate Chart</button>
     <button id="printBtn" type="button" class="secondary">Print</button>
+    <button id="printAdminBtn" type="button" class="secondary">
+      Print with Administration Record
+    </button>
     <button id="resetBtn" type="button" class="ghost">Reset</button>
   </div>
 
