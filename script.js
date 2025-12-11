@@ -32,49 +32,58 @@ const roundTo = (x, step) => Math.round(x / step) * step;
 const floorTo = (x, step) => Math.floor(x / step) * step;
 const ceilTo  = (x, step) => Math.ceil (x / step) * step;
 const MAX_WEEKS = 60;
-const THREE_MONTHS_MS = 90 * 24 * 3600 * 1000;
+const DAYS_PER_MONTH = 28; // change to 30 if you prefer 30-day "months"
+const MS_PER_DAY = 24 * 3600 * 1000;
+const THREE_MONTHS_MS = 3 * DAYS_PER_MONTH * MS_PER_DAY; // only used as a fallback
 const EPS = 1e-6;
 
 // Compute the maximum plan/chart date from user controls.
-// Defaults to 3 months from startDate if controls are missing or unset.
 function getChartCapDate(startDate){
   const base = new Date(startDate);
+  // If the start date is somehow invalid, fall back to 3 x DAYS_PER_MONTH from "now"
   if (!(base instanceof Date) || isNaN(+base)) {
-    return new Date(+startDate + THREE_MONTHS_MS);
+    return addDays(new Date(), 3 * DAYS_PER_MONTH);
   }
 
-  // Default: 3 months from start date (current behaviour)
-  let cap = new Date(+base + THREE_MONTHS_MS);
+  const durationRadio = document.getElementById("taperModeDuration");
+  const durationSelect = document.getElementById("taperDuration");
+  const endRadio      = document.getElementById("taperModeDate");
+  const endInput      = document.getElementById("taperEndDate");
 
-  // Expected HTML IDs:
-  //  - radio for "duration" option:    chartRangePresetMode
-  //  - <select> for e.g. "1 month":    chartRangePreset  (value = number of months, e.g. "1", "3")
-  //  - radio for "specific end date":  chartRangeEndMode
-  //  - <input type="date">:            chartRangeEndDate
-  const presetRadio = document.getElementById("chartRangePresetMode");
-  const presetSelect = document.getElementById("chartRangePreset");
-  const endRadio    = document.getElementById("chartRangeEndMode");
-  const endInput    = document.getElementById("chartRangeEndDate");
+  // Helper: default to 3 x DAYS_PER_MONTH from the start date
+  const fallbackCap = () => addDays(base, 3 * DAYS_PER_MONTH);
 
-  // Option A: duration from dropdown (e.g. 1, 2, 3 months…)
-  if (presetRadio && presetRadio.checked && presetSelect) {
-    const months = parseInt(presetSelect.value, 10);
-    if (Number.isFinite(months) && months > 0) {
-      cap = new Date(base);
-      cap.setMonth(cap.getMonth() + months);
-      return cap;
+  // ----- Option A: duration-based mode (default / pre-selected) -----
+  if (durationRadio && durationRadio.checked && durationSelect) {
+    const raw = (durationSelect.value || "").trim();
+
+    // "Until complete" → effectively uncapped, but with a generous safety ceiling
+    if (raw === "complete") {
+      const months = 24; // ≈ 2 years; adjust if you ever want a longer/shorter "complete"
+      return addDays(base, months * DAYS_PER_MONTH);
     }
+
+    const months = parseInt(raw, 10);
+    if (Number.isFinite(months) && months > 0) {
+      return addDays(base, months * DAYS_PER_MONTH);
+    }
+
+    // If the value is somehow invalid, use the default
+    return fallbackCap();
   }
 
-  // Option B: explicit end date
+  // ----- Option B: explicit end date -----
   if (endRadio && endRadio.checked && endInput && endInput.value) {
     const d = new Date(endInput.value);
-    if (!isNaN(+d)) {
-      cap = d;
+    if (!isNaN(+d) && +d >= +base) {
+      return d; // respect the user’s chosen end date
     }
+    // If the chosen end date is invalid or earlier than the start date, fall back
+    return fallbackCap();
   }
 
-  return cap;
+  // If controls are missing or unchecked, fall back to 3 x DAYS_PER_MONTH
+  return fallbackCap();
 }
 
 /* ===== Patch interval safety (Fentanyl: ×3 days, Buprenorphine: ×7 days) ===== */
@@ -804,9 +813,9 @@ function apMarkDirty(isDirty, message){
     });
   };
   if (isDirty){
-    disable("#printBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
+    disable("#printBtn, #printAdminBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
   } else {
-    enable("#printBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
+    enable("#printBtn, #printAdminBtn, #btnPrint, .btn-print, #downloadBtn, .btn-download");
   }
 }
 // --- PRINT DECORATIONS (header, colgroup, zebra fallback, nowrap units) ---
@@ -920,23 +929,11 @@ function tightenStrengthUnits() {
 
 // 5) Add short weekday to the Date cell (print only), without bolding
 function addWeekdayToDates() {
-  const dateCells = document.querySelectorAll("#outputCard tbody.step-group tr:first-child td:first-child");
-  const originals = new Map();
-  const weekday = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-  const parseDMY = (s) => {
-    // expects DD/MM/YYYY
-    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) return null;
-    const [_, d, mo, y] = m.map(Number);
-    return new Date(y, mo - 1, d);
-  };
-  dateCells.forEach(td => {
-    const orig = td.textContent || "";
-    originals.set(td, orig);
-    const dt = parseDMY(orig.trim());
-    if (dt) td.textContent = `${weekday[dt.getDay()]} ${orig}`;
-  });
-  return () => { originals.forEach((val, td) => { td.textContent = val; }); };
+  // Previous versions tried to reformat the date cells (e.g. add "Mon/Tue").
+  // That made the parsing for the administration calendars brittle.
+  // We now leave the table dates exactly as they are and just return
+  // a no-op cleanup function.
+  return () => {};
 }
 
 // Prepare all print-only decorations and return a cleanup function
@@ -1593,6 +1590,286 @@ function _printCSS(){
     @page{size:A4;margin:12mm}
   </style>`;
 }
+// Build print-only Administration Record calendars (one month per page)
+function buildAdministrationCalendars() {
+  const { table, type } = getPrintTableAndType();
+  if (!table) return () => {};
+
+  // Helper: parse whatever date text is in the table into a Date
+  const parseDMY = (s) => {
+    const text = String(s || "").replace(/\s+/g, " ").trim();
+    if (!text) return null;
+    const dt = new Date(text);
+    if (!dt || isNaN(dt.getTime())) return null;
+    return dt;
+  };
+
+  // Scan table rows to find all taper dates + any review dates
+  const allDates = [];
+  const reviewDates = [];
+
+  const rows = table.querySelectorAll("tbody.step-group tr");
+  rows.forEach(tr => {
+    let tdDate;
+    if (type === "standard") {
+      // standard tablet table: date column has class "col-date"
+      tdDate = tr.querySelector("td.col-date");
+    } else {
+      // patch table: first column ("Apply on") holds the date
+      tdDate = tr.querySelector("td") || null;
+    }
+    if (!tdDate) return;
+
+    const dateText = (tdDate.textContent || "").trim();
+    if (!dateText) return; // skip blank / spacer rows
+
+    const dt = parseDMY(dateText);
+    if (!dt) return;
+    allDates.push(dt);
+
+    // Final / review cell is marked with "final-cell"
+    const finalCell = tr.querySelector("td.final-cell");
+    if (finalCell) {
+      const msg = (finalCell.textContent || "").toLowerCase();
+      if (msg.includes("review")) {
+        reviewDates.push(dt);
+      }
+    }
+  });
+
+  if (!allDates.length) {
+    // Nothing to build calendars from
+    return () => {};
+  }
+
+  // Sort and deduplicate taper step dates
+  const uniqDates = Array.from(new Set(allDates.map(d => d.getTime())))
+    .sort((a, b) => a - b)
+    .map(ms => new Date(ms));
+
+  const startDate = uniqDates[0];
+  const endDate   = uniqDates[uniqDates.length - 1];
+
+  const sameYMD = (a, b) =>
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth()    === b.getMonth() &&
+    a.getDate()     === b.getDate();
+
+  const isReviewDate = (d) =>
+    reviewDates.some(r => sameYMD(r, d));
+
+  const isStepDate = (d) =>
+    uniqDates.some(dt => sameYMD(dt, d));
+
+  const card = document.getElementById("outputCard");
+  if (!card) return () => {};
+
+  const block = document.createElement("div");
+  block.id = "adminRecordBlock";
+  block.className = "admin-record-block print-only";
+
+  const monthNames = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+  ];
+
+  // Month iteration: from startDate.month to endDate.month inclusive
+  let cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+  while (
+    cursor.getFullYear() < endDate.getFullYear() ||
+    (cursor.getFullYear() === endDate.getFullYear() &&
+     cursor.getMonth()    <= endDate.getMonth())
+  ) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd   = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+
+    const monthWrapper = document.createElement("div");
+    monthWrapper.className = "admin-month";
+
+    const title = document.createElement("h2");
+    title.className = "admin-month-heading";
+    title.textContent =
+      `Administration record – ${monthNames[cursor.getMonth()]} ${cursor.getFullYear()}`;
+    monthWrapper.appendChild(title);
+
+    const note = document.createElement("p");
+    note.className = "admin-month-note";
+    note.innerHTML =
+      "Tick the box after you have taken your dose.<br>";
+    monthWrapper.appendChild(note);
+
+    // Calendar table
+    const tbl = document.createElement("table");
+    tbl.className = "admin-calendar";
+
+    const thead = document.createElement("thead");
+    const trHead = document.createElement("tr");
+    ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].forEach(dow => {
+      const th = document.createElement("th");
+      th.textContent = dow;
+      trHead.appendChild(th);
+    });
+    thead.appendChild(trHead);
+    tbl.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+
+    // Compute leading blanks (calendar starts Monday)
+    const firstDay = (monthStart.getDay() + 6) % 7; // JS Sunday=0 → Monday=0
+    let currentRow = document.createElement("tr");
+    for (let i = 0; i < firstDay; i++) {
+      const td = document.createElement("td");
+      td.className = "admin-empty";
+      currentRow.appendChild(td);
+    }
+
+    // Build each day cell
+    for (let d = 1; d <= monthEnd.getDate(); d++) {
+      const cellDate = new Date(cursor.getFullYear(), cursor.getMonth(), d);
+
+      if (currentRow.children.length === 7) {
+        tbody.appendChild(currentRow);
+        currentRow = document.createElement("tr");
+      }
+
+      const td = document.createElement("td");
+      td.className = "admin-day";
+
+      const label = document.createElement("div");
+      label.className = "day-number";
+      label.textContent = d.toString();
+      td.appendChild(label);
+
+      const inWindow =
+        cellDate >= startDate &&
+        cellDate <= endDate;
+
+      // Light grey for days entirely outside the taper window
+      if (!inWindow) {
+        td.classList.add("admin-day-outside");
+      }
+
+      const stepDay   = isStepDate(cellDate);
+      const reviewDay = isReviewDate(cellDate);
+
+      // Four tick boxes on EVERY day
+      const doses = ["Morning","Midday","Dinner","Night"];
+      doses.forEach(name => {
+        const row = document.createElement("div");
+        row.className = "dose-row";
+        const box = document.createElement("span");
+        box.className = "admin-checkbox";
+        const text = document.createElement("span");
+        text.textContent = ` ${name}`;
+        row.appendChild(box);
+        row.appendChild(text);
+        td.appendChild(row);
+      });
+
+      // Step-down days: thicker border + underlined date + optional "Step" tag
+      if (stepDay) {
+        td.classList.add("admin-day-step");
+        if (!reviewDay) {
+          const stepTag = document.createElement("div");
+          stepTag.className = "step-label";
+          stepTag.textContent = "Dose reduction";
+          td.appendChild(stepTag);
+        }
+      }
+
+      // Review days: strong grey styling + "Review" tag (overrides step styling)
+      if (reviewDay) {
+        td.classList.add("admin-day-review");
+        const reviewTag = document.createElement("div");
+        reviewTag.className = "review-label";
+        reviewTag.textContent = "See prescriber";
+        td.appendChild(reviewTag);
+      }
+
+      currentRow.appendChild(td);
+    }
+
+    // Trailing blanks to complete the last week row
+    while (currentRow.children.length && currentRow.children.length < 7) {
+      const td = document.createElement("td");
+      td.className = "admin-empty";
+      currentRow.appendChild(td);
+    }
+    if (currentRow.children.length) {
+      tbody.appendChild(currentRow);
+    }
+
+    tbl.appendChild(tbody);
+    monthWrapper.appendChild(tbl);
+
+    // Page break after each month
+    const pb = document.createElement("div");
+    pb.className = "page-break";
+    monthWrapper.appendChild(pb);
+
+    block.appendChild(monthWrapper);
+
+    // Move to next month
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+
+  card.appendChild(block);
+
+  // Cleanup: remove block after printing
+  return () => {
+    block.remove();
+  };
+}
+
+// ---- Print functions ----
+
+function printOutputOnly(){
+  if (_dirtySinceGenerate) {
+    alert("Please re-generate the chart before printing.");
+    return;
+  }
+  const anyTable = document.querySelector("#scheduleBlock table, #patchBlock table");
+  if (!anyTable) {
+    alert("There is no taper chart to print.");
+    return;
+  }
+
+  document.body.classList.add("printing");
+  const cleanupDecor = preparePrintDecorations();
+
+  window.print();
+
+  setTimeout(() => {
+    document.body.classList.remove("printing");
+    try { cleanupDecor(); } catch(e) {}
+  }, 100);
+}
+
+function printWithAdministrationRecord(){
+  if (_dirtySinceGenerate) {
+    alert("Please re-generate the chart before printing.");
+    return;
+  }
+  const anyTable = document.querySelector("#scheduleBlock table, #patchBlock table");
+  if (!anyTable) {
+    alert("There is no taper chart to print.");
+    return;
+  }
+
+  document.body.classList.add("printing");
+
+  const cleanupDecor = preparePrintDecorations();
+  const cleanupAdmin = buildAdministrationCalendars();
+
+  window.print();
+
+  setTimeout(() => {
+    document.body.classList.remove("printing");
+    try { cleanupDecor(); } catch(e) {}
+    try { cleanupAdmin(); } catch(e) {}
+  }, 100);
+}
 function printOutputOnly() {
   const tableExists = document.querySelector("#scheduleBlock table, #patchBlock table");
   if (!tableExists) { alert("Please generate a chart first."); return; }
@@ -1841,14 +2118,14 @@ function _smallIntToWords(n) {
   return map[n] ?? String(n);
 }
 function qToCell(q){ // q = quarters of a tablet (for table cells)
-  const tabs = q/4;
-  const whole = Math.floor(tabs + 1e-6);
-  const frac  = +(tabs - whole).toFixed(2);
-  if (frac === 0) return String(whole);
-  if (frac === 0.5)  return whole ? `${_smallIntToWords(whole)} and a half` : "half";
-  if (frac === 0.25) return whole ? `${_smallIntToWords(whole)} and a quarter` : "a quarter";
-  if (frac === 0.75) return whole ? `${_smallIntToWords(whole)} and three quarters` : "three quarters";
-  return `${_smallIntToWords(whole)} and ${String(frac)} of a tablet`;
+  if (q == null || q === "") return "";
+  const tabs = q / 4;  // convert quarters → tablets, e.g. 2 → 0.5, 6 → 1.5
+  if (!Number.isFinite(tabs)) return "";
+  // Format to at most 2 decimal places, then strip trailing zeros
+  let s = tabs.toFixed(2);            // e.g. "0.50", "1.25", "2.00"
+  s = s.replace(/\.00$/, "");         // "2.00" → "2"
+  s = s.replace(/(\.\d)0$/, "$1");    // "1.50" → "1.5"
+  return s;                           // e.g. "0.5", "0.25", "1.25"
 }
 function tabletsPhraseDigits(q){ // instruction lines
   const tabs = q/4;
@@ -2755,7 +3032,7 @@ function composeForSlot_BZRA_Selected(targetMg, cls, med, form, selectedMg){
   // - half/quarter only from LCS
   const units = [];
   for (const mg of mgList){
-    const m = +Number(mg).toFixed(3);
+    const m = +Number(mg).toFixed(4);
     if (!(m > 0)) continue;
 
     // Whole tablet always allowed
@@ -3555,8 +3832,9 @@ function stepBZRA(packs, percent, med, form){
     target = tot;
   }
 
-  // 2b) If still same as prior step, step DOWN by one grid step
-  if (Math.abs(target - tot) < EPS && tot > 0) {
+  // 2b) If the rounded target is less than half a grid-step below the current dose,
+  //     force at least one full step down. This avoids "fake" steps like 0.25 → 0.25.
+  if ((tot - target) < (step / 2) && tot > 0) {
     target = roundTo(Math.max(0, tot - step), step);
   }
 
@@ -4690,6 +4968,7 @@ function init(){
   document.getElementById("generateBtn")?.addEventListener("click", buildPlan);
   document.getElementById("resetBtn")?.addEventListener("click", ()=>location.reload());
   document.getElementById("printBtn")?.addEventListener("click", printOutputOnly);
+  document.getElementById("printAdminBtn")?.addEventListener("click", printWithAdministrationRecord);
   document.getElementById("savePdfBtn")?.addEventListener("click", saveOutputAsPdf);
 document.getElementById("classSelect")?.addEventListener("change", () => {
   updateBestPracticeBox();
