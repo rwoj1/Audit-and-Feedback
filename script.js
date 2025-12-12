@@ -4752,19 +4752,25 @@ function perStrengthRowsFractional(r){
   });
 
   const medName = String(r.med || '');
-  const suffix  = formSuffixWithSR(r.form);
+const suffix  = formSuffixWithSR(r.form);
 
-  bases.forEach(b=>{
-  const q = byBase[b], lines = [];
+bases.forEach(b => {
+  const q = byBase[b];
+  if (!q) return;
 
-  // Default wording is "tablet(s)".
-  // For Gabapentin, switch to "capsule(s)" for 100/300/400 and "tablet(s)" for 600/800.
+  const lines = [];
+
+  // --- 1. Choose the wording unit ("tablet" vs "capsule") ---
   let doseUnit = "tablet";
-  if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
-    const df = (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
-      ? (GABA_FORM_BY_STRENGTH[b] || "Capsule")
-      : "Capsule";
-    doseUnit = /Capsule/i.test(df) ? "capsule" : "tablet";
+
+  if (r.cls === "Gabapentinoids" && r.med === "Gabapentin") {
+    // Use the same strength→form mapping we used for the instructions:
+    const formForStrength =
+      (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
+        ? (GABA_FORM_BY_STRENGTH[b] || "Capsule")
+        : "Capsule";
+
+    doseUnit = /Capsule/i.test(formForStrength) ? "capsule" : "tablet";
   }
 
   if (q.AM)  lines.push(`Take ${unitsPhraseDigits(q.AM, doseUnit)} in the morning`);
@@ -4772,21 +4778,38 @@ function perStrengthRowsFractional(r){
   if (q.DIN) lines.push(`Take ${unitsPhraseDigits(q.DIN, doseUnit)} at dinner`);
   if (q.PM)  lines.push(`Take ${unitsPhraseDigits(q.PM, doseUnit)} at night`);
 
-  // Build the Strength label
-  // Build the strength label correctly (SR preserved; Oxy/Nx paired)
+  if (!lines.length) return;
+
+  // --- 2. Build the Strength label ---
   let strengthLabel;
+
   if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
-    strengthLabel = oxyNxPairLabel(b); // ...
-    } else {
-    strengthLabel = `${r.med} ${stripZeros(b)} mg ${suffix}`;
+    // Special paired label for oxycodone/naloxone
+    strengthLabel = oxyNxPairLabel(b);
+  } else if (r.cls === "Gabapentinoids" && r.med === "Gabapentin") {
+    // Gabapentin: use the same Capsule/Tablet mapping per strength
+    const formForStrength =
+      (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
+        ? (GABA_FORM_BY_STRENGTH[b] || "Capsule")
+        : "Capsule";
+
+    strengthLabel = `${r.med} ${stripZeros(b)} mg ${formForStrength}`;
+  } else {
+    // Everyone else: use the generic suffix (Tablet, SR Tablet, Capsule, etc.)
+    strengthLabel = `${medName} ${stripZeros(b)} mg ${suffix}`;
   }
+
   strengthLabel = prettySelectedLabelOrSame(r.cls, r.med, r.form, strengthLabel);
-    rows.push({
-  strengthLabel: strengthLabel,
-  instructions: lines.join("\n"),
-  am: mkCell(q.AM), mid: mkCell(q.MID), din: mkCell(q.DIN), pm: mkCell(q.PM)
-});
+
+  rows.push({
+    strengthLabel,
+    instructions: lines.join("\n"),
+    am: mkCell(q.AM),
+    mid: mkCell(q.MID),
+    din: mkCell(q.DIN),
+    pm: mkCell(q.PM)
   });
+});
 
   return rows;
 }
