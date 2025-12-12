@@ -276,6 +276,7 @@ function nounForGabapentinByStrength(form, med, strengthStr){
 
 // Selected formulations (by mg base). Empty Set => "use all".
 let SelectedFormulations = new Set();
+let _lastProductPickerKey = "";   // prevents cross-medicine selection carryover
 
 function shouldShowProductPicker(cls, med, form){
   // Limit to the medicines you specified
@@ -1513,7 +1514,16 @@ function renderProductPicker(){
   const cls  = (clsEl && clsEl.value)  || "";
   const med  = (medEl && medEl.value)  || "";
   const form = (formEl && formEl.value) || "";
-
+  // If the user has changed class/medicine/form since last render, clear selection.
+  // Otherwise numbers like "100" from morphine will carry over to gabapentin "100".
+  const pickerKey = `${cls}||${med}||${form}`;
+  if (pickerKey !== _lastProductPickerKey) {
+    _lastProductPickerKey = pickerKey;
+    if (window.SelectedFormulations && typeof SelectedFormulations.clear === "function") {
+      SelectedFormulations.clear();
+    }
+  }
+  
   const card = document.getElementById("productPickerCard");
   const host = document.getElementById("productPicker");
   if (!card || !host) return;
