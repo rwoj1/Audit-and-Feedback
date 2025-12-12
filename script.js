@@ -4755,8 +4755,9 @@ function perStrengthRowsFractional(r){
   const suffix  = formSuffixWithSR(r.form);
 
   bases.forEach(b=>{
-    const q=byBase[b], lines=[];
-      // Default wording is "tablet(s)".
+  const q = byBase[b], lines = [];
+
+  // Default wording is "tablet(s)".
   // For Gabapentin, switch to "capsule(s)" for 100/300/400 and "tablet(s)" for 600/800.
   let doseUnit = "tablet";
   if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
@@ -4765,22 +4766,23 @@ function perStrengthRowsFractional(r){
       : "Capsule";
     doseUnit = /Capsule/i.test(df) ? "capsule" : "tablet";
   }
-    if(q.AM)  lines.push(`Take ${tabletsPhraseDigits(q.AM)} in the morning`);
-    if(q.MID) lines.push(`Take ${tabletsPhraseDigits(q.MID)} at midday`);
-    if(q.DIN) lines.push(`Take ${tabletsPhraseDigits(q.DIN)} at dinner`);
-    if(q.PM)  lines.push(`Take ${tabletsPhraseDigits(q.PM)} at night`);
 
-    // Build the Strength label
-// Build the strength label correctly (SR preserved; Oxy/Nx paired)
-let strengthLabel;
-if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
-  strengthLabel = oxyNxPairLabel(b); // e.g., "Oxycodone 20 mg + naloxone 10 mg SR tablet"
-} else if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
-  const df = GABA_FORM_BY_STRENGTH[b] || "Capsule";
-  strengthLabel = `${r.med} ${stripZeros(b)} mg ${df}`;
-} else {
-  strengthLabel = `${r.med} ${stripZeros(b)} mg ${formSuffixWithSR(r.form)}`;
-}
+  if (q.AM)  lines.push(`Take ${unitsPhraseDigits(q.AM, doseUnit)} in the morning`);
+  if (q.MID) lines.push(`Take ${unitsPhraseDigits(q.MID, doseUnit)} at midday`);
+  if (q.DIN) lines.push(`Take ${unitsPhraseDigits(q.DIN, doseUnit)} at dinner`);
+  if (q.PM)  lines.push(`Take ${unitsPhraseDigits(q.PM, doseUnit)} at night`);
+
+  // Build the Strength label
+  // Build the strength label correctly (SR preserved; Oxy/Nx paired)
+  let strengthLabel;
+  if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
+    strengthLabel = oxyNxPairLabel(b); // ...
+  } else if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
+    const df = GABA_FORM_BY_STRENGTH[b] || "Capsule";
+    strengthLabel = `${r.med} ${stripZeros(b)} mg ${df}`;
+  } else {
+    strengthLabel = `${nameShort} ${stripZeros(b)} mg ${suffix}`;
+  }
    strengthLabel = prettySelectedLabelOrSame(r.cls, r.med, r.form, strengthLabel);
    rows.push({
   strengthLabel: strengthLabel,
