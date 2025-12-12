@@ -4777,14 +4777,11 @@ function perStrengthRowsFractional(r){
   let strengthLabel;
   if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
     strengthLabel = oxyNxPairLabel(b); // ...
-  } else if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
-    const df = GABA_FORM_BY_STRENGTH[b] || "Capsule";
-    strengthLabel = `${r.med} ${stripZeros(b)} mg ${df}`;
-  } else {
-    strengthLabel = `${nameShort} ${stripZeros(b)} mg ${suffix}`;
+    } else {
+    strengthLabel = `${r.med} ${stripZeros(b)} mg ${suffix}`;
   }
-   strengthLabel = prettySelectedLabelOrSame(r.cls, r.med, r.form, strengthLabel);
-   rows.push({
+  strengthLabel = prettySelectedLabelOrSame(r.cls, r.med, r.form, strengthLabel);
+    rows.push({
   strengthLabel: strengthLabel,
   instructions: lines.join("\n"),
   am: mkCell(q.AM), mid: mkCell(q.MID), din: mkCell(q.DIN), pm: mkCell(q.PM)
