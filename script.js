@@ -4872,6 +4872,8 @@ const calcLogger = {
 
         prevTotal = chosen; // advance for next step’s comparisons
       });
+            // After all rows built, update the variance notice
+      this.updateVarianceNotice();
     },
 
     render(){
