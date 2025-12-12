@@ -3212,7 +3212,6 @@ function preferredBidTargets(total, cls, med, form){
   return { AM: am, PM: pm };
 }
 
-/* ===== Opioids (tablets/capsules) — shave DIN→MID, then rebalance BID ===== */
 /* ===== Opioids (tablets/capsules) — BID grid search + shave fallback ===== */
 function stepOpioid_Shave(packs, percent, cls, med, form){
   const tot = packsTotalMg(packs);
