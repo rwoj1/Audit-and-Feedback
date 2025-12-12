@@ -4802,137 +4802,114 @@ Hooks into renderStandardTable/renderPatchTable
   const EPS = 1e-6;
 
 const calcLogger = {
-  rows: [],
+    rows: [],
+    clear(){ this.rows = []; },
 
-  clear(){ this.rows = []; },
+    // Build from the same rows that renderers use (no new math)
+    buildFromRows(stepRows){
+      this.clear();
 
-  // Turn the orange variance banner on/off
-  updateVarianceNotice(){
-    const host = document.getElementById("varianceNotice");
-    if (!host) return;
-    const EPS = 1e-6;
-    const hasVariance = this.rows.some(r => (r.actualPct - r.cfgPct) > EPS);
-    host.style.display = hasVariance ? "" : "none";
-  },
+      const cls  = document.getElementById("classSelect")?.value || "";
+      const med  = document.getElementById("medicineSelect")?.value || "";
+      const form = document.getElementById("formSelect")?.value || "";
 
-  // Build from the same rows that renderers use (no new math)
-  buildFromRows(stepRows){
-    this.clear();
+      const p1Pct = num(document.getElementById("p1Percent")?.value);
+      const p2Pct = num(document.getElementById("p2Percent")?.value);
+      const p2Int = Math.max(0, parseInt(document.getElementById("p2Interval")?.value || "", 10));
+      const p2StartInput = document.getElementById("p2StartDate");
+      const p2Start = (p2Pct > 0 && p2Int > 0 && p2StartInput)
+        ? (p2StartInput._flatpickr?.selectedDates?.[0] || (p2StartInput.value ? new Date(p2StartInput.value) : null))
+        : null;
 
-    const cls  = document.getElementById("classSelect")?.value || "";
-    const med  = document.getElementById("medicineSelect")?.value || "";
-    const form = document.getElementById("formSelect")?.value || "";
+      const unit = /Patch/i.test(form) ? "mcg/h" : "mg";
 
-    const p1Pct = num(document.getElementById("p1Percent")?.value);
-    const p2Pct = num(document.getElementById("p2Percent")?.value);
-    const p2Int = Math.max(0, parseInt(document.getElementById("p2Interval")?.value || "", 10));
-    const p2StartInput = document.getElementById("p2StartDate");
-    const p2Start = (p2Pct > 0 && p2Int > 0 && p2StartInput)
-      ? (p2StartInput._flatpickr?.selectedDates?.[0] || (p2StartInput.value ? new Date(p2StartInput.value) : null))
-      : null;
-
-    const unit = /Patch/i.test(form) ? "mcg/h" : "mg";
-
-    // Derive starting total from current inputs (no recomputation of future rows)
-    let prevTotal = 0;
-    if (cls === "Antipsychotic" && typeof window.apSeedPacksFromFourInputs === "function") {
-      prevTotal = safePacksTotalMg(window.apSeedPacksFromFourInputs() || {});
-    } else if (/Patch/i.test(form)) {
-      prevTotal = sumPatchesFromDoseLines();
-    } else if (typeof window.buildPacksFromDoseLines === "function") {
-      prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
-    }
-
-    (stepRows || []).forEach((row) => {
-      if (row.stop || row.review) return; // skip non-dose rows
-
-      const dateStr   = row.dateStr || row.date || row.when || "";
-      const cfgPct    = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
-      const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational (unrounded)
-
-      // Chosen total comes from the rendered row itself
-      let chosen = 0;
-      if (/Patch/i.test(form) || row.patches) {
-        chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
-      } else {
-        chosen = safePacksTotalMg(row.packs);
+      // Derive starting total from current inputs (no recomputation of future rows)
+      let prevTotal = 0;
+      if (cls === "Antipsychotic" && typeof window.apSeedPacksFromFourInputs === "function") {
+        prevTotal = safePacksTotalMg(window.apSeedPacksFromFourInputs() || {});
+      } else if (/Patch/i.test(form)) {
+        prevTotal = sumPatchesFromDoseLines();
+      } else if (typeof window.buildPacksFromDoseLines === "function") {
+        prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
       }
 
-      const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
+    (stepRows || []).forEach((row) => {
+        if (row.stop || row.review) return; // skip non-dose rows
 
-      this.rows.push({
-        step: this.rows.length + 1,
-        date: dateStr,
-        target: rawTarget,
-        cfgPct,
-        chosen,
-        unit,
-        actualPct
+        const dateStr   = row.dateStr || row.date || row.when || "";
+        const cfgPct    = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+        const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational (unrounded)
+
+        // Chosen total comes from the rendered row itself
+        let chosen = 0;
+        if (/Patch/i.test(form) || row.patches) {
+          chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
+        } else {
+          chosen = safePacksTotalMg(row.packs);
+        }
+
+        const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
+
+        this.rows.push({
+          step: this.rows.length + 1,
+          date: dateStr,
+          target: rawTarget,
+          cfgPct,
+          chosen,
+          unit,
+          actualPct
+        });
+
+        prevTotal = chosen; // advance for next step’s comparisons
       });
+    },
 
-      prevTotal = chosen; // advance for next step’s comparisons
-    });
+    render(){
+      const hostCard  = document.getElementById("calcBlock");
+      const hostTable = document.getElementById("calcTableHost");
+      const checked   = document.getElementById("showCalc")?.checked;
+      if (!hostCard || !hostTable) return;
 
-    // 🔔 ONLY side effect: toggle banner
-    this.updateVarianceNotice();
-  },
+      if (!checked || !this.rows.length) {
+        hostCard.style.display = "none";
+        hostTable.innerHTML = "";
+        return;
+      }
 
-  render(){
-    const hostCard  = document.getElementById("calcBlock");
-    const hostTable = document.getElementById("calcTableHost");
-    const checked   = document.getElementById("showCalc")?.checked;
-    if (!hostCard || !hostTable) return;
+      const tbl   = document.createElement("table");
+      tbl.className = "plan-table calc-table";
 
-    if (!checked || !this.rows.length) {
-      hostCard.style.display = "none";
+      const thead = document.createElement("thead");
+      const trh   = document.createElement("tr");
+      [
+        "Step",
+        "Date",
+        "Calculated Dose",
+        "Selected % Change",
+        "Rounded Dose",
+        "Actual % Change"
+      ].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
+      thead.appendChild(trh);
+      tbl.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      this.rows.forEach(r => {
+        const tr = document.createElement("tr");
+        tr.appendChild(td(r.step));
+        tr.appendChild(td(r.date || ""));
+        tr.appendChild(td(fmtQty(r.target, r.unit), "mono"));
+        tr.appendChild(td(stripZeros(+r.cfgPct) + "%"));
+        tr.appendChild(td(fmtQty(r.chosen, r.unit), "mono"));
+        tr.appendChild(td(stripZeros(+r.actualPct.toFixed(1)) + "%"));
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+
       hostTable.innerHTML = "";
-      return;
+      hostTable.appendChild(tbl);
+      hostCard.style.display = "";
     }
-
-    const tbl   = document.createElement("table");
-    tbl.className = "plan-table calc-table";
-
-    const thead = document.createElement("thead");
-    const trh   = document.createElement("tr");
-    [
-      "Step",
-      "Date",
-      "Calculated Dose",
-      "Selected % Change",
-      "Rounded Dose",
-      "Actual % Change"
-    ].forEach(h=>{
-      const th = document.createElement("th");
-      th.textContent = h;
-      trh.appendChild(th);
-    });
-    thead.appendChild(trh);
-    tbl.appendChild(thead);
-
-    const tbody = document.createElement("tbody");
-    this.rows.forEach(r => {
-      const tr = document.createElement("tr");
-      const td = (txt, cls="")=>{
-        const c = document.createElement("td");
-        c.textContent = txt;
-        if (cls) c.className = cls;
-        return c;
-      };
-      tr.appendChild(td(r.step));
-      tr.appendChild(td(r.date || ""));
-      tr.appendChild(td(fmtQty(r.target, r.unit), "mono"));
-      tr.appendChild(td(stripZeros(+r.cfgPct) + "%"));
-      tr.appendChild(td(fmtQty(r.chosen, r.unit), "mono"));
-      tr.appendChild(td(stripZeros(+r.actualPct.toFixed(1)) + "%"));
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody);
-
-    hostTable.innerHTML = "";
-    hostTable.appendChild(tbl);
-    hostCard.style.display = "";
-  }
-};
+  };
 
 
   // ---------- helpers ----------
