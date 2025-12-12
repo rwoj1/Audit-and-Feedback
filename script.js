@@ -4801,7 +4801,7 @@ Hooks into renderStandardTable/renderPatchTable
 (function () {
   const EPS = 1e-6;
 
-const calcLogger = {
+  const calcLogger = {
     rows: [],
     clear(){ this.rows = []; },
 
@@ -4833,7 +4833,7 @@ const calcLogger = {
         prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
       }
 
-    (stepRows || []).forEach((row) => {
+      (stepRows || []).forEach((row) => {
         if (row.stop || row.review) return; // skip non-dose rows
 
         const dateStr   = row.dateStr || row.date || row.when || "";
@@ -4911,7 +4911,6 @@ const calcLogger = {
     }
   };
 
-
   // ---------- helpers ----------
   function num(v){ const n = parseFloat(v ?? ""); return isFinite(n) ? n : 0; }
 
@@ -4960,19 +4959,15 @@ const calcLogger = {
   function td(text, cls){ const el = document.createElement("td"); if (cls) el.className = cls; el.textContent = text; return el; }
 
   // ---------- wrap existing renderers ----------
-const _renderStd = (typeof window.renderStandardTable === "function")
-  ? window.renderStandardTable : null;
-
-if (_renderStd){
-  window.renderStandardTable = function(rows){
-    try { calcLogger.buildFromRows(rows); } catch {}
-    const rv = _renderStd.apply(this, arguments);      // <– still renders chart
-    try {
-      if (document.getElementById("showCalc")?.checked) calcLogger.render();
-    } catch {}
-    return rv;
-  };
-}
+  const _renderStd   = (typeof window.renderStandardTable === "function") ? window.renderStandardTable : null;
+  if (_renderStd){
+    window.renderStandardTable = function(rows){
+      try { calcLogger.buildFromRows(rows); } catch {}
+      const rv = _renderStd.apply(this, arguments);
+      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
+      return rv;
+    };
+  }
 
   const _renderPatch = (typeof window.renderPatchTable === "function") ? window.renderPatchTable : null;
   if (_renderPatch){
@@ -5002,8 +4997,6 @@ if (_renderStd){
 
 /* =================== Build & init =================== */
 
-/* =================== Build & init =================== */
-
 function buildPlan(){
   // Patch-specific guard: enforce multiples (Fentanyl ×3d, Buprenorphine ×7d)
   if (typeof patchIntervalRule === "function" &&
@@ -5012,9 +5005,9 @@ function buildPlan(){
     return; // invalid interval → abort build
   }
 
-  const med  = document.getElementById("medicineSelect")?.value;
+    const med  = document.getElementById("medicineSelect")?.value;
   const form = document.getElementById("formSelect")?.value;
-  const cls  = document.getElementById("classSelect")?.value || "";
+  const cls = document.getElementById("classSelect")?.value || "";
   
   if (!cls || !med || !form) {
     alert("Please select a class, medicine, and form first.");
@@ -5031,9 +5024,8 @@ function buildPlan(){
     rows = (typeof buildPlanTablets === "function") ? buildPlanTablets() : [];
     if (typeof renderStandardTable === "function") renderStandardTable(rows);
   }
-
-  updateClassFooter();   // keep footer in sync with current class
-  setGenerateEnabled();  // keep button/print gating in sync
+  updateClassFooter(); // keep footer in sync with current class
+  setGenerateEnabled(); // keep button/print gating in sync
   setDirty(false);
 }
 
