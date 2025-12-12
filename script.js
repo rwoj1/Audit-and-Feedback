@@ -3708,11 +3708,18 @@ function stepGabapentinoid(packs, percent, med, form){
 
 // ---- Compute this step's target from PREVIOUS ACHIEVED total, then quantise ----
 const rawTarget = tot * (1 - percent/100);
-let targetRounded = nearestStep(rawTarget, stepMg);     // ties → round up
-// ✅ Anti-stall: if rounding returns the SAME total (e.g., 500 → 450 → ⤴︎ 500), force a one-step drop
-if (Math.abs(targetRounded - tot) < EPS && tot > 0) {
-  targetRounded = Math.max(0, tot - stepMg);           // e.g., 500 → 400
+
+// ✅ Always round UP to the next grid step (stepMg),
+//    so we don't randomly round doses down (e.g., 1417 → 1400)
+let targetRounded = ceilTo(rawTarget, stepMg);
+
+// ✅ Anti-stall: if rounding up keeps us at (or above) the current total,
+//    force at least one grid-step reduction
+if (targetRounded >= tot - EPS && tot > 0) {
+  targetRounded = Math.max(0, tot - stepMg);
 }
+
+// How much total reduction (in mg) we still need to achieve for this step
 let reductionNeeded = Math.max(0, +(tot - targetRounded).toFixed(3));
 if (reductionNeeded <= EPS) reductionNeeded = stepMg;   // safety: still ensure progress
 
@@ -3734,11 +3741,13 @@ if (reductionNeeded <= EPS) reductionNeeded = stepMg;   // safety: still ensure 
     }
   }
 
-  // ---- TID planning (covers normal TID and AM–DIN–PM variant) ----
-  const candidateSums = (() => {
-    const down = floorTo(targetRounded, stepMg), up = ceilTo(targetRounded, stepMg);
-    return (down === up) ? [down] : [down, up];
-  })();
+// ---- TID planning (covers normal TID and AM–DIN–PM variant) ----
+// Prefer the UPWARD grid point first, only consider the lower one as a fallback
+const candidateSums = (() => {
+  const up   = ceilTo(targetRounded, stepMg);
+  const down = floorTo(targetRounded, stepMg);
+  return (down === up) ? [up] : [up, down];
+})();
 
   let best = null;
   for (const S of candidateSums) {
