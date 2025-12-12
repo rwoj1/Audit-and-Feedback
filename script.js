@@ -2137,19 +2137,6 @@ function tabletsPhraseDigits(q){ // instruction lines
   if (frac === 0.75) return whole ? `${_smallIntToWords(whole)} and three quarters of a tablet` : "three quarters of a tablet";
   return `${_smallIntToWords(whole)} and ${String(frac)} of a tablet`;
 }
-function unitsPhraseDigits(q, unit){
-  // Reuse tabletsPhraseDigits wording, but swap "tablet(s)" for the requested unit
-  const base = tabletsPhraseDigits(q);
-  const u = String(unit || "tablet").toLowerCase();
-  if (u === "tablet") return base;
-
-  const plural = u.endsWith("s") ? u : u + "s";
-
-  // Replace plurals first, then singular to avoid "capsuless"
-  return base
-    .replace(/tablets/gi, plural)
-    .replace(/tablet/gi, u);
-}
 // Collapse pairs of 12/12.5 to 25 (repeat until no pairs remain)
 function collapseFentanylTwelves(patches){
   const isTwelve = v => Math.abs(v - 12) < 0.01 || Math.abs(v - 12.5) < 0.01;
@@ -4756,22 +4743,11 @@ function perStrengthRowsFractional(r){
   const suffix  = formSuffixWithSR(r.form);
 
 bases.forEach(b=>{
-  const q = byBase[b], lines = [];
-
-  // Default wording is "tablet(s)".
-  // For Gabapentin, switch to "capsule(s)" for 100/300/400 and "tablet(s)" for 600/800.
-  let doseUnit = "tablet";
-  if (r.med === "Gabapentin" && r.form === "Tablet/Capsule") {
-    const df = (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
-      ? (GABA_FORM_BY_STRENGTH[b] || "Capsule")
-      : "Capsule";
-    doseUnit = /Capsule/i.test(df) ? "capsule" : "tablet";
-  }
-
-  if (q.AM)  lines.push(`Take ${unitsPhraseDigits(q.AM, doseUnit)} in the morning`);
-  if (q.MID) lines.push(`Take ${unitsPhraseDigits(q.MID, doseUnit)} at midday`);
-  if (q.DIN) lines.push(`Take ${unitsPhraseDigits(q.DIN, doseUnit)} at dinner`);
-  if (q.PM)  lines.push(`Take ${unitsPhraseDigits(q.PM, doseUnit)} at night`);
+  const q=byBase[b], lines=[];
+  if(q.AM)  lines.push(`Take ${tabletsPhraseDigits(q.AM)} in the morning`);
+  if(q.MID) lines.push(`Take ${tabletsPhraseDigits(q.MID)} at midday`);
+  if(q.DIN) lines.push(`Take ${tabletsPhraseDigits(q.DIN)} at dinner`);
+  if(q.PM)  lines.push(`Take ${tabletsPhraseDigits(q.PM)} at night`);
 
   // Build the Strength label
   // Build the strength label correctly (SR preserved; Oxy/Nx paired)
@@ -4784,6 +4760,7 @@ bases.forEach(b=>{
   } else {
     strengthLabel = `${nameShort} ${stripZeros(b)} mg ${suffix}`;
   }
+
    strengthLabel = prettySelectedLabelOrSame(r.cls, r.med, r.form, strengthLabel);
    rows.push({
   strengthLabel: strengthLabel,
