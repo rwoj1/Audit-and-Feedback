@@ -512,6 +512,15 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   }
   // Show/hide panel & order row; fill the brief; update total
 
+  function bzraVisibilityTick(){
+  const cls = document.getElementById("classSelect")?.value || "";
+  const box = document.getElementById("bzraSplitOptions");
+  if (!box) return;
+
+  const isBZRA = (cls === "Benzodiazepines / Z-Drug (BZRA)");
+  box.style.display = isBZRA ? "" : "none";
+}
+  
 function apVisibilityTick(){
   const cls = document.getElementById("classSelect")?.value || "";
   const med = document.getElementById("medicineSelect")?.value || "";
@@ -5202,6 +5211,7 @@ function init(){
     updateRecommended();
     applyPatchIntervalAttributes();
     renderProductPicker();
+    bzraVisibilityTick();
     if (typeof setFooterText === "function") setFooterText(document.getElementById("classSelect")?.value || "");
     resetDoseLinesToLowest();
     setDirty(true);
