@@ -4321,8 +4321,8 @@ if (p2Start && +date < +p2Start) {
   nextDate = nextByP1;
 }
 
-    if (reviewDate && +nextDate >= +reviewDate) { rows.push({ week: week+1, date: fmtDate(reviewDate), packs:{}, med, form, cls, review:true }); break; }
-    if (+nextDate >= +capDate) { rows.push({ date: fmtDate(nextDate), packs:{}, med, form, cls, review:true }); break; }
+    if (reviewDate && +nextDate >= +reviewDate) {rows.push({ week: week+1, date: fmtDate(reviewDate), packs:{}, med, form, cls, review:true });break;}
+    if (+nextDate >= +capDate) {  rows.push({ date: fmtDate(capDate), packs:{}, med, form, cls, review:true }); break;}
 
 // NEW: end-sequence Case B (LCS not selected) → force Review on the next boundary
 if (window._forceReviewNext) {
