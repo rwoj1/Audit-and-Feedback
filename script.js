@@ -4919,13 +4919,14 @@ Hooks into renderStandardTable/renderPatchTable
         const cfgPct    = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
         const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational (unrounded)
 
-      // Chosen total comes from the rendered row itself
-      let chosen = 0;
-      if (/Patch/i.test(form)) {
-      chosen = patchTotalFromRow(row);
-      } else {
-      chosen = safePacksTotalMg(row.packs);
-      }
+  // Chosen total comes from the rendered row itself
+let chosen = 0;
+if (/Patch/i.test(form)) {
+  chosen = patchTotalFromRow(row);   // <-- key fix for patches
+} else {
+  chosen = safePacksTotalMg(row.packs);
+}
+
         // PATCH ONLY: collapse rows where the total dose didn't change
       if (/Patch/i.test(form) && Math.abs(chosen - prevTotal) < EPS) return;
         const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
