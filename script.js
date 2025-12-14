@@ -73,12 +73,23 @@ function getChartCapDate(startDate){
   }
 
   // ----- Option B: explicit end date -----
-  if (endRadio && endRadio.checked && endInput && endInput.value) {
-    const d = new Date(endInput.value);
-    if (!isNaN(+d) && +d >= +base) {
+  if (endRadio && endRadio.checked && endInput) {
+    // Prefer Flatpickr's parsed Date (endInput._flatpickr.selectedDates[0])
+    let d = null;
+    if (endInput._flatpickr && Array.isArray(endInput._flatpickr.selectedDates) && endInput._flatpickr.selectedDates[0]) {
+      d = endInput._flatpickr.selectedDates[0];
+    } else if (endInput.value) {
+      // Fallback: parse "d/m/Y" (e.g. 15/12/2025) safely
+      const parts = endInput.value.split("/").map(s => parseInt(s, 10));
+      if (parts.length === 3 && parts.every(n => Number.isFinite(n))) {
+        const [dd, mm, yyyy] = parts;
+        d = new Date(yyyy, mm - 1, dd);
+      }
+    }
+    if (d instanceof Date && !isNaN(+d) && +d >= +base) {
       return d; // respect the user’s chosen end date
     }
-    // If the chosen end date is invalid or earlier than the start date, fall back
+// If the chosen end date is invalid or earlier than the start date, fall back
     return fallbackCap();
   }
 
@@ -5095,6 +5106,74 @@ function init(){
       try { el.type = "date"; } catch(_) {}
     }
   });
+    // 1b) Chart horizon controls ("Generate chart for")
+  const durationRadio = document.getElementById("taperModeDuration");
+  const endRadio = document.getElementById("taperModeDate");
+  const durationSelect = document.getElementById("taperDuration");
+  const endInput = document.getElementById("taperEndDate");
+
+  const syncTaperModeUI = () => {
+    if (durationRadio && durationSelect) durationSelect.disabled = !durationRadio.checked;
+    if (endRadio && endInput) endInput.disabled = !endRadio.checked;
+  };
+
+  // Default to "Until complete"
+  if (durationRadio) durationRadio.checked = true;
+  if (durationSelect) durationSelect.value = "complete";
+  syncTaperModeUI();
+
+  // If user interacts with controls, switch modes automatically
+  durationSelect?.addEventListener("change", () => {
+    if (durationRadio) durationRadio.checked = true;
+    syncTaperModeUI();
+    setDirty(true);
+    setGenerateEnabled();
+  });
+
+  endInput?.addEventListener("change", () => {
+    if (endRadio) endRadio.checked = true;
+    syncTaperModeUI();
+    setDirty(true);
+    setGenerateEnabled();
+  });
+
+  durationRadio?.addEventListener("change", () => {
+    syncTaperModeUI();
+    setDirty(true);
+    setGenerateEnabled();
+  });
+
+  endRadio?.addEventListener("change", () => {
+    syncTaperModeUI();
+    setDirty(true);
+    setGenerateEnabled();
+  });
+
+  // Keep end-date >= start-date (best-effort, only if flatpickr is present)
+  const startEl = document.getElementById("startDate");
+  const bumpEndMinDate = () => {
+    if (!endInput || !endInput._flatpickr) return;
+
+    let sd = null;
+    if (startEl && startEl._flatpickr &&
+        Array.isArray(startEl._flatpickr.selectedDates) &&
+        startEl._flatpickr.selectedDates[0]) {
+      sd = startEl._flatpickr.selectedDates[0];
+    } else if (startEl && startEl.value) {
+      const parts = startEl.value.split("/").map(s => parseInt(s, 10));
+      if (parts.length === 3 && parts.every(n => Number.isFinite(n))) {
+        const [dd, mm, yyyy] = parts;
+        sd = new Date(yyyy, mm - 1, dd);
+      }
+    }
+
+    if (sd instanceof Date && !isNaN(+sd)) {
+      endInput._flatpickr.set("minDate", sd);
+    }
+  };
+
+  startEl?.addEventListener("change", bumpEndMinDate);
+  bumpEndMinDate();
 
   // 2) Clear Phase-1 presets (placeholders only)
   const p1PctEl = document.getElementById("p1Percent");
