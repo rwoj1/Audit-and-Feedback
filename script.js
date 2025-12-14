@@ -97,6 +97,26 @@ function getChartCapDate(startDate){
   return fallbackCap();
 }
 
+function patchTotalFromRow(row){
+  // 1) If the patch renderer already stored a numeric total, use it
+  if (Number.isFinite(row?.totalRate)) return row.totalRate;
+  if (Number.isFinite(row?.total)) return row.total;
+
+  // 2) If it stored an array of patch items, use existing sumPatches()
+  if (Array.isArray(row?.patches)) return sumPatches(row.patches);
+
+  // 3) If it stored an object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
+  if (row && row.packs && typeof row.packs === "object") {
+    let total = 0;
+    for (const k of Object.keys(row.packs)) {
+      const qty = parseFloat(row.packs[k]) || 0;
+      total += parsePatchRate(k) * qty;
+    }
+    return total;
+  }
+
+  return 0;
+}
 /* ===== Patch interval safety (Fentanyl: ×3 days, Buprenorphine: ×7 days) ===== */
 //#endregion
 //#region 2. Patch Interval Rules (safety)
@@ -4844,26 +4864,7 @@ bases.forEach(b => {
 
   return rows;
 }
-function patchTotalFromRow(row){
-  // 1) If the patch renderer already stored a numeric total, use it
-  if (Number.isFinite(row?.totalRate)) return row.totalRate;
-  if (Number.isFinite(row?.total)) return row.total;
 
-  // 2) If it stored an array of patch items, use existing sumPatches()
-  if (Array.isArray(row?.patches)) return sumPatches(row.patches);
-
-  // 3) If it stored an object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
-  if (row && row.packs && typeof row.packs === "object") {
-    let total = 0;
-    for (const k of Object.keys(row.packs)) {
-      const qty = parseFloat(row.packs[k]) || 0;
-      total += parsePatchRate(k) * qty;
-    }
-    return total;
-  }
-
-  return 0;
-}
 /* =============================================================
 SHOW CALCULATIONS — logger + renderer (no recalculation)
 Hooks into renderStandardTable/renderPatchTable
