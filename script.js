@@ -4834,6 +4834,15 @@ Hooks into renderStandardTable/renderPatchTable
     rows: [],
     clear(){ this.rows = []; },
 
+    // Show / hide the variance banner based on current rows
+    updateVarianceNotice(){
+      const host = document.getElementById("varianceNotice");
+      if (!host) return;
+      const EPS = 1e-6;
+      const hasVariance = this.rows.some(r => (r.actualPct - r.cfgPct) > EPS);
+      host.style.display = hasVariance ? "" : "none";
+    },
+    
     // Build from the same rows that renderers use (no new math)
     buildFromRows(stepRows){
       this.clear();
@@ -4891,6 +4900,8 @@ Hooks into renderStandardTable/renderPatchTable
 
         prevTotal = chosen; // advance for next step’s comparisons
       });
+            // After all rows built, update the variance notice
+      this.updateVarianceNotice();
     },
 
     render(){
