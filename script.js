@@ -5052,15 +5052,23 @@ function sumPatchesFromDoseLines(){
     };
   }
 
-  const _renderPatch = (typeof window.renderPatchTable === "function") ? window.renderPatchTable : null;
-  if (_renderPatch){
-    window.renderPatchTable = function(rows){
-      try { calcLogger.buildFromRows(rows); } catch {}
-      const rv = _renderPatch.apply(this, arguments);
-      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
-      return rv;
-    };
-  }
+const _renderPatch =
+  (typeof renderPatchTable === "function")
+    ? renderPatchTable
+    : null;
+
+if (_renderPatch) {
+  renderPatchTable = function(rows) {
+    try { calcLogger.buildFromRows(rows); } catch (e) { console.error(e); }
+    const rv = _renderPatch.apply(this, arguments);
+    try {
+      if (document.getElementById("showCalc")?.checked) {
+        calcLogger.render();
+      }
+    } catch (e) { console.error(e); }
+    return rv;
+  };
+}
 
   // ---------- checkbox toggle ----------
   function wireCalcToggle(){
