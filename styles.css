@@ -487,6 +487,7 @@ button.ghost{
 .calc-toggle input {
   transform: scale(1.15);                  /* slightly bigger checkbox */
 }
+#bzraSplitOptions { display: none; }
 
 /* ==============================
    PRINT / PDF rules
