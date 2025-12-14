@@ -485,14 +485,15 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   return { target, step: stepMin, quantum: q };
 }
 
-  function bzraVisibilityTick(){
-  const cls = document.getElementById("classSelect")?.value || "";
+function bzraVisibilityTick() {
   const box = document.getElementById("bzraSplitOptions");
   if (!box) return;
 
+  const cls = document.getElementById("classSelect")?.value || "";
   const isBZRA = (cls === "Benzodiazepines / Z-Drug (BZRA)");
-  box.style.display = isBZRA ? "" : "none";
-  }
+
+  box.style.display = isBZRA ? "block" : "none";
+}
 
 /* ===== Antipsychotic UI wiring (layout only) ===== */
 ;(() => {
