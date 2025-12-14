@@ -4845,14 +4845,11 @@ bases.forEach(b => {
   return rows;
 }
 function patchTotalFromRow(row){
-  // 1) If the patch renderer already stored a numeric total, use it
+  // 1) Direct numeric totals (if present)
   if (Number.isFinite(row?.totalRate)) return row.totalRate;
   if (Number.isFinite(row?.total)) return row.total;
 
-  // 2) If it stored an array of patch items, use existing sumPatches()
-  if (Array.isArray(row?.patches)) return sumPatches(row.patches);
-
-  // 3) If it stored an object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
+  // 2) Object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
   if (row && row.packs && typeof row.packs === "object") {
     let total = 0;
     for (const k of Object.keys(row.packs)) {
@@ -5028,10 +5025,6 @@ function sumPatchesFromDoseLines(){
     return sum + (Number.isFinite(rate) ? rate : 0) * (Number.isFinite(qty) ? qty : 0);
   }, 0);
 }
-  function sumPatches(list){
-    try { return (list || []).reduce((s, p) => s + ((+p.rate) || 0), 0); }
-    catch { return 0; }
-  }
 
   function pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start){
     if (!(p2Start instanceof Date) || !(p2Pct > 0)) return p1Pct;
@@ -5052,23 +5045,15 @@ function sumPatchesFromDoseLines(){
     };
   }
 
-const _renderPatch =
-  (typeof renderPatchTable === "function")
-    ? renderPatchTable
-    : null;
-
-if (_renderPatch) {
-  renderPatchTable = function(rows) {
-    try { calcLogger.buildFromRows(rows); } catch (e) { console.error(e); }
-    const rv = _renderPatch.apply(this, arguments);
-    try {
-      if (document.getElementById("showCalc")?.checked) {
-        calcLogger.render();
-      }
-    } catch (e) { console.error(e); }
-    return rv;
-  };
-}
+  const _renderPatch = (typeof window.renderPatchTable === "function") ? window.renderPatchTable : null;
+  if (_renderPatch){
+    window.renderPatchTable = function(rows){
+      try { calcLogger.buildFromRows(rows); } catch {}
+      const rv = _renderPatch.apply(this, arguments);
+      try { if (document.getElementById("showCalc")?.checked) calcLogger.render(); } catch {}
+      return rv;
+    };
+  }
 
   // ---------- checkbox toggle ----------
   function wireCalcToggle(){
