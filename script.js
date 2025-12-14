@@ -2645,7 +2645,7 @@ const AP_ROUND = { Haloperidol: 0.5, Risperidone: 0.25, Quetiapine: 12.5, Olanza
 function isMR(form){ return /slow\s*release|modified|controlled|sustained/i.test(form) || /\b(SR|MR|CR|ER|XR|PR|CD)\b/i.test(form); }
 function formLabelCapsSR(form){ return String(form||"").replace(/\bsr\b/ig,"SR"); }
 function parseMgFromStrength(s){ const m = String(s||"").match(/^\s*([\d.]+)\s*(?:mg)?(?:\s*\/|$)/i); return m ? parseFloat(m[1]) : 0; }
-function parsePatchRate(s){ const m=String(s||"").match(/([\d.]+)\s*mcg\/hr/i); return m?parseFloat(m[1]):0; }
+function parsePatchRate(s){const str = String(s || "");const m = str.match(/([\d.]+)\s*mcg\s*\/\s*h(?:r)?/i);if (m) return parseFloat(m[1]);const n = parseFloat(str.replace(/[^\d.]/g, ""));return Number.isFinite(n) ? n : 0;}
 function stripZeros(n) {
   return Number.isInteger(n) ? String(n) : String(n).replace(/\.0+$/,"");
 }
@@ -4844,6 +4844,26 @@ bases.forEach(b => {
 
   return rows;
 }
+function patchTotalFromRow(row){
+  // 1) If the patch renderer already stored a numeric total, use it
+  if (Number.isFinite(row?.totalRate)) return row.totalRate;
+  if (Number.isFinite(row?.total)) return row.total;
+
+  // 2) If it stored an array of patch items, use existing sumPatches()
+  if (Array.isArray(row?.patches)) return sumPatches(row.patches);
+
+  // 3) If it stored an object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
+  if (row && row.packs && typeof row.packs === "object") {
+    let total = 0;
+    for (const k of Object.keys(row.packs)) {
+      const qty = parseFloat(row.packs[k]) || 0;
+      total += parsePatchRate(k) * qty;
+    }
+    return total;
+  }
+
+  return 0;
+}
 /* =============================================================
 SHOW CALCULATIONS — logger + renderer (no recalculation)
 Hooks into renderStandardTable/renderPatchTable
@@ -4899,14 +4919,15 @@ Hooks into renderStandardTable/renderPatchTable
         const cfgPct    = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
         const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational (unrounded)
 
-        // Chosen total comes from the rendered row itself
-        let chosen = 0;
-        if (/Patch/i.test(form) || row.patches) {
-          chosen = sumPatches(Array.isArray(row.patches) ? row.patches : []);
-        } else {
-          chosen = safePacksTotalMg(row.packs);
-        }
-
+      // Chosen total comes from the rendered row itself
+      let chosen = 0;
+      if (/Patch/i.test(form)) {
+      chosen = patchTotalFromRow(row);
+      } else {
+      chosen = safePacksTotalMg(row.packs);
+      }
+        // PATCH ONLY: collapse rows where the total dose didn't change
+      if (/Patch/i.test(form) && Math.abs(chosen - prevTotal) < EPS) return;
         const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
 
         this.rows.push({
@@ -4995,17 +5016,15 @@ Hooks into renderStandardTable/renderPatchTable
   }
 
 function sumPatchesFromDoseLines(){
-  let total = 0;
-  (window.doseLines || []).forEach(ln => {
-    const rate = (typeof window.parsePatchRate === "function")
-      ? (window.parsePatchRate(ln.strengthStr) || 0)
-      : (parseFloat(String(ln.strengthStr || "").replace(/[^\d.]+/g, "")) || 0);
-    const qty = Math.max(0, Math.floor(ln.qty ?? 0));
-    total += rate * qty;
-  });
-  return total;
-}
+  const form = document.getElementById("formSelect")?.value || "";
+  if (!/Patch/i.test(form)) return 0;
 
+  return (window.doseLines || []).reduce((sum, ln) => {
+    const rate = parsePatchRate(ln?.strengthStr);
+    const qty  = parseFloat(ln?.qty);
+    return sum + (Number.isFinite(rate) ? rate : 0) * (Number.isFinite(qty) ? qty : 0);
+  }, 0);
+}
   function sumPatches(list){
     try { return (list || []).reduce((s, p) => s + ((+p.rate) || 0), 0); }
     catch { return 0; }
