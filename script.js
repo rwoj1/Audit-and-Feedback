@@ -485,6 +485,15 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   return { target, step: stepMin, quantum: q };
 }
 
+  function bzraVisibilityTick(){
+  const cls = document.getElementById("classSelect")?.value || "";
+  const box = document.getElementById("bzraSplitOptions");
+  if (!box) return;
+
+  const isBZRA = (cls === "Benzodiazepines / Z-Drug (BZRA)");
+  box.style.display = isBZRA ? "" : "none";
+  }
+
 /* ===== Antipsychotic UI wiring (layout only) ===== */
 ;(() => {
   const $id = (s) => document.getElementById(s);
@@ -511,16 +520,7 @@ function snapTargetToSelection(totalMg, percent, cls, med, form){
   if (andUpdate && typeof apUpdateTotal === "function") apUpdateTotal();
   }
   // Show/hide panel & order row; fill the brief; update total
-
-  function bzraVisibilityTick(){
-  const cls = document.getElementById("classSelect")?.value || "";
-  const box = document.getElementById("bzraSplitOptions");
-  if (!box) return;
-
-  const isBZRA = (cls === "Benzodiazepines / Z-Drug (BZRA)");
-  box.style.display = isBZRA ? "" : "none";
-}
-  
+ 
 function apVisibilityTick(){
   const cls = document.getElementById("classSelect")?.value || "";
   const med = document.getElementById("medicineSelect")?.value || "";
