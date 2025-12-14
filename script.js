@@ -5105,6 +5105,8 @@ function init(){
 
   // 4) Change handlers for dependent selects
   document.getElementById("classSelect")?.addEventListener("change", () => {
+      if (window.SelectedFormulations && typeof SelectedFormulations.clear === "function") {
+    SelectedFormulations.clear();}
     populateMedicines();
     populateForms();
     updateRecommended();
