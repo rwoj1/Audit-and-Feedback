@@ -4994,17 +4994,17 @@ Hooks into renderStandardTable/renderPatchTable
     } catch { return 0; }
   }
 
-  function sumPatchesFromDoseLines(){
-    let total = 0;
-    (window.doseLines || []).forEach(ln => {
-      const rate = (typeof window.parsePatchRate === "function")
-        ? (window.parsePatchRate(ln.strengthStr) || 0)
-        : parseFloat(ln.strengthStr) || 0;
-      const qty = Math.max(0, Math.floor(ln.qty ?? 0));
-      total += rate * qty;
-    });
-    return total;
-  }
+function sumPatchesFromDoseLines(){
+  let total = 0;
+  (window.doseLines || []).forEach(ln => {
+    const rate = (typeof window.parsePatchRate === "function")
+      ? (window.parsePatchRate(ln.strengthStr) || 0)
+      : (parseFloat(String(ln.strengthStr || "").replace(/[^\d.]+/g, "")) || 0);
+    const qty = Math.max(0, Math.floor(ln.qty ?? 0));
+    total += rate * qty;
+  });
+  return total;
+}
 
   function sumPatches(list){
     try { return (list || []).reduce((s, p) => s + ((+p.rate) || 0), 0); }
