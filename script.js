@@ -4911,7 +4911,8 @@ Hooks into renderStandardTable/renderPatchTable
       } else if (typeof window.buildPacksFromDoseLines === "function") {
         prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
       }
-
+      
+      let keptAny = false; // PATCH: ensure we keep the first row
       (stepRows || []).forEach((row) => {
         if (row.stop || row.review) return; // skip non-dose rows
 
@@ -4928,7 +4929,7 @@ if (/Patch/i.test(form)) {
 }
 
         // PATCH ONLY: collapse rows where the total dose didn't change
-      if (/Patch/i.test(form) && Math.abs(chosen - prevTotal) < EPS) return;
+      if (/Patch/i.test(form) && keptAny && prevTotal > EPS && Math.abs(chosen - prevTotal) < EPS) return;
         const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
 
         this.rows.push({
@@ -4940,6 +4941,7 @@ if (/Patch/i.test(form)) {
           unit,
           actualPct
         });
+      keptAny = true;
 
         prevTotal = chosen; // advance for next step’s comparisons
       });
