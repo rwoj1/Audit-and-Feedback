@@ -4848,8 +4848,11 @@ function patchTotalFromRow(row){
   // 1) Direct numeric totals (if present)
   if (Number.isFinite(row?.totalRate)) return row.totalRate;
   if (Number.isFinite(row?.total)) return row.total;
-
-  // 2) Object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
+  // 2) Preferred: patch rows store an array like [5, 30, 5]
+  if (Array.isArray(row?.patches)) {
+    return row.patches.reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+  }
+  // 3) Fallback: object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
   if (row && row.packs && typeof row.packs === "object") {
     let total = 0;
     for (const k of Object.keys(row.packs)) {
@@ -4858,7 +4861,6 @@ function patchTotalFromRow(row){
     }
     return total;
   }
-
   return 0;
 }
 /* =============================================================
