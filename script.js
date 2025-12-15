@@ -4393,7 +4393,7 @@ if (!canShow || !hasRenderable){
   host.innerHTML = "";
   return;
 }
-  card.style.display = "";
+  wrap.style.display = "";
   card.style.display = "";
   host.innerHTML = "";
 
@@ -4481,6 +4481,9 @@ cb.addEventListener("change", () => {
     if (!window.SelectedFormulations) window.SelectedFormulations = new Set();
     SelectedFormulations.clear();
     renderProductPicker();
+     setTimeout(() => {
+    renderProductPicker();
+    }, 0);
     if (typeof setDirty === "function") setDirty(true);
     if (typeof setGenerateEnabled === "function") setGenerateEnabled();
   };
