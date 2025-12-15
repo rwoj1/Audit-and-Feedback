@@ -4352,6 +4352,7 @@ function renderProductPicker(){
   const card = document.getElementById("productPickerCard");
   const host = document.getElementById("productPicker");
   if (!card || !host) return;
+  const wrap = card.closest(".sub-card") || card;
 
   // current selection in the controls
   const clsEl  = document.getElementById("classSelect");
@@ -4385,11 +4386,12 @@ const bases = (strengths || [])
 const hasRenderable = bases.length > 0;
 
 if (!canShow || !hasRenderable){
+  wrap.style.display = "none";
   card.style.display = "none";
   host.innerHTML = "";
   return;
 }
-
+  card.style.display = "";
   card.style.display = "";
   host.innerHTML = "";
 
@@ -4436,6 +4438,7 @@ cb.addEventListener("change", () => {
   });
     // If nothing rendered, hide the whole card (prevents empty card UI)
   if (!host.children || host.children.length === 0) {
+    wrap.style.display = "none";
     card.style.display = "none";
     host.innerHTML = "";
     return;
