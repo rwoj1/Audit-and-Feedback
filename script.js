@@ -4393,14 +4393,14 @@ if (!canShow || !hasRenderable){
     cb.dataset.mg = String(mg);
 
     // if user has any selection, reflect it; otherwise leave unchecked (meaning "use all")
-    cb.checked = (SelectedFormulations.size > 0) ? SelectedFormulations.has(mg) : false;
+    cb.checked = (SelectedFormulations.size > 0) ? SelectedFormulations.has(Number(mg)) : false;
 
-    cb.addEventListener("change", () => {
-      if (cb.checked) SelectedFormulations.add(mg);
-      else SelectedFormulations.delete(mg);
-      if (typeof setDirty === "function") setDirty(true);
-    });
-
+cb.addEventListener("change", () => {
+  const n = Number(mg);
+  if (cb.checked) SelectedFormulations.add(n);
+  else SelectedFormulations.delete(n);
+  if (typeof setDirty === "function") setDirty(true);
+});
     const span = document.createElement("span");
     const title = (typeof strengthToProductLabel === "function")
       ? strengthToProductLabel(cls, med, form, s)   // e.g., "600 mg tablet"
@@ -4411,6 +4411,12 @@ if (!canShow || !hasRenderable){
     label.appendChild(span);
     host.appendChild(label);
   });
+    // If nothing rendered, hide the whole card (prevents empty card UI)
+  if (!host.children || host.children.length === 0) {
+    card.style.display = "none";
+    host.innerHTML = "";
+    return;
+  }
 
   // wire buttons (rebind on every render so they're always current)
   const btnSelectAll = document.getElementById("selectAllProductSelection");
