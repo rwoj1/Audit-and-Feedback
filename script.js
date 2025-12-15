@@ -4930,9 +4930,7 @@ if (/Patch/i.test(form) && prevTotal <= EPS) {
 let chosen = 0;
 if (/Patch/i.test(form)) {
   chosen = patchTotalFromRow(row);
-
-  // PATCH ONLY: if patchTotalFromRow can't read this row, fall back to current baseline
-  if (chosen <= EPS) chosen = prevTotal;
+  if (chosen <= EPS) chosen = prevTotal; // fallback ONLY after prevTotal is correct
 } else {
   chosen = safePacksTotalMg(row.packs);
 }
@@ -5031,26 +5029,30 @@ function sumPatchesFromDoseLines(){
   const form = document.getElementById("formSelect")?.value || "";
   if (!/Patch/i.test(form)) return 0;
 
-  return (window.doseLines || []).reduce((sum, ln) => {
-    // Be tolerant to whatever key the line uses
-    const strength =
-      ln?.strengthStr ??
-      ln?.strengthLabel ??
-      ln?.strength ??
-      "";
+  const lines = (typeof doseLines !== "undefined" && Array.isArray(doseLines))
+    ? doseLines
+    : (window.doseLines || []);
 
-    // Be tolerant to whatever key the line uses for quantity
-    const rawQty =
-      ln?.qty ??
-      ln?.quantity ??
-      ln?.count ??
-      0;
+  return lines.reduce((sum, ln) => {
+    const strength = ln?.strengthStr ?? ln?.strengthLabel ?? ln?.strength ?? "";
+    const rawQty   = ln?.qty ?? ln?.quantity ?? ln?.count ?? 0;
 
     const rate = parsePatchRate(strength);
     const qty  = Math.max(0, Math.floor(parseFloat(rawQty) || 0));
 
     return sum + (Number.isFinite(rate) ? rate : 0) * qty;
   }, 0);
+}
+  function sumPatches(list){
+  try {
+    return (list || []).reduce((s, p) => {
+      if (typeof p === "number") return s + p;        // numeric patch rates
+      if (p && typeof p === "object") return s + (+p.rate || 0); // {rate:x}
+      return s;
+    }, 0);
+  } catch {
+    return 0;
+  }
 }
 function patchTotalFromRow(row){
   // 1) If patch renderer stored numeric totals, use them
