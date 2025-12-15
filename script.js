@@ -4907,7 +4907,14 @@ Hooks into renderStandardTable/renderPatchTable
         prevTotal = safePacksTotalMg(window.apSeedPacksFromFourInputs() || {});
       } else if (/Patch/i.test(form)) {
         prevTotal = sumPatchesFromDoseLines();
-      } else if (typeof window.buildPacksFromDoseLines === "function") {
+      } 
+      // PATCH SAFETY NET: if doseLines didn’t yield a total, try the first row in the rendered plan
+if (/Patch/i.test(form) && prevTotal <= EPS) {
+  const firstDoseRow = (stepRows || []).find(r => !(r.stop || r.review));
+  const fromRow = patchTotalFromRow(firstDoseRow);
+  if (fromRow > EPS) prevTotal = fromRow;
+}
+      else if (typeof window.buildPacksFromDoseLines === "function") {
         prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
       }
       
@@ -5023,9 +5030,24 @@ function sumPatchesFromDoseLines(){
   if (!/Patch/i.test(form)) return 0;
 
   return (window.doseLines || []).reduce((sum, ln) => {
-    const rate = parsePatchRate(ln?.strengthStr);
-    const qty  = parseFloat(ln?.qty);
-    return sum + (Number.isFinite(rate) ? rate : 0) * (Number.isFinite(qty) ? qty : 0);
+    // Be tolerant to whatever key the line uses
+    const strength =
+      ln?.strengthStr ??
+      ln?.strengthLabel ??
+      ln?.strength ??
+      "";
+
+    // Be tolerant to whatever key the line uses for quantity
+    const rawQty =
+      ln?.qty ??
+      ln?.quantity ??
+      ln?.count ??
+      0;
+
+    const rate = parsePatchRate(strength);
+    const qty  = Math.max(0, Math.floor(parseFloat(rawQty) || 0));
+
+    return sum + (Number.isFinite(rate) ? rate : 0) * qty;
   }, 0);
 }
 
