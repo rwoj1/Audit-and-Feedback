@@ -4411,16 +4411,18 @@ if (!Number.isFinite(base) || base <= 0) return;
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.id = id;
-    cb.dataset.mg = String(base);
+    cb.dataset.base = String(base);
 
     // if user has any selection, reflect it; otherwise leave unchecked (meaning "use all")
-    cb.checked = (SelectedFormulations.size > 0) ? SelectedFormulations.has(Number(mg)) : false;
+    cb.checked = (SelectedFormulations.size > 0) ? SelectedFormulations.has(Number(base)) : false;
 
 cb.addEventListener("change", () => {
   const n = Number(base);
   if (cb.checked) SelectedFormulations.add(n);
   else SelectedFormulations.delete(n);
+
   if (typeof setDirty === "function") setDirty(true);
+  if (typeof setGenerateEnabled === "function") setGenerateEnabled();
 });
     const span = document.createElement("span");
   const title = (typeof strengthToProductLabel === "function")
@@ -4450,9 +4452,10 @@ cb.addEventListener("change", () => {
       host.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.checked = true;
         const base = parseFloat(cb.dataset.base);
-        if (Number.isFinite(base) && base > 0) SelectedFormulations.add(base);
+           if (Number.isFinite(base) && base > 0) SelectedFormulations.add(Number(base));
       });
       if (typeof setDirty === "function") setDirty(true);
+      if (typeof setGenerateEnabled === "function") setGenerateEnabled();
     };
   }
 
@@ -4461,6 +4464,7 @@ cb.addEventListener("change", () => {
       SelectedFormulations.clear();
       host.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
       if (typeof setDirty === "function") setDirty(true);
+      if (typeof setGenerateEnabled === "function") setGenerateEnabled();
     };
   }
 }
@@ -4473,6 +4477,7 @@ cb.addEventListener("change", () => {
     SelectedFormulations.clear();
     renderProductPicker();
     if (typeof setDirty === "function") setDirty(true);
+    if (typeof setGenerateEnabled === "function") setGenerateEnabled();
   };
   if (med  && !med._ppReset)  { med._ppReset  = true; med.addEventListener("change", reset); }
   if (form && !form._ppReset) { form._ppReset = true; form.addEventListener("change", reset); }
