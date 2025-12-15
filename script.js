@@ -31,7 +31,7 @@ const clamp   = (n, a, b) => Math.max(a, Math.min(b, n));
 const roundTo = (x, step) => Math.round(x / step) * step;
 const floorTo = (x, step) => Math.floor(x / step) * step;
 const ceilTo  = (x, step) => Math.ceil (x / step) * step;
-const MAX_WEEKS = 60;
+const MAX_WEEKS = 5200;
 const DAYS_PER_MONTH = 28; // change to 30 if you prefer 30-day "months"
 const MS_PER_DAY = 24 * 3600 * 1000;
 const THREE_MONTHS_MS = 3 * DAYS_PER_MONTH * MS_PER_DAY; // only used as a fallback
@@ -59,7 +59,7 @@ function getChartCapDate(startDate){
 
     // "Until complete" → effectively uncapped, but with a generous safety ceiling
     if (raw === "complete") {
-      const months = 24; // ≈ 2 years; adjust if you ever want a longer/shorter "complete"
+      const months = 600;
       return addDays(base, months * DAYS_PER_MONTH);
     }
 
@@ -4930,11 +4930,13 @@ if (/Patch/i.test(form) && prevTotal <= EPS) {
 let chosen = 0;
 if (/Patch/i.test(form)) {
   chosen = patchTotalFromRow(row);
-  // PATCH ONLY: if the first patch row doesn't encode patches, fall back to current-input total
+
+  // PATCH ONLY: if patchTotalFromRow can't read this row, fall back to current baseline
   if (chosen <= EPS) chosen = prevTotal;
 } else {
   chosen = safePacksTotalMg(row.packs);
 }
+
         // PATCH ONLY: collapse rows where the total dose didn't change
       if (/Patch/i.test(form) && keptAny && prevTotal > EPS && Math.abs(chosen - prevTotal) < EPS) return;
         const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
@@ -5050,7 +5052,26 @@ function sumPatchesFromDoseLines(){
     return sum + (Number.isFinite(rate) ? rate : 0) * qty;
   }, 0);
 }
+function patchTotalFromRow(row){
+  // 1) If patch renderer stored numeric totals, use them
+  if (Number.isFinite(row?.totalRate)) return row.totalRate;
+  if (Number.isFinite(row?.total)) return row.total;
 
+  // 2) If renderer stored an array of patch items
+  if (Array.isArray(row?.patches)) return sumPatches(row.patches);
+
+  // 3) If it stored an object map (rare fallback)
+  if (row && row.packs && typeof row.packs === "object") {
+    let total = 0;
+    for (const k of Object.keys(row.packs)) {
+      const qty = parseFloat(row.packs[k]) || 0;
+      total += parsePatchRate(k) * qty;
+    }
+    return total;
+  }
+  return 0;
+}
+ 
   function pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start){
     if (!(p2Start instanceof Date) || !(p2Pct > 0)) return p1Pct;
     try { const dt = new Date(dateStr); if (isFinite(+dt) && +dt >= +p2Start) return p2Pct; } catch {}
