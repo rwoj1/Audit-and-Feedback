@@ -4434,15 +4434,23 @@ function renderProductPicker(){
     : true;
 
   // figure out strengths we can list
-  const strengths = (typeof strengthsForPicker === "function") ? strengthsForPicker() : [];
-  const hasAny = Array.isArray(strengths) && strengths.length > 0;
+const strengths = (typeof strengthsForPicker === "function") ? strengthsForPicker() : [];
 
-  if (!canShow || !hasAny){
-    card.style.display = "none";
-    host.innerHTML = "";
-    return;
-  }
+// treat as “empty” unless at least one strength parses to a usable number
+const mgs = (strengths || [])
+  .map(s => (typeof parseMgFromStrength === "function"
+      ? parseMgFromStrength(s)
+      : (parseFloat(String(s).replace(/[^\d.]/g,"")) || 0)
+  ))
+  .filter(mg => Number.isFinite(mg) && mg > 0);
 
+const hasRenderable = mgs.length > 0;
+
+if (!canShow || !hasRenderable){
+  card.style.display = "none";
+  host.innerHTML = "";
+  return;
+}
   card.style.display = "";
   host.innerHTML = "";
 
