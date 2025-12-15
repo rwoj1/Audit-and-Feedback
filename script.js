@@ -4937,15 +4937,9 @@ Hooks into renderStandardTable/renderPatchTable
 
         const cfgPct = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
 
-        // Step 1 = baseline row (no reduction yet)
-        let rawTarget = prevTotal;
-        let actualPct = 0;
-
-        // Step 2+ = reduction from previous total
-        if (keptAny) {
-          rawTarget = prevTotal * (1 - (cfgPct / 100));
-          actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
-        }
+      // Step 1 = first reduction target from baseline
+      let rawTarget = prevTotal * (1 - (cfgPct / 100));
+      let actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
 
         this.rows.push({
           step: this.rows.length + 1,
