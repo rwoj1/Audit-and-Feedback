@@ -5043,12 +5043,11 @@ function sumPatchesFromDoseLines(){
     return sum + (Number.isFinite(rate) ? rate : 0) * qty;
   }, 0);
 }
-  function sumPatches(list){
+function sumPatches(list){
   try {
     return (list || []).reduce((s, p) => {
       if (typeof p === "number") return s + p;        // numeric patch rates
-      if (p && typeof p === "object") return s + (+p.rate || 0); // {rate:x}
-      return s;
+      return s + ((+p?.rate) || 0);                   // {rate: ...}
     }, 0);
   } catch {
     return 0;
