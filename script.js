@@ -1884,13 +1884,16 @@ function saveOutputAsPdf() {
 const SUGGESTED_PRACTICE = {
   opioids: `
   <p>
-    Tapering should be gradual and individualised to the person’s clinical characteristics, treatment goals and preferences. 
-    A variety of tapering regimens have been recommended in guidelines – summarised here [LINK].
+    Tapering should be <strong>gradual</strong> and <strong>individualised</strong> to the person’s current opioid regimen, clinical characteristics, treatment goals and preferences.
+    A variety of tapering regimens have been recommended in guidelines – summarised here [LINK]
   </p>
-
+  <p>
+  The following approach may be considered as a general guide:
+  <p>
+  
   <ul>
-    <li>Short-term use (less than 3 months): slow dose reduction (e.g. 10 to 25 % every week).</li>
-    <li>Longer-term use (more than 3 months): slower dose reduction (e.g. 10 to 25 % every 4 weeks). Some patients (e.g. those taking higher doses or for long periods) may need slower reductions.</li>
+    <li><strong>Short-term use</strong> (less than 3 months): slow dose reduction (eg 10 to 25% every week).</li>
+    <li><strong>Longer-term use</strong> (more than 3 months): slower dose reduction (eg by 10 to 25% every 4 weeks). Some patients (eg those taking higher doses or for long periods of time) may need slower reductions.</li>
   </ul>
 
   <p>
@@ -1898,14 +1901,12 @@ const SUGGESTED_PRACTICE = {
   </p>
 
   <p>
-    This calculator is designed to use whole slow-release dose forms (which cannot be cut). 
-    It is not designed for reducing immediate-release formulations, or for patients with severe substance use disorder, high risk of withdrawal, 
-    or symptom recurrence – seek specialist advice for tailored tapering plans for these patients.
+    <strong>This calculator is designed to use whole slow-release dose forms (which cannot be cut).</strong> 
+    It is not designed for reducing immediate-release formulations or for complex patients (eg those with severe substance use disorder, high risk of withdrawal or symptom recurrence) – seek specialist advice for tailored tapering plans for these patients.
   </p>
 
   <p>
-    At the later stages of a taper, the desired dose reduction may not be possible with a slow-release formulation; 
-    a short-acting opioid may be required to complete the taper or to manage withdrawal symptoms.
+   At the later stages of a taper, the desired dose reduction may not be possible with a slow-release formulation; a short-acting opioid may be required to complete the taper or to manage withdrawal symptoms.
   </p>
 
   <p>
@@ -1915,8 +1916,8 @@ const SUGGESTED_PRACTICE = {
 
   bzra: `
   <p>
-    Tapering should occur gradually and be individualised to the person’s clinical characteristics, treatment goals and preferences. 
-    Tapering recommendations in guidelines vary from 5 to 25% reductions every 1 to 4 weeks, with slower or faster tapers depending on dose and duration of use – summarised here [LINK].
+    Tapering should occur <strong>gradually</strong> and be <strong>individualised</strong> to the person’s clinical characteristics, treatment goals and preferences. 
+    Tapering recommendations in guidelines vary from 5 to 25% reductions every 1 to 4 weeks, with slower or faster tapers depending on dose and duration of use – summarised here [LINK]. 
   </p>
 
   <p>
@@ -1924,9 +1925,9 @@ const SUGGESTED_PRACTICE = {
   <p>
 
   <p>
-    This calculator is designed to use commercially available formulations in whole or half dose forms. 
-    It is not designed to calculate a slower taper using quarter-tablet doses or compounded formulations; 
-    such approaches may be required for patients with severe substance use disorder, high risk of withdrawal, or symptom recurrence.
+    <strong>This calculator is designed to use commercially available formulations in whole, half or quarter dose forms.</strong> 
+    It is not designed to calculate a slower taper using compounded formulations; 
+    such approaches may be required for complex patients (eg those with severe substance use disorder, high risk of withdrawal or symptom recurrence).
   </p>
   `,
   antipsychotic: `• Reduce ~25–50% every 1–2 weeks with close monitoring.
@@ -5370,8 +5371,7 @@ card.innerHTML = `
     </p>
 
     <p>
-      This calculator is not designed for generating an individualised tapering plan for patients with severe substance use disorder; 
-      these patients require tailored plans beyond the scope of this calculator.
+      This calculator is <strong>not</strong> designed for generating an individualised tapering plan for complex patients (eg those with severe substance use disorder); these patients require tailored plans beyond the scope of this calculator.
     </p>
 
     <p>
