@@ -4934,6 +4934,11 @@ if (/Patch/i.test(form)) {
 } else {
   chosen = safePacksTotalMg(row.packs);
 }
+        if (!keptAny) {
+  keptAny = true;
+  prevTotal = chosen;
+  return;
+}
 
         // PATCH ONLY: collapse rows where the total dose didn't change
       if (/Patch/i.test(form) && keptAny && prevTotal > EPS && Math.abs(chosen - prevTotal) < EPS) return;
