@@ -4353,7 +4353,9 @@ function renderProductPicker(){
   const host = document.getElementById("productPicker");
   if (!card || !host) return;
   const wrap = card.closest(".sub-card") || card;
-
+  wrap.style.display = "";
+  card.style.display = "";
+  
   // current selection in the controls
   const clsEl  = document.getElementById("classSelect");
   const medEl  = document.getElementById("medicineSelect");
