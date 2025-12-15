@@ -299,6 +299,8 @@ function shouldShowProductPicker(cls, med, form){
     ["Opioid","Oxycodone \/ Naloxone",/SR/i],
     ["Opioid","Tapentadol",/SR/i],
     ["Opioid","Tramadol",/SR/i],
+    ["Opioid","Fentanyl",/Patch/i],
+    ["Opioid","Buprenorphine",/Patch/i],
 
     // ===== Gabapentinoids (existing) =====
     ["Gabapentinoids","Gabapentin",/.*/],
@@ -333,27 +335,41 @@ function shouldShowProductPicker(cls, med, form){
 
 // Build a nice per-product label
 function strengthToProductLabel(cls, med, form, strengthStr){
+  // PATCH: label patch strengths as mcg/hr
+  if (/Patch/i.test(form)) {
+    const rate = (typeof parsePatchRate === "function")
+      ? parsePatchRate(strengthStr)
+      : (parseFloat(String(strengthStr).replace(/[^\d.]/g,"")) || 0);
+
+    return `${med} ${stripZeros(rate)} mcg/hr patch`;
+  }
+
+  // tablets/capsules (mg)
   const mg = parseMgFromStrength(strengthStr);
 
-  // ✅ Special case: Gabapentin shows simplified labels and uses true form by strength
   if (/^Gabapentin$/i.test(med)) {
-    const f = gabapentinFormForMg(mg).toLowerCase(); // "tablet" / "capsule"
+    const f = gabapentinFormForMg(mg).toLowerCase();
     return `${stripZeros(mg)} mg ${f}`;
   }
 
-  // Oxycodone/naloxone pair label stays as-is
   if (/Oxycodone\s*\/\s*Naloxone/i.test(med)) {
-    return oxyNxPairLabel(mg); // e.g., "Oxycodone 20 mg + naloxone 10 mg SR tablet"
+    return oxyNxPairLabel(mg);
   }
 
-  // Everyone else uses your normal suffix logic
   return `${med} ${stripZeros(mg)} mg ${formSuffixWithSR(form)}`;
 }
+
 
 // Which strengths are available for the picker (we use whatever the current Form provides)
 // For Gabapentin you already expose both tablet & capsule strengths via “Tablet/Capsule”.
 function strengthsForPicker(){
-  return strengthsForSelected().slice().sort((a,b)=>parseMgFromStrength(a)-parseMgFromStrength(b));
+  const form = document.getElementById("formSelect")?.value || "";
+  const arr = strengthsForSelected().slice();
+
+  if (/Patch/i.test(form)) {
+    return arr.sort((a,b)=>parsePatchRate(a)-parsePatchRate(b));
+  }
+  return arr.sort((a,b)=>parseMgFromStrength(a)-parseMgFromStrength(b));
 }
 
 // Filtered bases depending on checkbox selection (empty => all)
@@ -4356,32 +4372,37 @@ function renderProductPicker(){
   // figure out strengths we can list
 const strengths = (typeof strengthsForPicker === "function") ? strengthsForPicker() : [];
 
-// treat as “empty” unless at least one strength parses to a usable number
-const mgs = (strengths || [])
-  .map(s => (typeof parseMgFromStrength === "function"
-      ? parseMgFromStrength(s)
-      : (parseFloat(String(s).replace(/[^\d.]/g,"")) || 0)
-  ))
-  .filter(mg => Number.isFinite(mg) && mg > 0);
+const isPatch = /Patch/i.test(form);
 
-const hasRenderable = mgs.length > 0;
+// treat as “empty” unless at least one strength parses to a usable number
+const bases = (strengths || [])
+  .map(s => {
+    if (isPatch) return (typeof parsePatchRate === "function") ? parsePatchRate(s) : 0;
+    return (typeof parseMgFromStrength === "function") ? parseMgFromStrength(s) : 0;
+  })
+  .filter(v => Number.isFinite(v) && v > 0);
+
+const hasRenderable = bases.length > 0;
 
 if (!canShow || !hasRenderable){
   card.style.display = "none";
   host.innerHTML = "";
   return;
 }
+
   card.style.display = "";
   host.innerHTML = "";
 
   // build the checkbox list
   strengths.forEach(s => {
-    const mg = (typeof parseMgFromStrength === "function")
-      ? parseMgFromStrength(s)
-      : (parseFloat(String(s).replace(/[^\d.]/g,"")) || 0);
-    if (!Number.isFinite(mg) || mg <= 0) return;
+const base = isPatch
+  ? ((typeof parsePatchRate === "function") ? parsePatchRate(s) : (parseFloat(String(s).replace(/[^\d.]/g,"")) || 0))
+  : ((typeof parseMgFromStrength === "function") ? parseMgFromStrength(s) : (parseFloat(String(s).replace(/[^\d.]/g,"")) || 0));
 
-    const id = `prod_${String(med).replace(/\W+/g,'_')}_${mg}`;
+if (!Number.isFinite(base) || base <= 0) return;
+
+
+    const id = `prod_${String(med).replace(/\W+/g,'_')}_${base}`;
 
     const label = document.createElement("label");
     label.className = "checkbox";
@@ -4390,21 +4411,21 @@ if (!canShow || !hasRenderable){
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.id = id;
-    cb.dataset.mg = String(mg);
+    cb.dataset.mg = String(base);
 
     // if user has any selection, reflect it; otherwise leave unchecked (meaning "use all")
     cb.checked = (SelectedFormulations.size > 0) ? SelectedFormulations.has(Number(mg)) : false;
 
 cb.addEventListener("change", () => {
-  const n = Number(mg);
+  const n = Number(base);
   if (cb.checked) SelectedFormulations.add(n);
   else SelectedFormulations.delete(n);
   if (typeof setDirty === "function") setDirty(true);
 });
     const span = document.createElement("span");
-    const title = (typeof strengthToProductLabel === "function")
-      ? strengthToProductLabel(cls, med, form, s)   // e.g., "600 mg tablet"
-      : `${mg} mg`;
+  const title = (typeof strengthToProductLabel === "function")
+  ? strengthToProductLabel(cls, med, form, s)
+  : (isPatch ? `${base} mcg/hr` : `${base} mg`);
     span.textContent = title;
 
     label.appendChild(cb);
@@ -4428,8 +4449,8 @@ cb.addEventListener("change", () => {
       // tick everything currently shown
       host.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.checked = true;
-        const mg = parseFloat(cb.dataset.mg);
-        if (Number.isFinite(mg) && mg > 0) SelectedFormulations.add(mg);
+        const base = parseFloat(cb.dataset.base);
+        if (Number.isFinite(base) && base > 0) SelectedFormulations.add(base);
       });
       if (typeof setDirty === "function") setDirty(true);
     };
