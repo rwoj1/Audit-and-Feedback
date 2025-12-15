@@ -494,6 +494,22 @@ function bzraVisibilityTick() {
 
   box.style.display = isBZRA ? "block" : "none";
 }
+function bidPrefVisibilityTick(){
+  const box = document.getElementById("bidPrefCard");
+  if (!box) return;
+
+  const cls  = document.getElementById("classSelect")?.value || "";
+  const med  = document.getElementById("medicineSelect")?.value || "";
+  const form = document.getElementById("formSelect")?.value || "";
+
+  const isOpioidSrTablet =
+    (cls === "Opioid") && (/SR/i.test(form)) && (/Tablet/i.test(form));
+
+  const isPregabalin =
+    (cls === "Gabapentinoids") && (/^Pregabalin$/i.test(med));
+
+  box.style.display = (isOpioidSrTablet || isPregabalin) ? "" : "none";
+}
 
 /* ===== Antipsychotic UI wiring (layout only) ===== */
 ;(() => {
@@ -5284,6 +5300,7 @@ function init(){
     applyPatchIntervalAttributes();
     renderProductPicker();
     bzraVisibilityTick();
+    bidPrefVisibilityTick();
     if (typeof setFooterText === "function") setFooterText(document.getElementById("classSelect")?.value || "");
     resetDoseLinesToLowest();
     setDirty(true);
@@ -5296,6 +5313,7 @@ function init(){
     updateRecommended();
     applyPatchIntervalAttributes();
     renderProductPicker();
+    bidPrefVisibilityTick();
     if (typeof setFooterText === "function") setFooterText(document.getElementById("classSelect")?.value || "");
     resetDoseLinesToLowest();
     setDirty(true);
