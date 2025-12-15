@@ -302,17 +302,17 @@ function shouldShowProductPicker(cls, med, form){
     ["Opioid","Fentanyl",/Patch/i],
     ["Opioid","Buprenorphine",/Patch/i],
 
-    // ===== Gabapentinoids (existing) =====
-    ["Gabapentinoids","Gabapentin",/.*/],
-    ["Gabapentinoids","Pregabalin",/Capsule/i],
+    // ===== Gabapentinoid (existing) =====
+    ["Gabapentinoid","Gabapentin",/.*/],
+    ["Gabapentinoid","Pregabalin",/Capsule/i],
 
     // ===== Benzodiazepines / Z-drugs (under your BZRA umbrella) =====
-    ["Benzodiazepines / Z-Drug (BZRA)","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Benzodiazepines / Z-Drug (BZRA)","Diazepam",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Benzodiazepines / Z-Drug (BZRA)","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
-    ["Benzodiazepines / Z-Drug (BZRA)","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    ["Benzodiazepines / Z-Drug (BZRA)","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
-    ["Benzodiazepines / Z-Drug (BZRA)", "Zolpidem", /^Slow Release Tablet$/i],
+    ["Benzodiazepine / Z-Drug (BZRA)","Oxazepam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepine / Z-Drug (BZRA)","Diazepam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepine / Z-Drug (BZRA)","Alprazolam",/(Tablet|Tab|Capsule|Cap)/i],
+    ["Benzodiazepine / Z-Drug (BZRA)","Clonazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    ["Benzodiazepine / Z-Drug (BZRA)","Lorazepam",/(Tablet|Tab|Capsule|Cap|ODT|Wafer)/i],
+    ["Benzodiazepine / Z-Drug (BZRA)", "Zolpidem", /^Slow Release Tablet$/i],
 
     // ===== Proton Pump Inhibitors (PPIs) =====
     ["Proton Pump Inhibitor","Pantoprazole",/(Tablet|Tab|Capsule|Cap)/i],
@@ -506,7 +506,7 @@ function bzraVisibilityTick() {
   if (!box) return;
 
   const cls = document.getElementById("classSelect")?.value || "";
-  const isBZRA = (cls === "Benzodiazepines / Z-Drug (BZRA)");
+  const isBZRA = (cls === "Benzodiazepine / Z-Drug (BZRA)");
 
   box.style.display = isBZRA ? "block" : "none";
 }
@@ -522,7 +522,7 @@ function bidPrefVisibilityTick(){
     (cls === "Opioid") && (/SR/i.test(form)) && (/Tablet/i.test(form));
 
   const isPregabalin =
-    (cls === "Gabapentinoids") && (/^Pregabalin$/i.test(med));
+    (cls === "Gabapentinoid") && (/^Pregabalin$/i.test(med));
 
   box.style.display = (isOpioidSrTablet || isPregabalin) ? "" : "none";
 }
@@ -1933,7 +1933,7 @@ const SUGGESTED_PRACTICE = {
 • Slower taper may be appropriate depending on symptoms.
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
 
-  gabapentinoids: `• Reduce X% every Y weeks with close monitoring 
+  gabapentinoid: `• Reduce X% every Y weeks with close monitoring 
 [INSERT ALGORITHM]  [INSERT SUMMARY OF EVIDENCE] [INSERT GUIDE TO RULESET]`,
   
   ppi: `•	Reduce dose by 50% every 1-2 weeks 
@@ -1976,7 +1976,7 @@ They can help you plan and monitor your dose reduction safely.
 `,
   antipsychotic: "Insert specific footer + disclaimer for Antipsychotics",
   ppi:           "Insert specific footer + disclaimer for Proton Pump Inhibitors",
-  gabapentinoids:"Insert specific footer + disclaimer for Gabapentinoids",
+  gabapentinoid:"Insert specific footer + disclaimer for Gabapentinoid",
   _default:      ""
 };
 
@@ -1989,7 +1989,7 @@ function mapClassToKey(label){
   if (s.includes("antipsych")) return "antipsychotic";
   if (s.includes("proton") || s.includes("ppi")) return "ppi";
   if (s.includes("opioid") || s.includes("fentanyl") || s.includes("buprenorphine")) return "opioids";
-  if (s.includes("gaba") || s.includes("gabapentin") || s.includes("pregabalin")) return "gabapentinoids";
+  if (s.includes("gaba") || s.includes("gabapentin") || s.includes("pregabalin")) return "gabapentinoid";
   return null;
 }
 
@@ -2000,7 +2000,7 @@ function footerKeyFromLabel(label) {
   if (s.includes("benzodiazep") || s.includes("z-drug") || s.includes("z drug")) return "bzra";
   if (s.includes("antipsych")) return "antipsychotic";
   if (s.includes("proton") || s.includes("ppi")) return "ppi";
-  if (s.includes("gaba") || s.includes("gabapentin") || s.includes("pregabalin")) return "gabapentinoids";
+  if (s.includes("gaba") || s.includes("gabapentin") || s.includes("pregabalin")) return "gabapentinoid";
   return null;
 }
 
@@ -2032,7 +2032,7 @@ function updateBestPracticeBox() {
   bzra: "Benzodiazepines and Z-drugs for insomnia in older adults",
   antipsychotic: "Antipsychotics",
   ppi: "Proton Pump Inhibitors",
-  gabapentinoids: "Gabapentinoids"
+  gabapentinoid: "Gabapentinoid"
 };
   
   const text = SUGGESTED_PRACTICE[key] || "";
@@ -2540,7 +2540,7 @@ function renderPatchTable(stepRows) {
 
 //#endregion
 //#region 6. Catalogue (commercial strengths) & Label Helpers
-const CLASS_ORDER = ["Opioid","Benzodiazepines / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor","Gabapentinoids"];
+const CLASS_ORDER = ["Opioid","Benzodiazepine / Z-Drug (BZRA)","Antipsychotic","Proton Pump Inhibitor","Gabapentinoid"];
 
 const CATALOG = {
   Opioid: {
@@ -2552,7 +2552,7 @@ const CATALOG = {
     Buprenorphine: { Patch: ["5 mcg/hr","10 mcg/hr","15 mcg/hr","20 mcg/hr","25 mcg/hr","30 mcg/hr","40 mcg/hr"] },
     Fentanyl: { Patch: ["12 mcg/hr","25 mcg/hr","50 mcg/hr","75 mcg/hr","100 mcg/hr"] },
   },
-  "Benzodiazepines / Z-Drug (BZRA)": {
+  "Benzodiazepine / Z-Drug (BZRA)": {
     Alprazolam: { Tablet: ["0.25 mg","0.5 mg","1 mg","2 mg"] },
     Clonazepam: { Tablet: ["0.5 mg","2 mg"] },
     Diazepam: { Tablet: ["2 mg","5 mg"] },
@@ -2576,7 +2576,7 @@ const CATALOG = {
     Pantoprazole: { Tablet: ["20 mg","40 mg"] },
     Rabeprazole: { Tablet: ["10 mg","20 mg"] },
   },
-  "Gabapentinoids": {
+  "Gabapentinoid": {
     Pregabalin: {"Capsule": [25, 75, 150, 300] },
     Gabapentin: {"Tablet/Capsule": [100, 300, 400, 600, 800]},
   }
@@ -2686,11 +2686,11 @@ function canSplitTablets(cls, form, med){
     return { half:false, quarter:false };
   }
   // Classes that never split
-  if (cls === "Opioid" || cls === "Proton Pump Inhibitor" || cls === "Gabapentinoids") {
+  if (cls === "Opioid" || cls === "Proton Pump Inhibitor" || cls === "Gabapentinoid") {
     return { half:false, quarter:false };
   }
   // BZRA: plain tablets can be split; quartering depends on the toggle
-  if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
+  if (cls === "Benzodiazepine / Z-Drug (BZRA)") {
     const nonSplittable = /odt|wafer|dispers/i.test(f); // extra guard, though blocked above
     if (nonSplittable) return { half:false, quarter:false };
     const allowQuarter = (typeof isBzraQuarterAllowed === "function" && isBzraQuarterAllowed());
@@ -2712,9 +2712,9 @@ function defaultFreq(){
   const med = $("medicineSelect")?.value;
 
   if (form === "Patch") return "PATCH";
-  if (cls === "Benzodiazepines / Z-Drug (BZRA)") return "PM";
+  if (cls === "Benzodiazepine / Z-Drug (BZRA)") return "PM";
   if (cls === "Proton Pump Inhibitor") return "DIN";
-  if (cls === "Gabapentinoids") {
+  if (cls === "Gabapentinoid") {
     if (med === "Gabapentin")  return "TID";
     if (med === "Pregabalin")  return "BID";
     return "BID";
@@ -2778,10 +2778,10 @@ sSel.onchange = (e) => {
     if(/Patch/i.test(form)){
       const o=document.createElement("option"); o.value="PATCH"; o.textContent=($("medicineSelect").value==="Fentanyl")?"Every 3 days":"Every 7 days";
       fSel.appendChild(o); fSel.disabled=true;
-    } else if(cls==="Benzodiazepines / Z-Drug (BZRA)"){
+    } else if(cls==="Benzodiazepine / Z-Drug (BZRA)"){
       const o=document.createElement("option"); o.value="PM"; o.textContent="Daily at night";
       fSel.appendChild(o); fSel.disabled=true;
-    } else if(cls==="Opioid" || cls==="Antipsychotic" || cls==="Proton Pump Inhibitor" || cls==="Gabapentinoids"){
+    } else if(cls==="Opioid" || cls==="Antipsychotic" || cls==="Proton Pump Inhibitor" || cls==="Gabapentinoid"){
       [
         ["AM","In the morning"],["MID","At midday"],["DIN","At dinner"],["PM","At night"],
         ["BID","Twice a day (morning & night)"],["TID","Three times a day"],["QID","Four times a day"]
@@ -2868,7 +2868,7 @@ function specialInstructionFor(){
   const med=$("medicineSelect")?.value || "";
   const form=$("formSelect")?.value || "";
 
-  if(cls==="Benzodiazepines / Z-Drug (BZRA)" || cls==="Antipsychotic") return "";
+  if(cls==="Benzodiazepine / Z-Drug (BZRA)" || cls==="Antipsychotic") return "";
 
   if (/Patch/i.test(form)) return "Special instruction: apply to intact skin as directed. Do not cut patches.";
 
@@ -2906,7 +2906,7 @@ function allowedPiecesMg(cls, med, form){
 function lowestStepMg(cls, med, form){
   // BZRA: align with the BZRA-specific grid logic so step size and composition
   // use the same smallest piece (LCS + quarter toggle).
-  if (cls === "Benzodiazepines / Z-Drug (BZRA)") {
+  if (cls === "Benzodiazepins / Z-Drug (BZRA)") {
     // Zolpidem MR stays on its fixed 6.25 mg grid
     if (/Zolpidem/i.test(med) && isMR(form)) return 6.25;
 
@@ -2982,7 +2982,7 @@ const slots =
     });
   });
 
-  if($("classSelect").value==="Benzodiazepines / Z-Drug (BZRA)"){ packs.AM={}; packs.MID={}; packs.DIN={}; }
+  if($("classSelect").value==="Benzodiazepine / Z-Drug (BZRA)"){ packs.AM={}; packs.MID={}; packs.DIN={}; }
   return packs;
 }
 
@@ -3642,7 +3642,7 @@ return (function recomposeSlots_AP(slots){
 }
 
 
-/* ===== Gabapentinoids
+/* ===== Gabapentinoid
    Gabapentin:
      • Modes:
        (a) TID: AM+MID+PM
@@ -3777,7 +3777,7 @@ const candidateSums = (() => {
     try { if (typeof strengthsForSelected === 'function') arr = strengthsForSelected() || []; } catch(_){}
     try { if (!arr.length && typeof allowedStrengthsFilteredBySelection === 'function') arr = allowedStrengthsFilteredBySelection() || []; } catch(_){}
     if (!arr.length) {
-      try { if (typeof strengthsForPicker === "function") arr = strengthsForPicker("Gabapentinoids", med, form) || []; } catch(_){}
+      try { if (typeof strengthsForPicker === "function") arr = strengthsForPicker("Gabapentinoid", med, form) || []; } catch(_){}
     }
     return arr.map(toMgLoose).filter(n=>n>0).sort((a,b)=>a-b);
   }
@@ -3913,9 +3913,9 @@ const candidateSums = (() => {
     return out;
   }
 }
-/* ===== Benzodiazepines / Z-Drug (BZRA) — PM-only daily taper with selection & split rules ===== */
+/* ===== Benzodiazepine / Z-Drug (BZRA) — PM-only daily taper with selection & split rules ===== */
 function stepBZRA(packs, percent, med, form){
-  const cls = "Benzodiazepines / Z-Drug (BZRA)";
+  const cls = "Benzodiazepine / Z-Drug (BZRA)";
   const tot = packsTotalMg(packs);
   if (tot <= EPS) return packs;
 
@@ -4059,7 +4059,7 @@ function selectionGridStepBZRA(med, form, selectedMg){
     return 6.25;
   }
 
-  const cls = "Benzodiazepines / Z-Drug (BZRA)";
+  const cls = "Benzodiazepine / Z-Drug (BZRA)";
 
   if ((!mgList || !mgList.length) && typeof strengthsForPicker === "function") {
     const all = strengthsForPicker(cls, med, form) || [];
@@ -4208,8 +4208,8 @@ if (cls === "Antipsychotic") {
 const doStep = (phasePct) => {
   if (cls === "Opioid") packs = stepOpioid_Shave(packs, phasePct, cls, med, form);
   else if (cls === "Proton Pump Inhibitor") packs = stepPPI(packs, phasePct, cls, med, form);
-  else if (cls === "Benzodiazepines / Z-Drug (BZRA)") packs = stepBZRA(packs, phasePct, med, form);
-  else if (cls === "Gabapentinoids") packs = stepGabapentinoid(packs, phasePct, med, form);
+  else if (cls === "Benzodiazepine / Z-Drug (BZRA)") packs = stepBZRA(packs, phasePct, med, form);
+  else if (cls === "Gabapentinoid") packs = stepGabapentinoid(packs, phasePct, med, form);
   else packs = stepAP(packs, phasePct, med, form);
 };
 
@@ -4242,7 +4242,7 @@ if (packsTotalMg(packs) > EPS) {
 
 // If a BID class has reached selected-min BID and the class-lowest is among selections,
 // schedule PM-only at next boundary, then Stop at the following boundary.
-if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoids")) {
+if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoid")) {
   const selMin = selectedMinMg(cls, med, form);
   if (isAtSelectedBID(packs, selMin) && lowestSelectedForClassIsPresent(cls, med, form)) {
   window._pmOnlySnapshot = singleDoseFrom(packs);
@@ -4335,7 +4335,7 @@ if (typeof window !== "undefined" && window._forceReviewNext){
   }
 
   // Re-check: if we just landed at selected-min BID with lowest selected, schedule PM-only next
-if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoids")) {
+if (packsTotalMg(packs) > EPS && (cls === "Opioid" || cls === "Gabapentinoid")) {
   const selMin = selectedMinMg(cls, med, form);
   if (isAtSelectedBID(packs, selMin) && lowestSelectedForClassIsPresent(cls, med, form)) {
   window._pmOnlySnapshot = singleDoseFrom(packs);
@@ -4778,7 +4778,7 @@ bases.forEach(b => {
   // --- 1. Choose the wording unit ("tablet" vs "capsule") ---
   let doseUnit = "tablet";
 
-  if (r.cls === "Gabapentinoids" && r.med === "Gabapentin") {
+  if (r.cls === "Gabapentinoid" && r.med === "Gabapentin") {
     // Use the same strength→form mapping we used for the instructions:
     const formForStrength =
       (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
@@ -4801,7 +4801,7 @@ bases.forEach(b => {
   if (/Oxycodone\s*\/\s*Naloxone/i.test(r.med)) {
     // Special paired label for oxycodone/naloxone
     strengthLabel = oxyNxPairLabel(b);
-  } else if (r.cls === "Gabapentinoids" && r.med === "Gabapentin") {
+  } else if (r.cls === "Gabapentinoid" && r.med === "Gabapentin") {
     // Gabapentin: use the same Capsule/Tablet mapping per strength
     const formForStrength =
       (typeof GABA_FORM_BY_STRENGTH !== "undefined" && GABA_FORM_BY_STRENGTH)
