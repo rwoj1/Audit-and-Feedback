@@ -4874,22 +4874,19 @@ Hooks into renderStandardTable/renderPatchTable
     rows: [],
     clear(){ this.rows = []; },
 
-    // Show / hide the variance banner based on current rows
     updateVarianceNotice(){
       const host = document.getElementById("varianceNotice");
       if (!host) return;
-      const EPS = 1e-6;
       const hasVariance = this.rows.some(r => (r.actualPct - r.cfgPct) > EPS);
       host.style.display = hasVariance ? "" : "none";
     },
-    
-    // Build from the same rows that renderers use (no new math)
+
     buildFromRows(stepRows){
       this.clear();
 
       const cls  = document.getElementById("classSelect")?.value || "";
-      const med  = document.getElementById("medicineSelect")?.value || "";
       const form = document.getElementById("formSelect")?.value || "";
+      const isPatch = /Patch/i.test(form);
 
       const p1Pct = num(document.getElementById("p1Percent")?.value);
       const p2Pct = num(document.getElementById("p2Percent")?.value);
@@ -4899,44 +4896,56 @@ Hooks into renderStandardTable/renderPatchTable
         ? (p2StartInput._flatpickr?.selectedDates?.[0] || (p2StartInput.value ? new Date(p2StartInput.value) : null))
         : null;
 
-      const unit = /Patch/i.test(form) ? "mcg/h" : "mg";
+      const unit = isPatch ? "mcg/h" : "mg";
 
-      // Derive starting total from current inputs (no recomputation of future rows)
+      // --- Baseline total from current inputs ---
       let prevTotal = 0;
+
       if (cls === "Antipsychotic" && typeof window.apSeedPacksFromFourInputs === "function") {
         prevTotal = safePacksTotalMg(window.apSeedPacksFromFourInputs() || {});
-      } else if (/Patch/i.test(form)) {
+      } else if (isPatch) {
         prevTotal = sumPatchesFromDoseLines();
-      } 
-      // PATCH SAFETY NET: if doseLines didn’t yield a total, try the first row in the rendered plan
-if (/Patch/i.test(form) && prevTotal <= EPS) {
-  const firstDoseRow = (stepRows || []).find(r => !(r.stop || r.review));
-  const fromRow = patchTotalFromRow(firstDoseRow);
-  if (fromRow > EPS) prevTotal = fromRow;
-}
-      else if (typeof window.buildPacksFromDoseLines === "function") {
+
+        // PATCH SAFETY NET: if doseLines didn’t yield a total, try first plan row
+        if (prevTotal <= EPS) {
+          const firstDoseRow = (stepRows || []).find(r => !(r.stop || r.review));
+          const fromRow = patchTotalFromRow(firstDoseRow);
+          if (fromRow > EPS) prevTotal = fromRow;
+        }
+      } else if (typeof window.buildPacksFromDoseLines === "function") {
         prevTotal = safePacksTotalMg(window.buildPacksFromDoseLines() || {});
       }
-      
-      let keptAny = false; // PATCH: ensure we keep the first row
+
+      let keptAny = false;
+
       (stepRows || []).forEach((row) => {
-        if (row.stop || row.review) return; // skip non-dose rows
+        if (row.stop || row.review) return;
 
-        const dateStr   = row.dateStr || row.date || row.when || "";
-        const cfgPct    = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
-        const rawTarget = prevTotal * (1 - (cfgPct / 100)); // informational (unrounded)
+        const dateStr = row.dateStr || row.date || row.when || "";
 
-// Chosen total comes from the rendered row itself
-let chosen = 0;
-if (/Patch/i.test(form)) {
-  chosen = patchTotalFromRow(row);
-  if (chosen <= EPS) chosen = prevTotal; // fallback ONLY after prevTotal is correct
-} else {
-  chosen = safePacksTotalMg(row.packs);
-}
-        // PATCH ONLY: collapse rows where the total dose didn't change
-      if (/Patch/i.test(form) && keptAny && prevTotal > EPS && Math.abs(chosen - prevTotal) < EPS) return;
-        const actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
+        // Read the chosen dose from the plan row itself
+        let chosen = 0;
+        if (isPatch) {
+          chosen = patchTotalFromRow(row);
+          if (chosen <= EPS) chosen = prevTotal; // fallback only if row couldn't be read
+        } else {
+          chosen = safePacksTotalMg(row.packs);
+        }
+
+        // PATCH ONLY: collapse rows where the dose didn't change (optional)
+        if (isPatch && keptAny && prevTotal > EPS && Math.abs(chosen - prevTotal) < EPS) return;
+
+        const cfgPct = pickConfiguredPercentForDate(dateStr, p1Pct, p2Pct, p2Start);
+
+        // Step 1 = baseline row (no reduction yet)
+        let rawTarget = prevTotal;
+        let actualPct = 0;
+
+        // Step 2+ = reduction from previous total
+        if (keptAny) {
+          rawTarget = prevTotal * (1 - (cfgPct / 100));
+          actualPct = prevTotal > EPS ? (100 * (1 - (chosen / prevTotal))) : 0;
+        }
 
         this.rows.push({
           step: this.rows.length + 1,
@@ -4947,11 +4956,11 @@ if (/Patch/i.test(form)) {
           unit,
           actualPct
         });
-      keptAny = true;
 
-        prevTotal = chosen; // advance for next step’s comparisons
+        keptAny = true;
+        prevTotal = chosen;
       });
-            // After all rows built, update the variance notice
+
       this.updateVarianceNotice();
     },
 
@@ -4967,19 +4976,13 @@ if (/Patch/i.test(form)) {
         return;
       }
 
-      const tbl   = document.createElement("table");
+      const tbl = document.createElement("table");
       tbl.className = "plan-table calc-table";
 
       const thead = document.createElement("thead");
-      const trh   = document.createElement("tr");
-      [
-        "Step",
-        "Date",
-        "Calculated Dose",
-        "Selected % Change",
-        "Rounded Dose",
-        "Actual % Change"
-      ].forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
+      const trh = document.createElement("tr");
+      ["Step","Date","Calculated Dose","Selected % Change","Rounded Dose","Actual % Change"]
+        .forEach(h => { const th = document.createElement("th"); th.textContent = h; trh.appendChild(th); });
       thead.appendChild(trh);
       tbl.appendChild(thead);
 
@@ -5001,6 +5004,10 @@ if (/Patch/i.test(form)) {
       hostCard.style.display = "";
     }
   };
+
+  // Keep your existing wrapper/hook code below this point (do not delete it)
+  // (i.e., the code that calls calcLogger.buildFromRows(rows) after rendering)
+})();
 
   // ---------- helpers ----------
   function num(v){ const n = parseFloat(v ?? ""); return isFinite(n) ? n : 0; }
