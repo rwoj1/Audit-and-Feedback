@@ -5029,13 +5029,25 @@ function sumPatchesFromDoseLines(){
   const form = document.getElementById("formSelect")?.value || "";
   if (!/Patch/i.test(form)) return 0;
 
-  const lines = (typeof doseLines !== "undefined" && Array.isArray(doseLines))
-    ? doseLines
-    : (window.doseLines || []);
+  // IMPORTANT: support BOTH "doseLines" (your patch builder uses this)
+  // and "window.doseLines" (older versions used this)
+  const lines =
+    (typeof window !== "undefined" && Array.isArray(window.doseLines) && window.doseLines) ? window.doseLines :
+    (typeof doseLines !== "undefined" && Array.isArray(doseLines) && doseLines) ? doseLines :
+    [];
 
   return lines.reduce((sum, ln) => {
-    const strength = ln?.strengthStr ?? ln?.strengthLabel ?? ln?.strength ?? "";
-    const rawQty   = ln?.qty ?? ln?.quantity ?? ln?.count ?? 0;
+    const strength =
+      ln?.strengthStr ??
+      ln?.strengthLabel ??
+      ln?.strength ??
+      "";
+
+    const rawQty =
+      ln?.qty ??
+      ln?.quantity ??
+      ln?.count ??
+      0;
 
     const rate = parsePatchRate(strength);
     const qty  = Math.max(0, Math.floor(parseFloat(rawQty) || 0));
@@ -5043,6 +5055,7 @@ function sumPatchesFromDoseLines(){
     return sum + (Number.isFinite(rate) ? rate : 0) * qty;
   }, 0);
 }
+
 function sumPatches(list){
   try {
     return (list || []).reduce((s, p) => {
@@ -5054,14 +5067,15 @@ function sumPatches(list){
   }
 }
 function patchTotalFromRow(row){
-  // 1) If patch renderer stored numeric totals, use them
   if (Number.isFinite(row?.totalRate)) return row.totalRate;
   if (Number.isFinite(row?.total)) return row.total;
 
-  // 2) If renderer stored an array of patch items
-  if (Array.isArray(row?.patches)) return sumPatches(row.patches);
+  // patch rows store an array like [5, 30, 5]
+  if (Array.isArray(row?.patches)) {
+    return row.patches.reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
+  }
 
-  // 3) If it stored an object map (rare fallback)
+  // fallback: object like { "25 mcg/hr": 1, "12.5 mcg/hr": 1 }
   if (row && row.packs && typeof row.packs === "object") {
     let total = 0;
     for (const k of Object.keys(row.packs)) {
@@ -5070,6 +5084,7 @@ function patchTotalFromRow(row){
     }
     return total;
   }
+
   return 0;
 }
  
