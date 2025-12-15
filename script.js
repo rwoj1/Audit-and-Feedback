@@ -5005,10 +5005,6 @@ Hooks into renderStandardTable/renderPatchTable
     }
   };
 
-  // Keep your existing wrapper/hook code below this point (do not delete it)
-  // (i.e., the code that calls calcLogger.buildFromRows(rows) after rendering)
-})();
-
   // ---------- helpers ----------
   function num(v){ const n = parseFloat(v ?? ""); return isFinite(n) ? n : 0; }
 
