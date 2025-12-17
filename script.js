@@ -510,6 +510,16 @@ function bzraVisibilityTick() {
 
   box.style.display = isBZRA ? "block" : "none";
 }
+function printAdminVisibilityTick(){
+  const btn = document.getElementById("printAdminBtn");
+  if (!btn) return;
+
+  const med  = document.getElementById("medicineSelect")?.value || "";
+  const form = document.getElementById("formSelect")?.value || "";
+
+  const hide = /Patch/i.test(form) && /(Fentanyl|Buprenorphine)/i.test(med);
+  btn.style.display = hide ? "none" : "";
+}
 function bidPrefVisibilityTick(){
   const box = document.getElementById("bidPrefCard");
   if (!box) return;
@@ -1577,7 +1587,10 @@ function _printCSS(){
 function buildAdministrationCalendars() {
   const { table, type } = getPrintTableAndType();
   if (!table) return () => {};
-
+  const med  = document.getElementById("medicineSelect")?.value || "";
+  const form = document.getElementById("formSelect")?.value || "";
+  if (/Patch/i.test(form) && /(Fentanyl|Buprenorphine)/i.test(med)) return () => {};
+  
   // Helper: parse whatever date text is in the table into a Date
   const parseDMY = (s) => {
     const text = String(s || "").replace(/\s+/g, " ").trim();
@@ -1633,6 +1646,32 @@ function buildAdministrationCalendars() {
   const startDate = uniqDates[0];
   const endDate   = uniqDates[uniqDates.length - 1];
 
+    // Determine which time slots are actually used in the generated table
+  // (and rename Dinner -> Evening in the admin record)
+  const SLOT_COLS = [
+    { sel: "td.col-am",  label: "Morning" },
+    { sel: "td.col-mid", label: "Midday" },
+    { sel: "td.col-din", label: "Evening" }, // rename here
+    { sel: "td.col-pm",  label: "Night" },
+  ];
+
+  let usedSlots = SLOT_COLS;
+
+  // Only meaningful for the standard (non-patch) table
+  if (type === "standard") {
+    const rowsAll = Array.from(table.querySelectorAll("tbody.step-group tr"));
+    const isUsed = (sel) => rowsAll.some(tr => {
+      const td = tr.querySelector(sel);
+      if (!td) return false;
+      const t = (td.textContent || "").replace(/\s+/g, "").trim();
+      return t !== "" && t !== "0" && t !== "0.0" && t !== "0.00";
+    });
+
+    const filtered = SLOT_COLS.filter(s => isUsed(s.sel));
+    if (filtered.length) usedSlots = filtered; // if none found, keep all 4 as fallback
+  }
+
+  
   const sameYMD = (a, b) =>
     a.getFullYear() === b.getFullYear() &&
     a.getMonth()    === b.getMonth() &&
@@ -1728,28 +1767,23 @@ function buildAdministrationCalendars() {
         cellDate >= startDate &&
         cellDate <= endDate;
 
-      // Light grey for days entirely outside the taper window
-      if (!inWindow) {
-        td.classList.add("admin-day-outside");
-      }
-
-      const stepDay   = isStepDate(cellDate);
-      const reviewDay = isReviewDate(cellDate);
-
-      // Four tick boxes on EVERY day
-      const doses = ["Morning","Midday","Dinner","Night"];
-      doses.forEach(name => {
-        const row = document.createElement("div");
-        row.className = "dose-row";
-        const box = document.createElement("span");
-        box.className = "admin-checkbox";
-        const text = document.createElement("span");
-        text.textContent = ` ${name}`;
-        row.appendChild(box);
-        row.appendChild(text);
-        td.appendChild(row);
-      });
-
+// Light grey for days entirely outside the taper window
+if (!inWindow) {
+  td.classList.add("admin-day-outside");
+} else {
+  // tick boxes ONLY on days within the taper window (not the greyed-out days)
+  usedSlots.forEach(({ label }) => {
+    const row = document.createElement("div");
+    row.className = "dose-row";
+    const box = document.createElement("span");
+    box.className = "admin-checkbox";
+    const text = document.createElement("span");
+    text.textContent = ` ${label}`;
+    row.appendChild(box);
+    row.appendChild(text);
+    td.appendChild(row);
+  });
+}
       // Step-down days: thicker border + underlined date + optional "Step" tag
       if (stepDay) {
         td.classList.add("admin-day-step");
@@ -5270,6 +5304,7 @@ function init(){
     renderProductPicker();
     bzraVisibilityTick();
     bidPrefVisibilityTick();
+    printAdminVisibilityTick();
     if (typeof setFooterText === "function") setFooterText(document.getElementById("classSelect")?.value || "");
     resetDoseLinesToLowest();
     setDirty(true);
@@ -5283,6 +5318,7 @@ function init(){
     applyPatchIntervalAttributes();
     renderProductPicker();
     bidPrefVisibilityTick();
+    printAdminVisibilityTick();
     if (typeof setFooterText === "function") setFooterText(document.getElementById("classSelect")?.value || "");
     resetDoseLinesToLowest();
     setDirty(true);
