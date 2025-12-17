@@ -2870,12 +2870,12 @@ sSel.onchange = (e) => {
       fSel.appendChild(o); fSel.disabled=true;
     } else if(cls==="Opioid" || cls==="Antipsychotic" || cls==="Proton Pump Inhibitor" || cls==="Gabapentinoid"){
       [
-        ["AM","In the morning"],["MID","At midday"],["DIN","At dinner"],["PM","At night"],
+        ["AM","In the morning"],["MID","At midday"],["DIN","In the evening"],["PM","At night"],
         ["BID","Twice a day (morning & night)"],["TID","Three times a day"],["QID","Four times a day"]
       ].forEach(([v,t])=>{ const o=document.createElement("option"); o.value=v; o.textContent=t; fSel.appendChild(o); });
       fSel.disabled=false;
     } else {
-      [["AM","Daily in the morning"],["MID","Daily at midday"],["DIN","Daily at dinner"],["PM","Daily at night"]]
+      [["AM","Daily in the morning"],["MID","Daily at midday"],["DIN","Daily in the evening"],["PM","Daily at night"]]
         .forEach(([v,t])=>{ const o=document.createElement("option"); o.value=v; o.textContent=t; fSel.appendChild(o); });
       fSel.disabled=false;
     }
@@ -4877,7 +4877,7 @@ bases.forEach(b => {
 
   if (q.AM)  lines.push(`Take ${unitsPhraseDigits(q.AM, doseUnit)} in the morning`);
   if (q.MID) lines.push(`Take ${unitsPhraseDigits(q.MID, doseUnit)} at midday`);
-  if (q.DIN) lines.push(`Take ${unitsPhraseDigits(q.DIN, doseUnit)} at dinner`);
+  if (q.DIN) lines.push(`Take ${unitsPhraseDigits(q.DIN, doseUnit)} in the evening`);
   if (q.PM)  lines.push(`Take ${unitsPhraseDigits(q.PM, doseUnit)} at night`);
 
   if (!lines.length) return;
