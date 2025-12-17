@@ -1603,6 +1603,7 @@ function buildAdministrationCalendars() {
   // Scan table rows to find all taper dates + any review dates
   const allDates = [];
   const reviewDates = [];
+  const stopDates = [];
 
   const rows = table.querySelectorAll("tbody.step-group tr");
   rows.forEach(tr => {
@@ -1624,12 +1625,12 @@ function buildAdministrationCalendars() {
     allDates.push(dt);
 
     // Final / review cell is marked with "final-cell"
-    const finalCell = tr.querySelector("td.final-cell");
-    if (finalCell) {
-      const msg = (finalCell.textContent || "").toLowerCase();
-      if (msg.includes("review")) {
-        reviewDates.push(dt);
-      }
+const finalCell = tr.querySelector("td.final-cell");
+if (finalCell) {
+  const msg = (finalCell.textContent || "").toLowerCase();
+  if (msg.includes("review")) reviewDates.push(dt);
+  if (msg.includes("stop")) stopDates.push(dt);
+}
     }
   });
 
@@ -1718,6 +1719,9 @@ const slotsForDay = (d) => {
 
   const isReviewDate = (d) =>
     reviewDates.some(r => sameYMD(r, d));
+  
+  const isStopDate = (d) =>
+  stopDates.some(s => sameYMD(s, d));
 
   const isStepDate = (d) =>
     uniqDates.some(dt => sameYMD(dt, d));
@@ -1808,27 +1812,27 @@ const slotsForDay = (d) => {
         
       const stepDay = isStepDate(cellDate);
       const reviewDay = isReviewDate(cellDate);
-
+      const stopDay = isStopDate(cellDate);
       
 // Light grey for days entirely outside the taper window
 if (!inWindow) {
   td.classList.add("admin-day-outside");
-} else {
-// tick boxes ONLY on days within the taper window (not the greyed-out days)
-slotsForDay(cellDate).forEach(({ label }) => {
-  const row = document.createElement("div");
-  row.className = "dose-row";
-  const box = document.createElement("span");
-  box.className = "admin-checkbox";
-  const text = document.createElement("span");
-  text.textContent = ` ${label}`;
-  row.appendChild(box);
-  row.appendChild(text);
-  td.appendChild(row);
-});
+} else if (!stopDay) {
+  // tick boxes ONLY on days within the taper window AND not a Stop day
+  slotsForDay(cellDate).forEach(({ label }) => {
+    const row = document.createElement("div");
+    row.className = "dose-row";
+    const box = document.createElement("span");
+    box.className = "admin-checkbox";
+    const text = document.createElement("span");
+    text.textContent = ` ${label}`;
+    row.appendChild(box);
+    row.appendChild(text);
+    td.appendChild(row);
+  });
 }
   if (inWindow) {
-  if (stepDay) {
+  if (stepDay && !stopDay) {
     td.classList.add("admin-day-step");
     if (!reviewDay) {
       const stepTag = document.createElement("div");
@@ -1845,6 +1849,13 @@ slotsForDay(cellDate).forEach(({ label }) => {
     reviewTag.textContent = "See prescriber";
     td.appendChild(reviewTag);
   }
+       if (stopDay) {
+  td.classList.add("admin-day-review"); 
+  const stopTag = document.createElement("div");
+  stopTag.className = "review-label";
+  stopTag.textContent = "Stop";
+  td.appendChild(stopTag);
+}
 }
       currentRow.appendChild(td);
     }
