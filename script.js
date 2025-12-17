@@ -1646,32 +1646,72 @@ function buildAdministrationCalendars() {
   const startDate = uniqDates[0];
   const endDate   = uniqDates[uniqDates.length - 1];
 
-    // Determine which time slots are actually used in the generated table
-  // (and rename Dinner -> Evening in the admin record)
-  const SLOT_COLS = [
-    { sel: "td.col-am",  label: "Morning" },
-    { sel: "td.col-mid", label: "Midday" },
-    { sel: "td.col-din", label: "Evening" }, // rename here
-    { sel: "td.col-pm",  label: "Night" },
-  ];
+// Time slots + labels (Dinner -> Evening)
+const SLOT_COLS = [
+  { sel: "td.col-am",  key: "AM",  label: "Morning" },
+  { sel: "td.col-mid", key: "MID", label: "Midday" },
+  { sel: "td.col-din", key: "EVE", label: "Evening" },
+  { sel: "td.col-pm",  key: "PM",  label: "Night" },
+];
 
-  let usedSlots = SLOT_COLS;
+// Build a map: stepDateMs -> Set of slots used at that step
+const stepSlots = new Map();
 
-  // Only meaningful for the standard (non-patch) table
-  if (type === "standard") {
-    const rowsAll = Array.from(table.querySelectorAll("tbody.step-group tr"));
-    const isUsed = (sel) => rowsAll.some(tr => {
-      const td = tr.querySelector(sel);
-      if (!td) return false;
-      const t = (td.textContent || "").replace(/\s+/g, "").trim();
-      return t !== "" && t !== "0" && t !== "0.0" && t !== "0.00";
+if (type === "standard") {
+  const rowsAll = Array.from(table.querySelectorAll("tbody.step-group tr"));
+
+  let currentStepMs = null;
+
+  const nonZero = (td) => {
+    const t = (td?.textContent || "").replace(/\s+/g, "").trim();
+    if (!t) return false;
+    // treat any non-zero as used (covers "1", "0.5", tablet icons with text, etc)
+    const n = Number(t);
+    return Number.isFinite(n) ? n !== 0 : true;
+  };
+
+  rowsAll.forEach(tr => {
+    // Step date appears only on the first row of each group
+    const tdDate = tr.querySelector("td.col-date");
+    const dateText = (tdDate?.textContent || "").trim();
+    if (dateText) {
+      const dt = parseDMY(dateText);
+      if (dt) currentStepMs = dt.getTime();
+    }
+    if (currentStepMs == null) return;
+
+    // Ensure a set exists
+    if (!stepSlots.has(currentStepMs)) stepSlots.set(currentStepMs, new Set());
+
+    // Add any used slots from this row
+    SLOT_COLS.forEach(s => {
+      const td = tr.querySelector(s.sel);
+      if (td && nonZero(td)) stepSlots.get(currentStepMs).add(s.key);
     });
+  });
+}
 
-    const filtered = SLOT_COLS.filter(s => isUsed(s.sel));
-    if (filtered.length) usedSlots = filtered; // if none found, keep all 4 as fallback
+// Sorted list of step dates (ms) for lookup
+const stepMsList = uniqDates.map(d => d.getTime()).sort((a,b)=>a-b);
+
+// For any calendar day, use the most recent step date <= that day
+const slotsForDay = (d) => {
+  const dayMs = d.getTime();
+  let chosenMs = null;
+  for (let i = 0; i < stepMsList.length; i++) {
+    if (stepMsList[i] <= dayMs) chosenMs = stepMsList[i];
+    else break;
   }
+  const set = (chosenMs != null) ? stepSlots.get(chosenMs) : null;
 
-  
+  // Fallback: if we couldn't detect slots, show all 4 (keeps behavior safe)
+  const keys = (set && set.size) ? Array.from(set) : SLOT_COLS.map(s => s.key);
+
+  // Return slot objects in the standard display order
+  return SLOT_COLS.filter(s => keys.includes(s.key));
+};
+}
+ 
   const sameYMD = (a, b) =>
     a.getFullYear() === b.getFullYear() &&
     a.getMonth()    === b.getMonth() &&
@@ -1775,18 +1815,18 @@ function buildAdministrationCalendars() {
 if (!inWindow) {
   td.classList.add("admin-day-outside");
 } else {
-  // tick boxes ONLY on days within the taper window (not the greyed-out days)
-  usedSlots.forEach(({ label }) => {
-    const row = document.createElement("div");
-    row.className = "dose-row";
-    const box = document.createElement("span");
-    box.className = "admin-checkbox";
-    const text = document.createElement("span");
-    text.textContent = ` ${label}`;
-    row.appendChild(box);
-    row.appendChild(text);
-    td.appendChild(row);
-  });
+// tick boxes ONLY on days within the taper window (not the greyed-out days)
+slotsForDay(cellDate).forEach(({ label }) => {
+  const row = document.createElement("div");
+  row.className = "dose-row";
+  const box = document.createElement("span");
+  box.className = "admin-checkbox";
+  const text = document.createElement("span");
+  text.textContent = ` ${label}`;
+  row.appendChild(box);
+  row.appendChild(text);
+  td.appendChild(row);
+});
 }
   if (inWindow) {
   if (stepDay) {
