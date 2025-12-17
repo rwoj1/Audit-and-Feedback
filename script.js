@@ -2308,7 +2308,7 @@ function renderStandardTable(stepRows){
   // Column headers (on-screen unchanged)
   const thead = document.createElement("thead");
   const trCols = document.createElement("tr");
-  ["Date beginning","Strength","Instructions","Morning","Midday","Dinner","Night"].forEach(t=>{
+  ["Date beginning","Strength","Instructions","Morning","Midday","Evening","Night"].forEach(t=>{
     const th = document.createElement("th");
     th.textContent = t;
     trCols.appendChild(th);
