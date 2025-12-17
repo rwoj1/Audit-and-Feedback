@@ -1710,7 +1710,6 @@ const slotsForDay = (d) => {
   // Return slot objects in the standard display order
   return SLOT_COLS.filter(s => keys.includes(s.key));
 };
-}
  
   const sameYMD = (a, b) =>
     a.getFullYear() === b.getFullYear() &&
