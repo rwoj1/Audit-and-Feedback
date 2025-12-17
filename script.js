@@ -1631,7 +1631,6 @@ if (finalCell) {
   if (msg.includes("review")) reviewDates.push(dt);
   if (msg.includes("stop")) stopDates.push(dt);
 }
-    }
   });
 
   if (!allDates.length) {
