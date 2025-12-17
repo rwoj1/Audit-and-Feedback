@@ -1766,7 +1766,11 @@ function buildAdministrationCalendars() {
       const inWindow =
         cellDate >= startDate &&
         cellDate <= endDate;
+        
+      const stepDay = isStepDate(cellDate);
+      const reviewDay = isReviewDate(cellDate);
 
+      
 // Light grey for days entirely outside the taper window
 if (!inWindow) {
   td.classList.add("admin-day-outside");
@@ -1784,26 +1788,25 @@ if (!inWindow) {
     td.appendChild(row);
   });
 }
-      // Step-down days: thicker border + underlined date + optional "Step" tag
-      if (stepDay) {
-        td.classList.add("admin-day-step");
-        if (!reviewDay) {
-          const stepTag = document.createElement("div");
-          stepTag.className = "step-label";
-          stepTag.textContent = "Dose reduction";
-          td.appendChild(stepTag);
-        }
-      }
+  if (inWindow) {
+  if (stepDay) {
+    td.classList.add("admin-day-step");
+    if (!reviewDay) {
+      const stepTag = document.createElement("div");
+      stepTag.className = "step-label";
+      stepTag.textContent = "Dose reduction";
+      td.appendChild(stepTag);
+    }
+  }
 
-      // Review days: strong grey styling + "Review" tag (overrides step styling)
-      if (reviewDay) {
-        td.classList.add("admin-day-review");
-        const reviewTag = document.createElement("div");
-        reviewTag.className = "review-label";
-        reviewTag.textContent = "See prescriber";
-        td.appendChild(reviewTag);
-      }
-
+  if (reviewDay) {
+    td.classList.add("admin-day-review");
+    const reviewTag = document.createElement("div");
+    reviewTag.className = "review-label";
+    reviewTag.textContent = "See prescriber";
+    td.appendChild(reviewTag);
+  }
+}
       currentRow.appendChild(td);
     }
 
