@@ -747,13 +747,20 @@ button.ghost{
   line-height: 1.35;
 }
 
-/* strong headers within footer */
-.class-footer strong {
+/* strong headers within footer (only when strong is a direct child) */
+.class-footer > strong {
   display: block;
   color: var(--brand-900);
   font-weight: 600;
   margin-top: 0.9em;
   margin-bottom: 0.3em;
+}
+
+/* inline strong inside paragraphs should stay inline */
+.class-footer p strong,
+.class-footer li strong {
+  display: inline;
+  margin: 0;
 }
 
 /* textarea box */
