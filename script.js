@@ -20,6 +20,7 @@
 
 "use strict";
 
+//#region 1) Helpers & Core Utilities
 /* ====================== Helpers ====================== */
 
 const $ = (id) => document.getElementById(id);
@@ -106,6 +107,9 @@ function getChartCapDate(startDate){
   return fallbackCap();
 }
 
+//#endregion
+
+//#region 2) Patch Interval Safety Rules
 /* ===== Patch interval safety (Fentanyl: ×3 days, Buprenorphine: ×7 days) ===== */
 //#endregion
 //#region 2. Patch Interval Rules (safety)
@@ -546,6 +550,9 @@ function bidPrefVisibilityTick(){
   box.style.display = (isOpioidSrTablet || isPregabalin) ? "" : "none";
 }
 
+//#endregion
+
+//#region 3) Antipsychotic UI Wiring
 /* ===== Antipsychotic UI wiring (layout only) ===== */
 ;(() => {
   const $id = (s) => document.getElementById(s);
@@ -803,6 +810,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 })();
 
+//#endregion
+
+//#region 4) Antipsychotic Dose Seeding
 /* ===== Antipsychotics: seed packs from the four AM/MID/DIN/PM inputs ===== */
 function apSeedPacksFromFourInputs(){
   // Prefer your existing reader if present
@@ -1220,6 +1230,9 @@ function distributePregabalinBID(unitsArr, perSlotCap) {
 
   return out;
 }
+//#endregion
+
+//#region 5) Gabapentinoid Helpers
 /* ===== Gabapentinoid helpers (non-destructive additions) ===== */
 
 // Round daily target per medicine class, keeping nudged-down behavior if unchanged.
@@ -1579,6 +1592,9 @@ function hasSelectedCommercialLowest(cls, med, form) {
   return selectedMg.some((mg) => Math.abs(mg - lowestCommercial) < 1e-9);
 }
 
+//#endregion
+
+//#region 6) Print & Admin Record Helpers
 /* ===== Minimal print / save helpers (do NOT duplicate elsewhere) ===== */
 
 // PRINT: use your existing print CSS and guard against stale charts
@@ -2214,6 +2230,9 @@ function watchDirty(selector) {
   });
 }
 
+//#endregion
+
+//#region 7) Dose Text & Fraction Helpers
 /* ===== digits/words helpers (fractional → words incl. whole) ===== */
 function _smallIntToWords(n) {
   const map = {0:'zero',1:'one',2:'two',3:'three',4:'four',5:'five',6:'six',7:'seven',8:'eight',9:'nine',10:'ten'};
@@ -2262,6 +2281,9 @@ function collapseFentanylTwelves(patches){
   if (twelves % 2 === 1) others.push(12);
   return others.sort((a, b) => b - a).slice(0, 2); // keep ≤2 patches
 }
+//#endregion
+
+//#region 8) Dose-form Nouns & Labels
 /* ===== Dose-form nouns for labels/instructions ===== */
 function doseFormNoun(form) {
   if (/Patch/i.test(form)) return "patches";
@@ -5602,4 +5624,6 @@ if (document.readyState === 'loading') {
 }
 
 document.addEventListener("DOMContentLoaded", ()=>{ try{ init(); } catch(e){ console.error(e); alert("Init error: "+(e?.message||String(e))); }});
+//#endregion
+
 //#endregion
