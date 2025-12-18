@@ -2068,7 +2068,7 @@ This tapering plan may need to change depending on how you’re feeling.</p>
   <li>Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild, but can be distressing (e.g. flu-like symptoms, nausea, diarrhoea, stomach aches, anxiety, restlessness, sweating, fast heartbeat).</li>
 </ul>
 <p>See your healthcare team regularly while reducing your dose. If you have any concerns or troublesome withdrawal symptoms, speak to your prescriber about what to do.</p>
-<p>Your tolerance to opioids will reduce as your dose reduces. This means <strong>you are at risk of overdosing if you quickly return to your previous high doses of opioids</strong>. Naloxone is a medication that reverses the effects of opioid overdose and may save your life. For more information, see <a href="https://saferopioiduse.com.au" target="_blank">The Opioid Safety Toolkit (https://saferopioiduse.com.au) for details</a>.</p>
+<p>Your tolerance to opioids will reduce as your dose reduces. This means <strong>you are at risk of overdosing if you quickly return to your previous high doses of opioids</strong>. Naloxone is a medication that reverses the effects of opioid overdose and may save your life. For more information, see <a href="https://saferopioiduse.com.au" target="_blank">The Opioid Safety Toolkit (https://saferopioiduse.com.au)</a> for details.</p>
 
 <strong>Additional notes:</strong>
 <textarea></textarea>
