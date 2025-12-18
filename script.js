@@ -678,7 +678,7 @@ function apToggleCurrentDoseUI(isAP){
 
 // Ensure chips show full labels (Morning/Midday/Dinner/Night)
 function apEnsureChipLabels(){
-  const LABELS = { AM: "Morning", MID: "Midday", DIN: "Dinner", PM: "Night" };
+  const LABELS = { AM: "Morning", MID: "Midday", DIN: "Evening", PM: "Night" };
 
   document.querySelectorAll("#apOrder .ap-chip").forEach((chip, i) => {
     const slot = chip.getAttribute("data-slot") || "";
