@@ -1877,6 +1877,22 @@ if (!inWindow) {
     pb.className = "page-break";
     monthWrapper.appendChild(pb);
 
+// Notes section (print-only)
+const notes = document.createElement("div");
+notes.className = "admin-notes";
+
+const notesTitle = document.createElement("div");
+notesTitle.className = "admin-notes-title";
+notesTitle.textContent = "Notes";
+
+const notesBox = document.createElement("div");
+notesBox.className = "admin-notes-box";
+
+notes.appendChild(notesTitle);
+notes.appendChild(notesBox);
+monthWrapper.appendChild(notes);
+
+    
     block.appendChild(monthWrapper);
 
     // Move to next month
