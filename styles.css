@@ -380,6 +380,18 @@ button.ghost{
   height: 25mm;          /* adjust if you want more/less space */
 }
 
+.admin-notes-box {
+  border: 1px solid #000;
+  height: 25mm;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent,
+      transparent 6mm,
+      #e0e0e0 6mm,
+      #e0e0e0 6.5mm
+    );
+}
 
 /* ===== Disclaimer gate ===== */
 .hide-until-accept{ display:none !important; }
