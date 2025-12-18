@@ -2033,31 +2033,38 @@ const SUGGESTED_PRACTICE = {
 const CLASS_FOOTER_COPY = {
 opioids: `
 <p><strong>Talk to your doctor, pharmacist or nurse before making any changes to your medicine.</strong>
-They can help you plan and monitor your dose reduction safely.</p>
+This tapering plan may need to change depending on how you’re feeling.</p>
 <p>If you are taking a short-acting or “when required” opioid, confirm with your healthcare professional which dose to continue during each reduction step.</p>
-<p>Your tolerance to opioids will reduce as your dose reduces. This means you are at risk of overdosing if you quickly return to your previous high doses of opioids. Naloxone is a freely available medication that reverses the effects of opioids and may save your life if you have a severe opioid reaction. For more information, see <a href="https://saferopioiduse.com.au" target="_blank">The Opioid Safety Toolkit</a>.</p>
-<strong>Discuss the following with your doctor, pharmacist or nurse:</strong>
+<strong>Discuss the following with your healthcare team:</strong>
 <ul class="footer-list">
   <li>Other strategies to help manage your pain</li>
   <li>Regular review and follow-up appointments</li>
-  <li>Your support network</li>
-  <li>Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild (e.g. flu-like symptoms, nausea, diarrhoea, stomach aches).</li>
+  <li>How to keep your support network informed</li>
+  <li>•	Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild, but can be distressing (e.g. flu-like symptoms, nausea, diarrhoea, stomach aches, anxiety, restlessness, sweating, fast heartbeat).</li>
 </ul>
-<strong>Additional Notes:</strong>
+<p>See your healthcare team regularly while reducing your dose. If you have any concerns or troublesome withdrawal symptoms, speak to your prescriber about what to do.<p>
+<p>Your tolerance to opioids will reduce as your dose reduces. This means <strong>you are at risk of overdosing if you quickly return to your previous high doses of opioids</strong>. . Naloxone is a medication that reverses the effects of opioid overdose and may save your life. For more information, see <a href="https://saferopioiduse.com.au" target="_blank">The Opioid Safety Toolkit (https://saferopioiduse.com.au) for details</a>.</p>
+
+<strong>Additional notes:</strong>
+<textarea></textarea>
+<strong>Prescriber contact details:</strong>
 <textarea></textarea>
 <em>This information is not intended as a substitute for medical advice and should not be exclusively relied on to diagnose or manage a medical condition. Monash University disclaims all liability (including for negligence) for any loss, damage or injury resulting from reliance on or use of this information.</em>
 `,
 bzra: `
 <strong>Talk to your doctor, pharmacist or nurse before making any changes to your medicine.</strong>
-They can help you plan and monitor your dose reduction safely.
+This tapering plan may need to change depending on how you’re feeling.
 <strong>Discuss the following with your doctor, pharmacist or nurse:</strong>
 <ul class="footer-list">
   <li>Other strategies to help manage your insomnia</li>
   <li>Regular review and follow-up appointments</li>
-  <li>Your support network</li>
-  <li>Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild (e.g. sleeplessness, anxiety, restlessness).</li>
+  <li>How to keep your support network informed</li>
+  <li>•	Plans to prevent and manage withdrawal symptoms if you get any – these are temporary and usually mild, but can be distressing (e.g. sleeplessness, nightmares, anxiety, restlessness, irritability, sweating, tremors, high blood pressure, fast heartbeat).</li>
 </ul>
-<strong>Additional Notes:</strong>
+<p>See your healthcare team regularly while reducing your dose. If you have any concerns or troublesome withdrawal symptoms, speak to your prescriber about what to do.<p>
+<strong>Additional notes:</strong>
+<textarea></textarea>
+<strong>Prescriber contact details:</strong>
 <textarea></textarea>
 <em>This information is not intended as a substitute for medical advice and should not be exclusively relied on to diagnose or manage a medical condition. Monash University disclaims all liability (including for negligence) for any loss, damage or injury resulting from reliance on or use of this information.</em>
 `,
