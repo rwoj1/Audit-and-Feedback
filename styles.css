@@ -563,6 +563,25 @@ button.ghost{
     break-inside:avoid !important;
     page-break-inside:avoid !important;
   }
+   /* Remove the rounded card outline in PRINT */
+   body.printing #outputCard,
+   body.printing #outputCard.card,
+   body.printing #outputCard .card,
+   body.printing .card{
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+   }
+   /* PRINT: make the taper table header look like headings (no boxed cells) */
+.table thead th{
+  border-width: 0 0 1px 0 !important;
+  border-style: solid !important;
+  border-color: #000 !important;
+  background: #fff !important;
+}
+.table thead tr{
+  border: 0 !important;
+}
 
   /* Footer in print */
   .footer-notes,.footer-notes *{color:#000 !important;background:#fff !important;border:0 !important;}
