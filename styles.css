@@ -365,6 +365,22 @@ button.ghost{
     font-style: italic;
   }
 
+.admin-notes {
+  margin-top: 10mm;
+}
+
+.admin-notes-title {
+  font-weight: 600;
+  font-size: 10pt;
+  margin-bottom: 3mm;
+}
+
+.admin-notes-box {
+  border: 1px solid #000;
+  height: 25mm;          /* adjust if you want more/less space */
+}
+
+
 /* ===== Disclaimer gate ===== */
 .hide-until-accept{ display:none !important; }
 
