@@ -37,6 +37,15 @@ const MS_PER_DAY = 24 * 3600 * 1000;
 const THREE_MONTHS_MS = 3 * DAYS_PER_MONTH * MS_PER_DAY; // only used as a fallback
 const EPS = 1e-6;
 
+// ===== Medicine class visibility toggles =====
+const MEDICINE_CLASS_VISIBILITY = {
+  "Opioid": true,
+  "Benzodiazepine / Z-Drug (BZRA)": true,
+  "Antipsychotic": false,
+  "Proton Pump Inhibitor": true,
+  "Gabapentinoid": true,
+};
+
 // Compute the maximum plan/chart date from user controls.
 function getChartCapDate(startDate){
   const base = new Date(startDate);
@@ -2723,35 +2732,45 @@ const ANTIPSYCHOTIC_MODE = "show";
 function populateClasses() {
   const el = $("classSelect");
   if (!el) return;
+
+  // Keep current selection if possible
+  const current = el.value;
+
   el.innerHTML = "";
+
+  // General per-class mode: "show" | "hide" | "disable"
+  // Default is "show"
+  const CLASS_MODE = {
+    "Opioid": "show",
+    "Benzodiazepine / Z-Drug (BZRA)": "show",
+    "Antipsychotic": ANTIPSYCHOTIC_MODE || "show", // keep your existing control
+    "Proton Pump Inhibitor": "show",
+    "Gabapentinoid": "show",
+  };
 
   CLASS_ORDER.forEach(c => {
     // only add classes that exist in the catalog
     if (!CATALOG[c]) return;
 
-    // handle Antipsychotic visibility/enable state
-    if (c === "Antipsychotic") {
-      if (ANTIPSYCHOTIC_MODE === "hide") return; // skip entirely
+    const mode = CLASS_MODE[c] || "show";
+    if (mode === "hide") return; // skip entirely
 
-      const o = document.createElement("option");
-      o.value = c;
-      o.textContent = c;
-      if (ANTIPSYCHOTIC_MODE === "disable") {
-        o.disabled = true; // visible but cannot be chosen
-      }
-      el.appendChild(o);
-      return;
-    }
-
-    // normal classes
     const o = document.createElement("option");
     o.value = c;
     o.textContent = c;
+
+    if (mode === "disable") {
+      o.disabled = true; // visible but cannot be chosen
+    }
+
     el.appendChild(o);
   });
 
-  // Safety: if the current value is Antipsychotic while muted, bump to first available
-  if ((el.value === "Antipsychotic" && ANTIPSYCHOTIC_MODE !== "show") || !el.value) {
+  // Restore selection if still available and not hidden
+  const restoredOption = Array.from(el.options).find(o => o.value === current && !o.disabled);
+  if (restoredOption) {
+    el.value = current;
+  } else {
     el.selectedIndex = 0;
   }
 }
