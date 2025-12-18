@@ -2743,8 +2743,8 @@ function populateClasses() {
   const CLASS_MODE = {
     "Opioid": "show",
     "Benzodiazepine / Z-Drug (BZRA)": "show",
-    "Antipsychotic": ANTIPSYCHOTIC_MODE || "show",
-    "Proton Pump Inhibitor": "hide",
+    "Antipsychotic": ANTIPSYCHOTIC_MODE || "hide",
+    "Proton Pump Inhibitor": "show",
     "Gabapentinoid": "show",
   };
 
