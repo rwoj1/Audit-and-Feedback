@@ -1892,7 +1892,7 @@ notes.className = "admin-notes";
 
 const notesTitle = document.createElement("div");
 notesTitle.className = "admin-notes-title";
-notesTitle.textContent = "Notes";
+notesTitle.textContent = "Notes (eg activity level, sleep, withdrawal effects, ability to think clearly, social life)";
 
 const notesBox = document.createElement("div");
 notesBox.className = "admin-notes-box";
@@ -2727,8 +2727,6 @@ function oxyNxPairLabel(oxyMg){
   return `Oxycodone ${stripZeros(oxy)} mg + naloxone ${stripZeros(nx)} mg SR tablet`;
 }
 /* =================== Dropdowns & dose lines =================== */
-const ANTIPSYCHOTIC_MODE = "show";
-
 function populateClasses() {
   const el = $("classSelect");
   if (!el) return;
@@ -2743,7 +2741,7 @@ function populateClasses() {
   const CLASS_MODE = {
     "Opioid": "show",
     "Benzodiazepine / Z-Drug (BZRA)": "show",
-    "Antipsychotic": ANTIPSYCHOTIC_MODE || "hide",
+    "Antipsychotic": "hide",
     "Proton Pump Inhibitor": "show",
     "Gabapentinoid": "show",
   };
