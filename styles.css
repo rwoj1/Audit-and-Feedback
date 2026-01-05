@@ -330,15 +330,12 @@ button.ghost{
    CALCULATIONS (optional)
    ========================================================= */
 .calc-toggle{
-  display:flex;
+  display:inline-flex;
   align-items:center;
-  gap:8px;
-  margin:10px 0 6px 0;
+  gap:6px;
+  margin-left:6px;
+  margin-top:4px;
   font-weight:600;
-  font-size:1rem;
-  padding:0;
-  border:none;
-  background:none;
 }
 .calc-toggle input{transform:scale(1.15);}
 #calcBlock h3{margin:0 0 8px 0;}
