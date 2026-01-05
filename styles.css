@@ -114,24 +114,6 @@ button.ghost{
   color:var(--brand-700);
   border:1px solid var(--brand-600);
 }
-/* Subtle icons for actions – Unicode, no extra libraries */
-#generateBtn::before{
-  content:"▸";
-  margin-right:6px;
-  font-size:.9em;
-}
-
-#printBtn::before{
-  content:"⎙";
-  margin-right:6px;
-  font-size:.9em;
-}
-
-#printAdminBtn::before{
-  content:"⎙";
-  margin-right:6px;
-  font-size:.9em;
-}
 
 .pill,.dose-lines .badge{
   background:color-mix(in srgb,var(--brand-500) 12%,#fff 88%);
