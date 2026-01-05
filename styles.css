@@ -124,8 +124,21 @@ button.ghost{
 }
 
 .hint{color:var(--muted);margin:6px 0 0;}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+.actions{  display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;align-items:center;}
 
+/* Primary action: Generate Chart */
+.actions #generateBtn{
+  padding:11px 22px;
+  font-size:1rem;
+  box-shadow:0 4px 10px rgba(17,139,213,.18);
+}
+
+/* Secondary actions: slightly smaller text so they read as supporting */
+.actions #printBtn,
+.actions #printAdminBtn,
+.actions #resetBtn{
+  font-size:.95rem;
+}
 /* Details/Accordion: make the affordance obvious */
 .accordion summary{
   display:flex;align-items:center;gap:10px;
