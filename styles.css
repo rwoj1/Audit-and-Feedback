@@ -341,7 +341,8 @@ button.ghost{
 .calc-toggle input{transform:scale(1.15);}
 #calcBlock h3{margin:0 0 8px 0;}
 .calc-table{width:100%;}
-.calc-table th,.calc-table td{white-space:nowrap;}
+.calc-table th{white-space:nowrap;text-align:left;}
+.calc-table td{white-space:nowrap;text-align:left;}
 .calc-table .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;}
 .calc-table .wrap{white-space:normal;}
 .variance-notice{
