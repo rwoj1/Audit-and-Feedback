@@ -310,8 +310,6 @@ function shouldShowProductPicker(cls, med, form){
     ["Opioid","Oxycodone \/ Naloxone",/SR/i],
     ["Opioid","Tapentadol",/SR/i],
     ["Opioid","Tramadol",/SR/i],
-    ["Opioid","Fentanyl",/Patch/i],
-    ["Opioid","Buprenorphine",/Patch/i],
 
     // ===== Gabapentinoid (existing) =====
     ["Gabapentinoid","Gabapentin",/.*/],
