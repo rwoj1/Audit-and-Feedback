@@ -1,26 +1,27 @@
 /* =========================================================
-   THEME — Monash Brand
+   THEME — White page • Light-blue cards
+   Palette: 094D76, 118BD5, 0E75B3, 0D6CA6
    ========================================================= */
 :root{
-  --brand-900:#003399; 
-  --brand-700:#006DAE; 
-  --brand-600:#00739D;  
-  --brand-500:#118BD5;  
+  /* Brand blues */
+  --brand-900:#094D76;
+  --brand-700:#0D6CA6;
+  --brand-600:#0E75B3;
+  --brand-500:#118BD5;
 
   /* Surfaces & text */
-  --page:#F6F6F6;   
-  --card:#FFFFFF;     
-  --card-hover:#F0F4F8; 
-  --text:#0f172a;       
-  --muted:#505050;     
-  --border:#D0D7DF;     
-  --line:#E2E8F0;
-  --line-strong:#CBD5E1;
+  --page:#ffffff;
+  --card:#EDF6FB;
+  --card-hover:#E6F2F9;
+  --text:#0f172a;
+  --muted:#4b5563;
+  --border:#dbe9f5;
+  --line:#e5eef6;
+  --line-strong:#c9dfef;
 
   /* Accent */
-  --accent:var(--brand-700); 
+  --accent:var(--brand-500);
 }
-
 
 *{box-sizing:border-box;}
 html,body{
@@ -344,8 +345,8 @@ button.ghost{
    ADVANCED SETTINGS (details accordion content styling)
    ========================================================= */
 #advancedSettings{
-  background-color:color-mix(in srgb, var(--brand-500) 10%, #ffffff 90%);
-  border:1px solid color-mix(in srgb, var(--brand-700) 30%, var(--border) 70%);
+  background-color:#d6ebf8;
+  border:1px solid #b5d9f1;
   border-radius:12px;
   padding:12px 14px 14px;
   margin-top:14px;
