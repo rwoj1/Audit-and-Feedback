@@ -345,40 +345,56 @@ button.ghost{
    ADVANCED SETTINGS (details accordion content styling)
    ========================================================= */
 #advancedSettings{
-  background-color:#d6ebf8;
-  border:1px solid #b5d9f1;
-  border-radius:12px;
-  padding:12px 14px 14px;
-  margin-top:14px;
-  box-shadow:0 2px 6px rgba(0,0,0,.06);
+  background-color:transparent;
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:10px 12px 12px;
+  margin-top:16px;
+  box-shadow:none;
 }
+
+/* Summary bar – calmer and more in line with the rest of the UI */
 #advancedSettings>summary{
   list-style:none;
   cursor:pointer;
-  font-weight:700;
-  color:#004b7a;
-  margin:-4px -2px 6px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:600;
+  color:var(--muted);
+  padding:8px 10px;
+  margin:-4px -4px 4px;
+  border-radius:8px;
+  background:color-mix(in srgb,var(--card) 70%, #ffffff 30%);
 }
+
+/* Hide the default marker (keeps what you already had) */
 #advancedSettings>summary::-webkit-details-marker{display:none;}
 #advancedSettings>summary::marker{content:"";}
+
+/* Right chevron – keep, but a bit softer */
 #advancedSettings>summary::after{
   content:"▾";
   margin-left:auto;
   opacity:.7;
+  font-size:14px;
   transition:transform .2s ease;
 }
 #advancedSettings[open]>summary::after{transform:rotate(180deg);}
 
-/* Inner sub-cards only */
+/* Inner sub-cards – more like subtle panels, not big floating cards */
 #advancedSettings .sub-card{
-  background-color:#eaf4fb;
-  border:1px solid #c6e0f2;
+  background-color:var(--card);
+  border:1px solid var(--line);
   border-radius:10px;
-  padding:14px 16px;
+  padding:12px 14px;
   margin:10px 0;
-  box-shadow:0 1px 3px rgba(0,0,0,.04);
+  box-shadow:none;
 }
-#advancedSettings .sub-card p{margin:0 0 .75rem;line-height:1.55;}
+#advancedSettings .sub-card p{
+  margin:0 0 .75rem;
+  line-height:1.55;
+}
 
 /* Suggested practice readability */
 .suggested-practice{
