@@ -35,9 +35,9 @@ html,body{
    LAYOUT & HEADINGS
    ========================================================= */
 .container{max-width:1040px;margin:28px auto;padding:0 18px;}
-h1{font-size:22px;margin:0 0 12px;color:var(--brand-900);}
-h2{font-size:18px;margin:0 0 10px;color:var(--brand-700);}
-h3{font-size:14px;margin:0 0 8px;color:var(--muted);}
+h1{font-size:22px;margin:0 0 14px;color:var(--brand-900);}
+h2{font-size:19px;margin:0 0 12px;color:var(--brand-700);font-weight:700;}
+h3{font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600;}
 
 /* Cards */
 .card{
@@ -113,6 +113,24 @@ button.ghost{
   background:transparent;
   color:var(--brand-700);
   border:1px solid var(--brand-600);
+}
+/* Subtle icons for actions – Unicode, no extra libraries */
+#generateBtn::before{
+  content:"▸";
+  margin-right:6px;
+  font-size:.9em;
+}
+
+#printBtn::before{
+  content:"⎙";
+  margin-right:6px;
+  font-size:.9em;
+}
+
+#printAdminBtn::before{
+  content:"⎙";
+  margin-right:6px;
+  font-size:.9em;
 }
 
 .pill,.dose-lines .badge{
