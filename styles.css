@@ -333,9 +333,10 @@ button.ghost{
   display:inline-flex;
   align-items:center;
   gap:6px;
-  margin-left:6px;
-  margin-top:4px;
+  margin-left:0px;
+  margin-top:8px;
   font-weight:600;
+   font-size:1rem;
 }
 .calc-toggle input{transform:scale(1.15);}
 #calcBlock h3{margin:0 0 8px 0;}
