@@ -330,13 +330,16 @@ button.ghost{
    CALCULATIONS (optional)
    ========================================================= */
 .calc-toggle{
-  display:inline-flex;
+  display:flex;
   align-items:center;
-  gap:6px;
-  margin-left:0px;
-  margin-top:8px;
-  font-weight:600;
-   font-size:1rem;
+  gap:8px;
+  margin:12px 0 10px 0;
+  font-weight:700;
+  font-size:1.05rem;
+  padding:10px 12px;
+  border:1px solid #d6e3f3;
+  border-radius:8px;
+  background:#f4f8ff;
 }
 .calc-toggle input{transform:scale(1.15);}
 #calcBlock h3{margin:0 0 8px 0;}
