@@ -2181,9 +2181,12 @@ function updateBestPracticeBox() {
   const title = titleMap[key] || "Medicine information";
 
   // Update the accordion summary label
-  if (summaryEl) {
-    summaryEl.textContent = title;
-  }
+if (summaryEl) {
+  summaryEl.innerHTML = `
+    ${title}
+    <span class="summary-hint">(click to show more or less information)</span>
+  `;
+}
 
   // Make sure the accordion is visible/open once we have content
   if (accordion) {
