@@ -213,6 +213,14 @@ button.ghost:hover{
   outline-offset:2px;}
 .accordion .accordion-body{padding-top:12px;}
 
+/* Small helper text inside accordion summaries */
+.summary-hint{
+  font-size:12px;
+  font-weight:400;
+  color:#64748b;
+  margin-left:6px;
+}
+
 /* Inline label pairs */
 .taper-row{display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;margin-bottom:10px;}
 .inline-label{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;}
