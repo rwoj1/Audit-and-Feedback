@@ -443,16 +443,6 @@ table{width:100%;border-collapse:separate;border-spacing:0 8px;
 #advancedSettings>summary::-webkit-details-marker{display:none;}
 #advancedSettings>summary::marker{content:"";}
 
-/* Right chevron – keep, but a bit softer */
-#advancedSettings>summary::after{
-  content:"▾";
-  margin-left:auto;
-  opacity:.7;
-  font-size:14px;
-  transition:transform .2s ease;
-}
-#advancedSettings[open]>summary::after{transform:rotate(180deg);}
-
 /* Inner sub-cards – more like subtle panels, not big floating cards */
 #advancedSettings .sub-card{
   background-color:var(--card);
