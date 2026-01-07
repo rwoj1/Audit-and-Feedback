@@ -3,7 +3,6 @@
    Palette: 094D76, 118BD5, 0E75B3, 0D6CA6
    ========================================================= */
 :root{
-  /* Brand blues – Monash-ish, monochromatic */
   --brand-900:#003A5D; /* deep navy */
   --brand-700:#00558C; /* strong blue */
   --brand-600:#006DAE; /* primary action blue */
@@ -29,7 +28,6 @@ html,body{
   padding:0;
   background:var(--page);
   color:var(--text);
-  /* Monash-style body text: Helvetica / Arial */
   font-family:"Helvetica Neue", Arial, sans-serif;
   font-size:14px;
   line-height:1.45;
@@ -43,6 +41,9 @@ h1{font-family:"Roboto Condensed","Helvetica Neue",Arial,sans-serif;font-size:22
 h2{font-family:"Roboto Condensed","Helvetica Neue",Arial,sans-serif;font-size:19px;margin:0 0 12px;color:var(--brand-700);font-weight:700;}
 h3{font-family:"Helvetica Neue",Arial,sans-serif;font-size:14px;margin:0 0 8px;color:var(--muted);font-weight:600;}
 
+a{color:var(--brand-700);text-decoration:underline;}
+a:hover,
+a:focus-visible{color:var(--brand-900);}
 
 /* Cards */
 .card{
@@ -202,6 +203,7 @@ button.ghost:hover{
 .accordion[open] summary::before{transform:rotate(90deg);}
 .accordion summary:hover{background:#d3ebff;}
 .accordion summary:focus{outline:2px solid #7fb8f0;outline-offset:2px;}
+.accordion .accordion-body{padding-top:12px;}
 
 /* Inline label pairs */
 .taper-row{display:flex;align-items:center;flex-wrap:wrap;gap:12px 20px;margin-bottom:10px;}
@@ -238,14 +240,11 @@ button.ghost:hover{
 /* =========================================================
    TABLES + OUTPUT
    ========================================================= */
-.table{width:100%;border-collapse:separate;border-spacing:0 8px;}
-.table thead th{font-weight:600;text-align:left;padding:8px;color:var(--brand-900);}
-.table tbody td{
-  background:#fff;color:var(--text);
-  border:1px solid var(--border);
-  padding:10px;
-  vertical-align:top;
+table{width:100%;border-collapse:separate;border-spacing:0 8px;
 }
+.table thead th{font-weight:600;text-align:left;padding:8px 10px;color:var(--brand-900);background:#F6FAFD;border-bottom:1px solid var(--border);}
+.table tbody td{background:#fff;color:var(--text);border:1px solid var(--border);padding:10px;vertical-align:top;}
+.table tbody tr:nth-child(even) td{background:#FBFDFF;}
 .table tbody tr td:first-child{border-top-left-radius:10px;border-bottom-left-radius:10px;}
 .table tbody tr td:last-child{border-top-right-radius:10px;border-bottom-right-radius:10px;}
 
