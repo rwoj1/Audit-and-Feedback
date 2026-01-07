@@ -2152,27 +2152,54 @@ function updateBestPracticeBox() {
   const cls = document.getElementById("classSelect")?.value || "";
   const key = mapClassToKey(cls);
 
-  if (!key) { box.innerHTML = ""; _lastPracticeKey = null; return; }
+  const accordion = document.getElementById("bestPracticeAccordion");
+  const summaryEl = document.getElementById("bestPracticeSummary");
+
+  // If we don't have a recognised class, clear content and reset label
+  if (!key) {
+    if (box) box.innerHTML = "";
+    _lastPracticeKey = null;
+    if (summaryEl) {
+      summaryEl.textContent = "Medicine information and tapering guidance";
+    }
+    return;
+  }
 
   // Guard: only update if the class changed
   if (key === _lastPracticeKey) return;
   _lastPracticeKey = key;
 
- const titleMap = {
-  opioids: "Opioids for persistent noncancer pain",
-  bzra: "Benzodiazepines and Z-drugs for insomnia in older adults",
-  antipsychotic: "Antipsychotics",
-  ppi: "Proton Pump Inhibitors",
-  gabapentinoid: "Gabapentinoid"
-};
-  
+  const titleMap = {
+    opioids: "Opioids for persistent noncancer pain",
+    bzra: "Benzodiazepines and Z-drugs for insomnia in older adults",
+    antipsychotic: "Antipsychotics",
+    ppi: "Proton Pump Inhibitors",
+    gabapentinoid: "Gabapentinoid"
+  };
+
   const text = SUGGESTED_PRACTICE[key] || "";
- box.innerHTML = `
-  <h2>${titleMap[key]}</h2>
-  <div class="practice-text">
-    ${text}
-  </div>
-`;
+  const title = titleMap[key] || "Medicine information";
+
+  // Update the accordion summary label
+  if (summaryEl) {
+    summaryEl.textContent = title;
+  }
+
+  // Make sure the accordion is visible/open once we have content
+  if (accordion) {
+    accordion.hidden = false;
+    if (!accordion.hasAttribute("open")) {
+      accordion.setAttribute("open", "");
+    }
+  }
+
+  // Populate the box content
+  box.innerHTML = `
+    <h2>${title}</h2>
+    <div class="practice-text">
+      ${text}
+    </div>
+  `;
 }
 
 /* ---- Dirty state + gating ---- */
