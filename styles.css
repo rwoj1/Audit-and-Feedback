@@ -3,24 +3,24 @@
    Palette: 094D76, 118BD5, 0E75B3, 0D6CA6
    ========================================================= */
 :root{
-  /* Brand blues */
-  --brand-900:#094D76;
-  --brand-700:#0D6CA6;
-  --brand-600:#0E75B3;
-  --brand-500:#118BD5;
+  /* Brand blues – Monash-ish, monochromatic */
+  --brand-900:#003A5D; /* deep navy */
+  --brand-700:#00558C; /* strong blue */
+  --brand-600:#006DAE; /* primary action blue */
+  --brand-500:#4FA9E6; /* lighter accent */
 
   /* Surfaces & text */
   --page:#ffffff;
-  --card:#EDF6FB;
-  --card-hover:#E6F2F9;
-  --text:#0f172a;
+  --card:#F2F7FB;        /* very light blue card */
+  --card-hover:#E7F1F9;  /* slightly darker hover */
+  --text:#111827;
   --muted:#4b5563;
-  --border:#dbe9f5;
-  --line:#e5eef6;
-  --line-strong:#c9dfef;
+  --border:#d1e3f5;
+  --line:#e3edf7;
+  --line-strong:#c2d8f0;
 
-  /* Accent */
-  --accent:var(--brand-500);
+  /* Accent (links, highlights, etc.) */
+  --accent:var(--brand-600);
 }
 
 *{box-sizing:border-box;}
@@ -101,28 +101,64 @@ select:focus,input:focus,textarea:focus{
 }
 
 button{
-  background:linear-gradient(180deg,var(--brand-500),var(--brand-600));
-  color:#fff;border:none;border-radius:10px;
-  padding:10px 14px;font-weight:600;cursor:pointer;
-  transition:transform .05s ease, filter .15s ease;
+  background:var(--brand-600);
+  color:#fff;
+  border:1px solid var(--brand-700);
+  border-radius:10px;
+  padding:10px 14px;
+  font-weight:600;
+  cursor:pointer;
+  transition:
+    background-color .15s ease,
+    border-color .15s ease,
+    transform .05s ease,
+    box-shadow .15s ease;
+  box-shadow:0 2px 6px rgba(0,0,0,.08);
 }
-button:hover{filter:brightness(1.05);}
-button:active{transform:translateY(1px);}
-button:focus-visible{outline:2px solid rgba(9,77,118,.35);outline-offset:2px;}
+
+button:hover{
+  background:var(--brand-700);
+  border-color:var(--brand-900);
+}
+
+button:active{
+  transform:translateY(1px);
+  box-shadow:0 1px 3px rgba(0,0,0,.12);
+}
+
+button:focus-visible{
+  outline:3px solid color-mix(in srgb,var(--brand-500) 30%,#ffffff 70%);
+  outline-offset:2px;
+}
+
+/* Secondary button */
 button.secondary{
-  background:color-mix(in srgb,var(--brand-500) 12%,#fff 88%);
+  background:color-mix(in srgb,var(--brand-500) 10%,#ffffff 90%);
   color:var(--brand-900);
-  border:1px solid var(--brand-600);
+  border:1px solid color-mix(in srgb,var(--brand-600) 30%,#d1e3f5 70%);
+  box-shadow:none;
 }
+
+button.secondary:hover{
+  background:color-mix(in srgb,var(--brand-500) 18%,#ffffff 82%);
+}
+
+/* Ghost button */
 button.ghost{
   background:transparent;
   color:var(--brand-700);
-  border:1px solid var(--brand-600);
+  border:1px solid color-mix(in srgb,var(--brand-600) 30%,#d1e3f5 70%);
+  box-shadow:none;
 }
 
-.pill,.dose-lines .badge{
-  background:color-mix(in srgb,var(--brand-500) 12%,#fff 88%);
-  border:1px solid color-mix(in srgb,var(--brand-600) 35%,#e5e7eb 65%);
+button.ghost:hover{
+  background:color-mix(in srgb,var(--brand-500) 6%,#ffffff 94%);
+}
+
+.pill,
+.dose-lines .badge{
+  background:color-mix(in srgb,var(--brand-500) 10%,#ffffff 90%);
+  border:1px solid color-mix(in srgb,var(--brand-600) 25%,#d1e3f5 75%);
   color:var(--brand-900);
   border-radius:999px;
   padding:6px 10px;
